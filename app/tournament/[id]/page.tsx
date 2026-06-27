@@ -55,12 +55,36 @@ type Player = {
   email: string;
 };
 
+type PairingGroupPlayer = {
+  playerName: string;
+  teamName: string;
+};
+
+type PairingGroup = {
+  groupNumber: number;
+  teeTime: string;
+  startingHole: string;
+  players: PairingGroupPlayer[];
+};
+
 type PlayerFormState = {
   firstName: string;
   lastName: string;
   teamId: string;
   handicap: string;
   email: string;
+};
+
+type ImportedPlayerPreview = {
+  firstName: string;
+  lastName: string;
+  school: string;
+  gender: string;
+  className: string;
+  email: string;
+  teamId: string;
+  teamName: string;
+  handicap: string;
 };
 
 type ScorecardRow = {
@@ -75,6 +99,7 @@ type RoundSetupState = {
   startingHole: string;
   numberOfHoles: string;
   teeTime: string;
+  countingScores: string;
 };
 
 type ClippdExportState = {
@@ -103,6 +128,7 @@ const defaultRoundSetupState: RoundSetupState = {
   startingHole: "1",
   numberOfHoles: "18",
   teeTime: "7:30 AM",
+  countingScores: "4",
 };
 
 const defaultClippdExportState: ClippdExportState = {
@@ -116,7 +142,7 @@ const STORAGE_KEY = "clubhouse-hq-tournament-test";
 type PersistedTournamentState = {
   teams: Team[];
   players: Player[];
-  pairings: string[];
+  pairings: PairingGroup[];
   scorecards: {
     scorecardsGenerated: boolean;
     scorecardRows: ScorecardRow[];
@@ -155,12 +181,17 @@ export default function TournamentPage() {
   const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerFormState, setPlayerFormState] = useState<PlayerFormState>(defaultPlayerFormState);
+  const [isPlayerImportModalOpen, setIsPlayerImportModalOpen] = useState(false);
+  const [playerImportFileName, setPlayerImportFileName] = useState("");
+  const [playerImportRows, setPlayerImportRows] = useState<ImportedPlayerPreview[]>([]);
+  const [playerImportError, setPlayerImportError] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [playerErrors, setPlayerErrors] = useState<Partial<Record<keyof PlayerFormState, string>>>({});
   const [roundSetup, setRoundSetup] = useState<RoundSetupState>(defaultRoundSetupState);
   const [scorecardsGenerated, setScorecardsGenerated] = useState(false);
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>([]);
-  const [pairings, setPairings] = useState<string[]>([]);
+  const [pairings, setPairings] = useState<PairingGroup[]>([]);
+  const [pairingsMessage, setPairingsMessage] = useState("");
   const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
   const [scoreboardImportState, setScoreboardImportState] = useState({
@@ -177,6 +208,8 @@ export default function TournamentPage() {
     },
   });
   const [isAutoRepairModalOpen, setIsAutoRepairModalOpen] = useState(false);
+  const [activeQrPlayer, setActiveQrPlayer] = useState<ScorecardRow | null>(null);
+  const [activePrintPlayer, setActivePrintPlayer] = useState<ScorecardRow | null>(null);
   const [autoRepairState, setAutoRepairState] = useState({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -210,7 +243,10 @@ export default function TournamentPage() {
         setPlayers(parsedValue.players);
       }
       if (parsedValue.pairings) {
-        setPairings(parsedValue.pairings);
+        const storedPairings = parsedValue.pairings.filter(
+          (pairing): pairing is PairingGroup => typeof pairing === "object" && pairing !== null && "groupNumber" in pairing && "teeTime" in pairing && "startingHole" in pairing && "players" in pairing
+        );
+        setPairings(storedPairings);
       }
       if (parsedValue.scorecards) {
         setScorecardsGenerated(Boolean(parsedValue.scorecards.scorecardsGenerated));
@@ -257,6 +293,145 @@ export default function TournamentPage() {
     setTeamFormState(defaultTeamFormState);
     setTeamErrors({});
     setEditingTeamId(null);
+  };
+
+  const parseCsvLine = (line: string) => {
+    const values: string[] = [];
+    let currentValue = "";
+    let inQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+
+      if (char === '"') {
+        if (inQuotes && line[index + 1] === '"') {
+          currentValue += '"';
+          index += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+
+      if (char === "," && !inQuotes) {
+        values.push(currentValue.trim());
+        currentValue = "";
+        continue;
+      }
+
+      currentValue += char;
+    }
+
+    values.push(currentValue.trim());
+    return values;
+  };
+
+  const parseImportedPlayerCsv = (text: string) => {
+    const rows = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (rows.length < 2) {
+      throw new Error("The CSV file is empty.");
+    }
+
+    const headers = rows[0]
+      .toLowerCase()
+      .split(",")
+      .map((header) => header.replace(/\s+/g, ""));
+
+    const requiredHeaders = ["firstname", "lastname", "school", "gender", "class", "email"];
+    const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+
+    if (missingHeaders.length > 0) {
+      throw new Error("The CSV file is missing required columns.");
+    }
+
+    return rows.slice(1).map((row) => {
+      const values = parseCsvLine(row);
+      const data = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
+      const schoolName = data.school?.trim() || "Unassigned";
+      const matchingTeam = teams.find(
+        (team) => team.schoolName.toLowerCase() === schoolName.toLowerCase() || team.shortName.toLowerCase() === schoolName.toLowerCase()
+      );
+
+      return {
+        firstName: data.firstname?.trim() || "",
+        lastName: data.lastname?.trim() || "",
+        school: schoolName,
+        gender: data.gender?.trim() || "",
+        className: data.class?.trim() || "",
+        email: data.email?.trim() || "",
+        teamId: matchingTeam ? String(matchingTeam.id) : "",
+        teamName: matchingTeam ? matchingTeam.schoolName : schoolName,
+        handicap: "0",
+      } satisfies ImportedPlayerPreview;
+    }).filter((preview) => preview.firstName || preview.lastName || preview.email || preview.school);
+  };
+
+  const openPlayerImportModal = () => {
+    setPlayerImportError("");
+    setPlayerImportRows([]);
+    setPlayerImportFileName("");
+    setIsPlayerImportModalOpen(true);
+  };
+
+  const closePlayerImportModal = () => {
+    setIsPlayerImportModalOpen(false);
+    setPlayerImportError("");
+    setPlayerImportRows([]);
+    setPlayerImportFileName("");
+  };
+
+  const handlePlayerImportTemplateDownload = () => {
+    const template = ["First Name,Last Name,School,Gender,Class,Email", "Jane,Doe,Bluffton University,Female,Senior,jane.doe@example.com"].join("\n");
+    const blob = new Blob([template], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "clubhouse-hq-player-import-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePlayerImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setPlayerImportFileName(file.name);
+    setPlayerImportError("");
+
+    try {
+      const text = await file.text();
+      const rows = parseImportedPlayerCsv(text);
+      setPlayerImportRows(rows);
+    } catch (error) {
+      setPlayerImportRows([]);
+      setPlayerImportError(error instanceof Error ? error.message : "Unable to parse the CSV file.");
+    }
+  };
+
+  const handlePlayerImportConfirm = () => {
+    if (playerImportRows.length === 0) {
+      return;
+    }
+
+    const importedPlayers: Player[] = playerImportRows.map((row, index) => ({
+      id: Date.now() + index,
+      firstName: row.firstName.trim(),
+      lastName: row.lastName.trim(),
+      teamId: row.teamId,
+      teamName: row.teamName,
+      handicap: row.handicap,
+      email: row.email.trim(),
+    }));
+
+    setPlayers((current) => [...importedPlayers, ...current]);
+    closePlayerImportModal();
   };
 
   const openAddTeamModal = () => {
@@ -478,6 +653,81 @@ export default function TournamentPage() {
   const calculateTotal = (scores: number[]) =>
     scores.reduce((total, score) => total + (Number.isFinite(score) ? score : 0), 0);
 
+  const calculatePlayedTotal = (scores: number[]) =>
+    scores.reduce((total, score) => total + (score > 0 ? score : 0), 0);
+
+  const calculatePlayedHoles = (scores: number[]) =>
+    scores.reduce((count, score) => count + (score > 0 ? 1 : 0), 0);
+
+  const formatScoreToPar = (difference: number) => {
+    if (difference === 0) {
+      return "E";
+    }
+    return difference > 0 ? `+${difference}` : `${difference}`;
+  };
+
+  const addTiePositions = <T,>(rows: T[], getScore: (row: T) => number) => {
+    const scoreCounts = rows.reduce((map, row) => {
+      const score = getScore(row);
+      map.set(score, (map.get(score) ?? 0) + 1);
+      return map;
+    }, new Map<number, number>());
+
+    return rows.map((row, index) => {
+      const score = getScore(row);
+      const ordinal = index + 1;
+      const position = (scoreCounts.get(score) ?? 0) > 1 ? `T${ordinal}` : `${ordinal}`;
+
+      return {
+        ...row,
+        position,
+      };
+    });
+  };
+
+  const formatMinutesToTime = (minutesSinceMidnight: number) => {
+    const normalizedMinutes = ((minutesSinceMidnight % 1440) + 1440) % 1440;
+    const hours24 = Math.floor(normalizedMinutes / 60);
+    const minutes = normalizedMinutes % 60;
+    const meridiem = hours24 >= 12 ? "PM" : "AM";
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+    return `${hours12}:${String(minutes).padStart(2, "0")} ${meridiem}`;
+  };
+
+  const handleGeneratePairings = () => {
+    if (players.length === 0) {
+      setPairings([]);
+      setPairingsMessage("Add players before generating pairings.");
+      return;
+    }
+
+    const shuffledPlayers = [...players];
+
+    for (let index = shuffledPlayers.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [shuffledPlayers[index], shuffledPlayers[swapIndex]] = [shuffledPlayers[swapIndex], shuffledPlayers[index]];
+    }
+
+    const generatedPairings: PairingGroup[] = [];
+    const startingMinutes = 8 * 60;
+
+    for (let index = 0; index < shuffledPlayers.length; index += 4) {
+      const groupPlayers = shuffledPlayers.slice(index, index + 4);
+      generatedPairings.push({
+        groupNumber: generatedPairings.length + 1,
+        teeTime: formatMinutesToTime(startingMinutes + generatedPairings.length * 10),
+        startingHole: "1",
+        players: groupPlayers.map((player) => ({
+          playerName: `${player.firstName} ${player.lastName}`.trim(),
+          teamName: player.teamName || "Unassigned",
+        })),
+      });
+    }
+
+    setPairings(generatedPairings);
+    setPairingsMessage("");
+  };
+
   const formatToPar = (total: number) => {
     const difference = total - 72;
     if (difference === 0) {
@@ -500,6 +750,8 @@ export default function TournamentPage() {
   };
 
   const displayHoleCount = Math.max(1, Math.min(18, Number(roundSetup.numberOfHoles) || 18));
+  const countingScores = Math.max(1, Math.min(6, Number(roundSetup.countingScores) || 4));
+  const fullRoundPar = displayHoleCount * 4;
 
   const handleClippdInputChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -559,37 +811,69 @@ export default function TournamentPage() {
 
   const handleAutoRepairSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setPairings((current) => [
-      `${autoRepairState.sourceRound} → ${autoRepairState.targetRound}`,
-      `${autoRepairState.pairingOrder} • ${autoRepairState.teeTimeInterval}`,
-      ...current,
-    ]);
     closeAutoRepairModal();
+  };
+
+  const openQrModal = (player: ScorecardRow) => {
+    setActiveQrPlayer(player);
+  };
+
+  const closeQrModal = () => {
+    setActiveQrPlayer(null);
+  };
+
+  const openPrintScorecardModal = (player: ScorecardRow) => {
+    setActivePrintPlayer(player);
+  };
+
+  const closePrintScorecardModal = () => {
+    setActivePrintPlayer(null);
+  };
+
+  const handlePrintScorecard = () => {
+    window.print();
+  };
+
+  const handlePrintFromQrModal = () => {
+    if (!activeQrPlayer) {
+      return;
+    }
+
+    closeQrModal();
+    openPrintScorecardModal(activeQrPlayer);
   };
 
   const individualLeaderboard = useMemo(() => {
     if (!scorecardsGenerated || scorecardRows.length === 0) {
-      return [] as Array<{ id: number; playerName: string; team: string; total: number; toPar: string; through: string }>;
+      return [] as Array<{ position: string; id: number; playerName: string; team: string; totalScore: number; toPar: string; through: string; today: string }>;
     }
 
-    return [...scorecardRows]
+    const standings = [...scorecardRows]
       .map((row) => {
-        const total = calculateTotal(row.scores);
+        const playedHoles = calculatePlayedHoles(row.scores);
+        const totalScore = calculatePlayedTotal(row.scores);
+        const activePar = playedHoles * 4;
+        const toPar = playedHoles > 0 ? formatScoreToPar(totalScore - activePar) : "--";
+        const through = playedHoles >= displayHoleCount ? "F" : `${playedHoles}/${displayHoleCount}`;
+
         return {
           id: row.id,
           playerName: row.playerName,
           team: row.team,
-          total,
-          toPar: formatToPar(total),
-          through: `${row.scores.filter((score) => score > 0).length}/${displayHoleCount}`,
+          totalScore,
+          toPar,
+          through,
+          today: toPar,
         };
       })
-      .sort((a, b) => a.total - b.total || a.playerName.localeCompare(b.playerName));
+      .sort((a, b) => a.totalScore - b.totalScore || a.playerName.localeCompare(b.playerName));
+
+    return addTiePositions(standings, (row) => row.totalScore);
   }, [displayHoleCount, scorecardRows, scorecardsGenerated]);
 
   const teamLeaderboard = useMemo(() => {
     if (!scorecardsGenerated || scorecardRows.length === 0) {
-      return [] as Array<{ team: string; teamTotal: number; toPar: string }>;
+      return [] as Array<{ position: string; teamName: string; totalScore: number; toPar: string; through: string; today: string }>;
     }
 
     const grouped = new Map<string, ScorecardRow[]>();
@@ -600,20 +884,41 @@ export default function TournamentPage() {
       grouped.set(row.team, current);
     });
 
-    return Array.from(grouped.entries())
+    const standings = Array.from(grouped.entries())
       .map(([team, rows]) => {
-        const sortedRows = [...rows].sort((a, b) => calculateTotal(a.scores) - calculateTotal(b.scores) || a.playerName.localeCompare(b.playerName));
-        const fourLowest = sortedRows.slice(0, 4);
-        const teamTotal = fourLowest.reduce((total, row) => total + calculateTotal(row.scores), 0);
+        const completedRows = rows
+          .map((row) => {
+            const playedHoles = calculatePlayedHoles(row.scores);
+            return {
+              ...row,
+              playedHoles,
+              totalScore: calculatePlayedTotal(row.scores),
+            };
+          })
+          .filter((row) => row.playedHoles >= displayHoleCount)
+          .sort((a, b) => a.totalScore - b.totalScore || a.playerName.localeCompare(b.playerName));
+
+        if (completedRows.length < countingScores) {
+          return null;
+        }
+
+        const countedPlayers = completedRows.slice(0, countingScores);
+        const totalScore = countedPlayers.reduce((total, row) => total + row.totalScore, 0);
+        const toPar = formatScoreToPar(totalScore - fullRoundPar * countingScores);
 
         return {
-          team,
-          teamTotal,
-          toPar: formatToPar(teamTotal),
+          teamName: team,
+          totalScore,
+          toPar,
+          through: "F",
+          today: toPar,
         };
       })
-      .sort((a, b) => a.teamTotal - b.teamTotal || a.team.localeCompare(b.team));
-  }, [scorecardRows, scorecardsGenerated]);
+      .filter((team): team is { teamName: string; totalScore: number; toPar: string; through: string; today: string } => Boolean(team))
+      .sort((a, b) => a.totalScore - b.totalScore || a.teamName.localeCompare(b.teamName));
+
+    return addTiePositions(standings, (row) => row.totalScore);
+  }, [countingScores, displayHoleCount, fullRoundPar, scorecardRows, scorecardsGenerated]);
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
@@ -784,13 +1089,22 @@ export default function TournamentPage() {
                       Build your player roster.
                     </h3>
                   </div>
-                  <button
-                    type="button"
-                    onClick={openAddPlayerModal}
-                    className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
-                  >
-                    Add Player
-                  </button>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={openPlayerImportModal}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                    >
+                      Import Players
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openAddPlayerModal}
+                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                    >
+                      Add Player
+                    </button>
+                  </div>
                 </div>
 
                 {players.length === 0 ? (
@@ -861,6 +1175,7 @@ export default function TournamentPage() {
                     <div className="flex flex-col gap-3 sm:flex-row">
                       <button
                         type="button"
+                        onClick={handleGeneratePairings}
                         className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                       >
                         Generate Pairings
@@ -883,9 +1198,40 @@ export default function TournamentPage() {
                     <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
                       Draft Schedule Preview
                     </p>
-                    <div className="mt-4 rounded-[20px] border border-dashed border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center text-[#51635C]">
-                      Draft pairing groups will appear here once the next phase is connected.
-                    </div>
+                    {pairingsMessage ? (
+                      <div className="mt-4 rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] px-6 py-5 text-center text-sm font-semibold uppercase tracking-[0.25em] text-[#0B3D2E]">
+                        {pairingsMessage}
+                      </div>
+                    ) : null}
+
+                    {pairings.length > 0 ? (
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        {pairings.map((pairing) => (
+                          <div key={pairing.groupNumber} className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-5">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Group {pairing.groupNumber}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                                <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1">{pairing.teeTime}</span>
+                                <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1">Hole {pairing.startingHole}</span>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 space-y-2">
+                              {pairing.players.map((player) => (
+                                <div key={`${pairing.groupNumber}-${player.playerName}`} className="rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3">
+                                  <p className="font-black text-[#0B3D2E]">{player.playerName}</p>
+                                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">{player.teamName}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : pairingsMessage ? null : (
+                      <div className="mt-4 rounded-[20px] border border-dashed border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center text-[#51635C]">
+                        Draft pairing groups will appear here once the next phase is connected.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -910,7 +1256,7 @@ export default function TournamentPage() {
                     </button>
                   </div>
 
-                  <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-5">
                     <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
                       <span>Round Number</span>
                       <input
@@ -947,6 +1293,18 @@ export default function TournamentPage() {
                         className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                       />
                     </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Counting Scores</span>
+                      <input
+                        name="countingScores"
+                        type="number"
+                        min="1"
+                        max="6"
+                        value={roundSetup.countingScores}
+                        onChange={handleRoundSetupChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                      />
+                    </label>
                   </div>
                 </div>
 
@@ -975,20 +1333,22 @@ export default function TournamentPage() {
                                 <th className="px-4 py-4">Position</th>
                                 <th className="px-4 py-4">Player</th>
                                 <th className="px-4 py-4">Team</th>
-                                <th className="px-4 py-4 text-center">Total</th>
+                                <th className="px-4 py-4 text-center">Total Score</th>
                                 <th className="px-4 py-4 text-center">To Par</th>
                                 <th className="px-4 py-4 text-center">Through</th>
+                                <th className="px-4 py-4 text-center">Today</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {individualLeaderboard.map((player, index) => (
+                              {individualLeaderboard.map((player) => (
                                 <tr key={player.id} className="border-t border-[#E8DCC8] bg-white/70">
-                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{index + 1}</td>
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{player.position}</td>
                                   <td className="px-4 py-4 font-black text-[#0B3D2E]">{player.playerName}</td>
                                   <td className="px-4 py-4 text-sm text-[#51635C]">{player.team}</td>
-                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{player.total}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{player.totalScore}</td>
                                   <td className="px-4 py-4 text-center font-black text-[#B8892D]">{player.toPar}</td>
                                   <td className="px-4 py-4 text-center text-sm text-[#51635C]">{player.through}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{player.today}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1002,7 +1362,7 @@ export default function TournamentPage() {
                             Team Scores
                           </p>
                           <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
-                            Four-Best Player Total
+                            Counting Score Total ({countingScores})
                           </h4>
                         </div>
 
@@ -1011,18 +1371,22 @@ export default function TournamentPage() {
                             <thead className="bg-[#F6F1E6] text-left text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
                               <tr>
                                 <th className="px-4 py-4">Position</th>
-                                <th className="px-4 py-4">Team</th>
-                                <th className="px-4 py-4 text-center">Team Total</th>
+                                <th className="px-4 py-4">Team Name</th>
+                                <th className="px-4 py-4 text-center">Total Score</th>
                                 <th className="px-4 py-4 text-center">To Par</th>
+                                <th className="px-4 py-4 text-center">Through</th>
+                                <th className="px-4 py-4 text-center">Today</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {teamLeaderboard.map((team, index) => (
-                                <tr key={team.team} className="border-t border-[#E8DCC8] bg-white/70">
-                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{index + 1}</td>
-                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{team.team}</td>
-                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{team.teamTotal}</td>
+                              {teamLeaderboard.map((team) => (
+                                <tr key={team.teamName} className="border-t border-[#E8DCC8] bg-white/70">
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{team.position}</td>
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{team.teamName}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{team.totalScore}</td>
                                   <td className="px-4 py-4 text-center font-black text-[#B8892D]">{team.toPar}</td>
+                                  <td className="px-4 py-4 text-center text-sm text-[#51635C]">{team.through}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{team.today}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1053,7 +1417,19 @@ export default function TournamentPage() {
 
                                 return (
                                   <tr key={row.id} className="border-t border-[#E8DCC8] bg-white/70">
-                                    <td className="px-4 py-4 font-black text-[#0B3D2E]">{row.playerName}</td>
+                                    <td className="px-4 py-4 font-black text-[#0B3D2E]">
+                                      <div className="flex items-center gap-3">
+                                        <span>{row.playerName}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => openQrModal(row)}
+                                          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E8DCC8] bg-[#FCFAF5] text-sm font-black text-[#0B3D2E] transition duration-300 hover:bg-[#E8DCC8]"
+                                          aria-label={`Open QR code for ${row.playerName}`}
+                                        >
+                                          ⬢
+                                        </button>
+                                      </div>
+                                    </td>
                                     <td className="px-4 py-4 text-sm text-[#51635C]">{row.team}</td>
                                     {row.scores.map((score, holeIndex) => (
                                       <td key={`${row.id}-${holeIndex}`} className="px-2 py-3 text-center">
@@ -1069,6 +1445,15 @@ export default function TournamentPage() {
                                     ))}
                                     <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{total}</td>
                                     <td className="px-4 py-4 text-center font-black text-[#B8892D]">{toPar}</td>
+                                    <td className="px-4 py-4 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => openPrintScorecardModal(row)}
+                                        className="rounded-full border border-[#B8892D] px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                                      >
+                                        Print Scorecard
+                                      </button>
+                                    </td>
                                   </tr>
                                 );
                               })}
@@ -1403,6 +1788,368 @@ export default function TournamentPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isPlayerImportModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closePlayerImportModal}
+        >
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Player Import
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    Import Players
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePlayerImportModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-7 py-7">
+              <p className="text-base leading-8 text-[#51635C]">
+                Download the CSV template, upload a completed file, preview imported players, and confirm the import into your tournament roster.
+              </p>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handlePlayerImportTemplateDownload}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Download CSV Template
+                </button>
+                <label className="flex cursor-pointer items-center justify-center rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5">
+                  <span>Upload CSV</span>
+                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={handlePlayerImportFileChange} />
+                </label>
+              </div>
+
+              {playerImportFileName ? (
+                <p className="mt-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  Selected file: {playerImportFileName}
+                </p>
+              ) : null}
+
+              {playerImportError ? (
+                <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-sm text-[#0B3D2E]">
+                  {playerImportError}
+                </div>
+              ) : null}
+
+              {playerImportRows.length > 0 ? (
+                <div className="mt-6 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5 shadow-inner">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                      Preview Imported Players
+                    </p>
+                    <span className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
+                      {playerImportRows.length} rows
+                    </span>
+                  </div>
+
+                  <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
+                    {playerImportRows.map((row, index) => (
+                      <div key={`${row.firstName}-${row.lastName}-${index}`} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-sm text-[#0B3D2E]">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span className="font-black">{row.firstName} {row.lastName}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">{row.school}</span>
+                        </div>
+                        <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[#51635C]">
+                          {row.gender} • {row.className} • {row.email}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-6 rounded-[24px] border border-dashed border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center text-[#51635C]">
+                  Upload a CSV file to preview imported players before confirming.
+                </div>
+              )}
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closePlayerImportModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePlayerImportConfirm}
+                  disabled={playerImportRows.length === 0}
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
+                >
+                  Confirm Import
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeQrPlayer ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closeQrModal}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Mobile Score Entry
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    {activeQrPlayer.playerName}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeQrModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-7 py-7">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Player Name</p>
+                  <p className="mt-2 font-black text-[#0B3D2E]">{activeQrPlayer.playerName}</p>
+                </div>
+                <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Team</p>
+                  <p className="mt-2 font-black text-[#0B3D2E]">{activeQrPlayer.team}</p>
+                </div>
+                <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5 md:col-span-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Round</p>
+                  <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.roundNumber}</p>
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner">
+                <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-[24px] border border-dashed border-[#B8892D] bg-white text-4xl font-black text-[#0B3D2E]">
+                  QR
+                </div>
+                <p className="mt-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  QR Code placeholder
+                </p>
+              </div>
+
+              <p className="mt-6 text-center text-base leading-8 text-[#51635C]">
+                Players simply scan this QR code to enter scores from any phone. No app required.
+              </p>
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeQrModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Download QR
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintFromQrModal}
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                >
+                  Print Scorecard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activePrintPlayer ? (
+        <div
+          className="print-scorecard-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closePrintScorecardModal}
+        >
+          <div
+            className="print-scorecard-shell w-full max-w-5xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="print-hide bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Printable Scorecard
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    {activePrintPlayer.playerName}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePrintScorecardModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-7 py-7">
+              <div className="print-scorecard-sheet rounded-[28px] border border-[#E8DCC8] bg-white/80 p-6 shadow-inner">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6]">
+                      HQ
+                    </div>
+                    <div>
+                      <p className="text-lg font-black tracking-[-0.02em] text-[#0B3D2E]">Clubhouse HQ</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-[#B8892D]">College Golf Operations</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Tournament</p>
+                    <p className="mt-1 font-black text-[#0B3D2E]">{tournament.name}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Round Number</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.roundNumber}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Player</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.playerName}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Team</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.team}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Tee Time</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.teeTime}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Starting Hole</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.startingHole}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Course</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{tournament.course}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 overflow-hidden rounded-[24px] border border-[#E8DCC8]">
+                  <table className="min-w-full border-separate border-spacing-0 text-sm">
+                    <thead className="bg-[#F6F1E6] text-left text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                      <tr>
+                        <th className="px-3 py-3">Hole</th>
+                        <th className="px-3 py-3">Par</th>
+                        <th className="px-3 py-3">Yardage</th>
+                        <th className="px-3 py-3">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: 18 }, (_, index) => {
+                        const holeNumber = index + 1;
+                        const score = activePrintPlayer.scores[holeNumber - 1] ?? 0;
+                        const scoreDisplay = score > 0 ? score : "";
+                        const par = 4;
+                        const yardage = 350 + holeNumber * 6;
+                        return (
+                          <tr key={holeNumber} className="border-t border-[#E8DCC8] bg-white/70">
+                            <td className="px-3 py-3 font-black text-[#0B3D2E]">{holeNumber}</td>
+                            <td className="px-3 py-3 text-[#51635C]">{par}</td>
+                            <td className="px-3 py-3 text-[#51635C]">{yardage}</td>
+                            <td className="px-3 py-3 font-black text-[#0B3D2E]">{scoreDisplay}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9 Total</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.scores.slice(0, 9).reduce((sum, score) => sum + score, 0)}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9 Total</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.scores.slice(9, 18).reduce((sum, score) => sum + score, 0)}</p>
+                  </div>
+                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Overall Total</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.scores.reduce((sum, score) => sum + score, 0)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">To Par</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{formatToPar(activePrintPlayer.scores.reduce((sum, score) => sum + score, 0))}</p>
+                  </div>
+                  <div className="rounded-full border border-[#E8DCC8] bg-white px-4 py-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                    Notes
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Notes</p>
+                  <div className="print-notes-area mt-3 min-h-20 rounded-[18px] border border-dashed border-[#E8DCC8] bg-white/80 p-4 text-sm text-[#51635C]">
+                    Add notes for the player or round here.
+                  </div>
+                </div>
+              </div>
+
+              <div className="print-hide mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closePrintScorecardModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintScorecard}
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                >
+                  Print
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Download PDF
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
