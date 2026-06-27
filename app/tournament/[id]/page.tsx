@@ -1,0 +1,1636 @@
+"use client";
+
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+
+type Tournament = {
+  id: number;
+  name: string;
+  date: string;
+  course: string;
+  city: string;
+  state: string;
+  rounds: string;
+  scoringFormat: string;
+};
+
+const tournaments: Tournament[] = [
+  {
+    id: 1,
+    name: "Spring Invitational",
+    date: "2026-06-20",
+    course: "Glen Oaks",
+    city: "Findlay",
+    state: "OH",
+    rounds: "2",
+    scoringFormat: "Stroke Play",
+  },
+];
+
+const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
+
+type Team = {
+  id: number;
+  schoolName: string;
+  shortName: string;
+  teamColor: string;
+  coachName: string;
+};
+
+type TeamFormState = {
+  schoolName: string;
+  shortName: string;
+  teamColor: string;
+  coachName: string;
+};
+
+type Player = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  teamId: string;
+  teamName: string;
+  handicap: string;
+  email: string;
+};
+
+type PlayerFormState = {
+  firstName: string;
+  lastName: string;
+  teamId: string;
+  handicap: string;
+  email: string;
+};
+
+type ScorecardRow = {
+  id: number;
+  playerName: string;
+  team: string;
+  scores: number[];
+};
+
+type RoundSetupState = {
+  roundNumber: string;
+  startingHole: string;
+  numberOfHoles: string;
+  teeTime: string;
+};
+
+type ClippdExportState = {
+  tournamentId: string;
+  tournamentKey: string;
+  exportFormat: string;
+};
+
+const defaultTeamFormState: TeamFormState = {
+  schoolName: "",
+  shortName: "",
+  teamColor: "",
+  coachName: "",
+};
+
+const defaultPlayerFormState: PlayerFormState = {
+  firstName: "",
+  lastName: "",
+  teamId: "",
+  handicap: "",
+  email: "",
+};
+
+const defaultRoundSetupState: RoundSetupState = {
+  roundNumber: "1",
+  startingHole: "1",
+  numberOfHoles: "18",
+  teeTime: "7:30 AM",
+};
+
+const defaultClippdExportState: ClippdExportState = {
+  tournamentId: "",
+  tournamentKey: "",
+  exportFormat: "Final Results CSV",
+};
+
+const STORAGE_KEY = "clubhouse-hq-tournament-test";
+
+type PersistedTournamentState = {
+  teams: Team[];
+  players: Player[];
+  pairings: string[];
+  scorecards: {
+    scorecardsGenerated: boolean;
+    scorecardRows: ScorecardRow[];
+    roundSetup: RoundSetupState;
+  };
+  clippdExportState: ClippdExportState;
+  scoreboardImportState: {
+    tournamentId: string;
+    tournamentKey: string;
+    options: {
+      tournamentDetails: boolean;
+      teams: boolean;
+      players: boolean;
+      courseSetup: boolean;
+      scorecards: boolean;
+      teeTimes: boolean;
+      startingHoles: boolean;
+    };
+  };
+  autoRepairState: {
+    sourceRound: string;
+    targetRound: string;
+    pairingOrder: string;
+    teeTimeInterval: string;
+  };
+};
+
+export default function TournamentPage() {
+  const params = useParams();
+  const [activeTab, setActiveTab] = useState("Overview");
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamFormState, setTeamFormState] = useState<TeamFormState>(defaultTeamFormState);
+  const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
+  const [teamErrors, setTeamErrors] = useState<Partial<Record<keyof TeamFormState, string>>>({});
+  const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [playerFormState, setPlayerFormState] = useState<PlayerFormState>(defaultPlayerFormState);
+  const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
+  const [playerErrors, setPlayerErrors] = useState<Partial<Record<keyof PlayerFormState, string>>>({});
+  const [roundSetup, setRoundSetup] = useState<RoundSetupState>(defaultRoundSetupState);
+  const [scorecardsGenerated, setScorecardsGenerated] = useState(false);
+  const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>([]);
+  const [pairings, setPairings] = useState<string[]>([]);
+  const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
+  const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
+  const [scoreboardImportState, setScoreboardImportState] = useState({
+    tournamentId: "",
+    tournamentKey: "",
+    options: {
+      tournamentDetails: true,
+      teams: true,
+      players: true,
+      courseSetup: true,
+      scorecards: false,
+      teeTimes: false,
+      startingHoles: false,
+    },
+  });
+  const [isAutoRepairModalOpen, setIsAutoRepairModalOpen] = useState(false);
+  const [autoRepairState, setAutoRepairState] = useState({
+    sourceRound: "Round 1",
+    targetRound: "Round 2",
+    pairingOrder: "Worst to Best",
+    teeTimeInterval: "8 minutes",
+  });
+
+  const tournament = useMemo(() => {
+    const id = Number(params?.id);
+    return tournaments.find((item) => item.id === id) ?? tournaments[0];
+  }, [params?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const storedValue = window.localStorage.getItem(STORAGE_KEY);
+
+      if (!storedValue) {
+        return;
+      }
+
+      const parsedValue = JSON.parse(storedValue) as Partial<PersistedTournamentState>;
+
+      if (parsedValue.teams) {
+        setTeams(parsedValue.teams);
+      }
+      if (parsedValue.players) {
+        setPlayers(parsedValue.players);
+      }
+      if (parsedValue.pairings) {
+        setPairings(parsedValue.pairings);
+      }
+      if (parsedValue.scorecards) {
+        setScorecardsGenerated(Boolean(parsedValue.scorecards.scorecardsGenerated));
+        setScorecardRows(parsedValue.scorecards.scorecardRows || []);
+        setRoundSetup(parsedValue.scorecards.roundSetup || defaultRoundSetupState);
+      }
+      if (parsedValue.clippdExportState) {
+        setClippdExportState(parsedValue.clippdExportState);
+      }
+      if (parsedValue.scoreboardImportState) {
+        setScoreboardImportState(parsedValue.scoreboardImportState);
+      }
+      if (parsedValue.autoRepairState) {
+        setAutoRepairState(parsedValue.autoRepairState);
+      }
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const persistedState: PersistedTournamentState = {
+      teams,
+      players,
+      pairings,
+      scorecards: {
+        scorecardsGenerated,
+        scorecardRows,
+        roundSetup,
+      },
+      clippdExportState,
+      scoreboardImportState,
+      autoRepairState,
+    };
+
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
+  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState]);
+
+  const resetTeamForm = () => {
+    setTeamFormState(defaultTeamFormState);
+    setTeamErrors({});
+    setEditingTeamId(null);
+  };
+
+  const openAddTeamModal = () => {
+    resetTeamForm();
+    setIsTeamModalOpen(true);
+  };
+
+  const openEditTeamModal = (team: Team) => {
+    setTeamFormState({
+      schoolName: team.schoolName,
+      shortName: team.shortName,
+      teamColor: team.teamColor,
+      coachName: team.coachName,
+    });
+    setEditingTeamId(team.id);
+    setTeamErrors({});
+    setIsTeamModalOpen(true);
+  };
+
+  const closeTeamModal = () => {
+    setIsTeamModalOpen(false);
+    resetTeamForm();
+  };
+
+  const handleTeamInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    const fieldName = name as keyof TeamFormState;
+
+    setTeamFormState((current) => ({ ...current, [fieldName]: value }));
+
+    if (teamErrors[fieldName]) {
+      setTeamErrors((current) => ({ ...current, [fieldName]: undefined }));
+    }
+  };
+
+  const validateTeamForm = () => {
+    const nextErrors: Partial<Record<keyof TeamFormState, string>> = {};
+
+    if (!teamFormState.schoolName.trim()) {
+      nextErrors.schoolName = "School name is required.";
+    }
+    if (!teamFormState.shortName.trim()) {
+      nextErrors.shortName = "Short name is required.";
+    }
+    if (!teamFormState.teamColor.trim()) {
+      nextErrors.teamColor = "Team color is required.";
+    }
+    if (!teamFormState.coachName.trim()) {
+      nextErrors.coachName = "Coach name is required.";
+    }
+
+    setTeamErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleTeamSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!validateTeamForm()) {
+      return;
+    }
+
+    if (editingTeamId) {
+      setTeams((current) =>
+        current.map((team) =>
+          team.id === editingTeamId
+            ? {
+                ...team,
+                schoolName: teamFormState.schoolName.trim(),
+                shortName: teamFormState.shortName.trim().toUpperCase(),
+                teamColor: teamFormState.teamColor.trim(),
+                coachName: teamFormState.coachName.trim(),
+              }
+            : team
+        )
+      );
+    } else {
+      setTeams((current) => [
+        {
+          id: Date.now(),
+          schoolName: teamFormState.schoolName.trim(),
+          shortName: teamFormState.shortName.trim().toUpperCase(),
+          teamColor: teamFormState.teamColor.trim(),
+          coachName: teamFormState.coachName.trim(),
+        },
+        ...current,
+      ]);
+    }
+
+    closeTeamModal();
+  };
+
+  const resetPlayerForm = () => {
+    setPlayerFormState(defaultPlayerFormState);
+    setPlayerErrors({});
+    setEditingPlayerId(null);
+  };
+
+  const openAddPlayerModal = () => {
+    const initialTeamId = teams.length > 0 ? String(teams[0].id) : "";
+    setPlayerFormState({ ...defaultPlayerFormState, teamId: initialTeamId });
+    setPlayerErrors({});
+    setEditingPlayerId(null);
+    setIsPlayerModalOpen(true);
+  };
+
+  const openEditPlayerModal = (player: Player) => {
+    setPlayerFormState({
+      firstName: player.firstName,
+      lastName: player.lastName,
+      teamId: player.teamId,
+      handicap: player.handicap,
+      email: player.email,
+    });
+    setEditingPlayerId(player.id);
+    setPlayerErrors({});
+    setIsPlayerModalOpen(true);
+  };
+
+  const closePlayerModal = () => {
+    setIsPlayerModalOpen(false);
+    resetPlayerForm();
+  };
+
+  const handlePlayerInputChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = event.target;
+    const fieldName = name as keyof PlayerFormState;
+
+    setPlayerFormState((current) => ({ ...current, [fieldName]: value }));
+
+    if (playerErrors[fieldName]) {
+      setPlayerErrors((current) => ({ ...current, [fieldName]: undefined }));
+    }
+  };
+
+  const validatePlayerForm = () => {
+    const nextErrors: Partial<Record<keyof PlayerFormState, string>> = {};
+
+    if (!playerFormState.firstName.trim()) {
+      nextErrors.firstName = "First name is required.";
+    }
+    if (!playerFormState.lastName.trim()) {
+      nextErrors.lastName = "Last name is required.";
+    }
+    if (!playerFormState.teamId.trim()) {
+      nextErrors.teamId = "Team is required.";
+    }
+    if (!playerFormState.handicap.trim()) {
+      nextErrors.handicap = "Handicap is required.";
+    }
+
+    setPlayerErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handlePlayerSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!validatePlayerForm()) {
+      return;
+    }
+
+    const selectedTeam = teams.find((team) => String(team.id) === playerFormState.teamId);
+
+    if (editingPlayerId) {
+      setPlayers((current) =>
+        current.map((player) =>
+          player.id === editingPlayerId
+            ? {
+                ...player,
+                firstName: playerFormState.firstName.trim(),
+                lastName: playerFormState.lastName.trim(),
+                teamId: playerFormState.teamId,
+                teamName: selectedTeam?.schoolName || "Unassigned",
+                handicap: playerFormState.handicap.trim(),
+                email: playerFormState.email.trim(),
+              }
+            : player
+        )
+      );
+    } else {
+      setPlayers((current) => [
+        {
+          id: Date.now(),
+          firstName: playerFormState.firstName.trim(),
+          lastName: playerFormState.lastName.trim(),
+          teamId: playerFormState.teamId,
+          teamName: selectedTeam?.schoolName || "Unassigned",
+          handicap: playerFormState.handicap.trim(),
+          email: playerFormState.email.trim(),
+        },
+        ...current,
+      ]);
+    }
+
+    closePlayerModal();
+  };
+
+  const handleRoundSetupChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    setRoundSetup((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleScoreInputChange = (rowId: number, holeIndex: number, value: string) => {
+    const parsedValue = Number(value);
+
+    setScorecardRows((current) =>
+      current.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              scores: row.scores.map((score, index) => (index === holeIndex ? (Number.isNaN(parsedValue) ? 0 : parsedValue) : score)),
+            }
+          : row
+      )
+    );
+  };
+
+  const calculateTotal = (scores: number[]) =>
+    scores.reduce((total, score) => total + (Number.isFinite(score) ? score : 0), 0);
+
+  const formatToPar = (total: number) => {
+    const difference = total - 72;
+    if (difference === 0) {
+      return "E";
+    }
+    return difference > 0 ? `+${difference}` : `${difference}`;
+  };
+
+  const generateScorecards = () => {
+    const holeCount = Math.max(1, Math.min(18, Number(roundSetup.numberOfHoles) || 18));
+    const nextRows = players.map((player) => ({
+      id: player.id,
+      playerName: `${player.firstName} ${player.lastName}`.trim(),
+      team: player.teamName || "Unassigned",
+      scores: Array.from({ length: holeCount }, () => 0),
+    }));
+
+    setScorecardsGenerated(true);
+    setScorecardRows(nextRows);
+  };
+
+  const displayHoleCount = Math.max(1, Math.min(18, Number(roundSetup.numberOfHoles) || 18));
+
+  const handleClippdInputChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = event.target;
+    setClippdExportState((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleClippdSave = () => {
+    setClippdExportState((current) => ({ ...current }));
+  };
+
+  const handleClippdGenerate = () => {
+    setClippdExportState((current) => ({ ...current }));
+  };
+
+  const handleScoreboardImportInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { name, value, checked, type } = event.target;
+
+    if (type === "checkbox") {
+      setScoreboardImportState((current) => ({
+        ...current,
+        options: {
+          ...current.options,
+          [name]: checked,
+        },
+      }));
+      return;
+    }
+
+    setScoreboardImportState((current) => ({ ...current, [name]: value }));
+  };
+
+  const openScoreboardImportModal = () => {
+    setIsScoreboardImportModalOpen(true);
+  };
+
+  const closeScoreboardImportModal = () => {
+    setIsScoreboardImportModalOpen(false);
+  };
+
+  const handleScoreboardImportSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    closeScoreboardImportModal();
+  };
+
+  const handleAutoRepairInputChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = event.target;
+    setAutoRepairState((current) => ({ ...current, [name]: value }));
+  };
+
+  const openAutoRepairModal = () => {
+    setIsAutoRepairModalOpen(true);
+  };
+
+  const closeAutoRepairModal = () => {
+    setIsAutoRepairModalOpen(false);
+  };
+
+  const handleAutoRepairSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPairings((current) => [
+      `${autoRepairState.sourceRound} → ${autoRepairState.targetRound}`,
+      `${autoRepairState.pairingOrder} • ${autoRepairState.teeTimeInterval}`,
+      ...current,
+    ]);
+    closeAutoRepairModal();
+  };
+
+  const individualLeaderboard = useMemo(() => {
+    if (!scorecardsGenerated || scorecardRows.length === 0) {
+      return [] as Array<{ id: number; playerName: string; team: string; total: number; toPar: string; through: string }>;
+    }
+
+    return [...scorecardRows]
+      .map((row) => {
+        const total = calculateTotal(row.scores);
+        return {
+          id: row.id,
+          playerName: row.playerName,
+          team: row.team,
+          total,
+          toPar: formatToPar(total),
+          through: `${row.scores.filter((score) => score > 0).length}/${displayHoleCount}`,
+        };
+      })
+      .sort((a, b) => a.total - b.total || a.playerName.localeCompare(b.playerName));
+  }, [displayHoleCount, scorecardRows, scorecardsGenerated]);
+
+  const teamLeaderboard = useMemo(() => {
+    if (!scorecardsGenerated || scorecardRows.length === 0) {
+      return [] as Array<{ team: string; teamTotal: number; toPar: string }>;
+    }
+
+    const grouped = new Map<string, ScorecardRow[]>();
+
+    scorecardRows.forEach((row) => {
+      const current = grouped.get(row.team) ?? [];
+      current.push(row);
+      grouped.set(row.team, current);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([team, rows]) => {
+        const sortedRows = [...rows].sort((a, b) => calculateTotal(a.scores) - calculateTotal(b.scores) || a.playerName.localeCompare(b.playerName));
+        const fourLowest = sortedRows.slice(0, 4);
+        const teamTotal = fourLowest.reduce((total, row) => total + calculateTotal(row.scores), 0);
+
+        return {
+          team,
+          teamTotal,
+          toPar: formatToPar(teamTotal),
+        };
+      })
+      .sort((a, b) => a.teamTotal - b.teamTotal || a.team.localeCompare(b.team));
+  }, [scorecardRows, scorecardsGenerated]);
+
+  return (
+    <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
+        <Link href="/dashboard" className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
+            HQ
+          </div>
+          <div>
+            <h1 className="text-lg font-black tracking-[-0.02em]">Clubhouse HQ</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-[#B8892D]">
+              College Golf Operations
+            </p>
+          </div>
+        </Link>
+
+        <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
+            Dashboard
+          </Link>
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
+            Live Scores
+          </Link>
+        </nav>
+      </header>
+
+      <section className="mx-auto max-w-7xl px-6 py-6 lg:px-8 lg:py-10">
+        <div className="overflow-hidden rounded-[36px] border border-[#E8DCC8] bg-white/90 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur">
+          <div className="bg-[#0B3D2E] px-8 py-8 text-[#F6F1E6] lg:px-10">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                  Tournament Details
+                </p>
+                <h2 className="mt-2 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
+                  {tournament.name}
+                </h2>
+              </div>
+              <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#F6F1E6]/80">
+                Status: Upcoming
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/10 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F0C96A]">Golf Course</p>
+                <p className="mt-2 font-black text-[#F6F1E6]">{tournament.course}</p>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/10 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F0C96A]">Date</p>
+                <p className="mt-2 font-black text-[#F6F1E6]">{tournament.date}</p>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/10 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F0C96A]">Rounds</p>
+                <p className="mt-2 font-black text-[#F6F1E6]">{tournament.rounds}</p>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/10 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F0C96A]">Location</p>
+                <p className="mt-2 font-black text-[#F6F1E6]">{tournament.city}, {tournament.state}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-[#E8DCC8] bg-[#FCFAF5] px-6 py-4 lg:px-10">
+            <div className="flex flex-wrap gap-3">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em] transition duration-300 ${
+                    activeTab === tab
+                      ? "bg-[#0B3D2E] text-[#F6F1E6]"
+                      : "bg-transparent text-[#51635C] hover:bg-[#E8DCC8]"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="px-6 py-8 lg:px-10 lg:py-10">
+            {activeTab === "Teams" ? (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                      Teams
+                    </p>
+                    <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                      Build your tournament field.
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openAddTeamModal}
+                    className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                  >
+                    Add Team
+                  </button>
+                </div>
+
+                {teams.length === 0 ? (
+                  <div className="rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-10 text-center shadow-inner">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#0B3D2E] text-2xl font-black text-[#F0C96A]">
+                      HQ
+                    </div>
+                    <h4 className="mt-6 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                      No teams have been added.
+                    </h4>
+                    <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-[#51635C]">
+                      Add your first college team to begin building the tournament.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {teams.map((team) => (
+                      <div key={team.id} className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                              {team.shortName}
+                            </p>
+                            <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                              {team.schoolName}
+                            </h4>
+                          </div>
+                          <div className="h-5 w-5 rounded-full border border-[#E8DCC8]" style={{ backgroundColor: team.teamColor || "#0B3D2E" }} />
+                        </div>
+
+                        <div className="mt-6 space-y-3 text-sm text-[#51635C]">
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="font-semibold uppercase tracking-[0.25em]">Coach</span>
+                            <span className="text-right font-black text-[#0B3D2E]">{team.coachName}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                          <button
+                            type="button"
+                            onClick={() => openEditTeamModal(team)}
+                            className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTeams((current) => current.filter((item) => item.id !== team.id))}
+                            className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : activeTab === "Players" ? (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                      Players
+                    </p>
+                    <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                      Build your player roster.
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openAddPlayerModal}
+                    className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                  >
+                    Add Player
+                  </button>
+                </div>
+
+                {players.length === 0 ? (
+                  <div className="rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-10 text-center shadow-inner">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#0B3D2E] text-2xl font-black text-[#F0C96A]">
+                      HQ
+                    </div>
+                    <h4 className="mt-6 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                      No players have been added.
+                    </h4>
+                    <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-[#51635C]">
+                      Add your first player to begin building the tournament.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {players.map((player) => (
+                      <div key={player.id} className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                            {player.teamName}
+                          </p>
+                          <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                            {player.firstName} {player.lastName}
+                          </h4>
+                        </div>
+
+                        <div className="mt-6 space-y-3 text-sm text-[#51635C]">
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="font-semibold uppercase tracking-[0.25em]">Handicap</span>
+                            <span className="text-right font-black text-[#0B3D2E]">{player.handicap}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                          <button
+                            type="button"
+                            onClick={() => openEditPlayerModal(player)}
+                            className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPlayers((current) => current.filter((item) => item.id !== player.id))}
+                            className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : activeTab === "Pairings" ? (
+              <div className="space-y-6">
+                <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                        Pairings
+                      </p>
+                      <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                        Create and refine your tee-time flow.
+                      </h3>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      >
+                        Generate Pairings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openAutoRepairModal}
+                        className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                      >
+                        Auto Re-Pair by Results
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 max-w-3xl text-lg leading-8 text-[#51635C]">
+                    Pairings will be generated from your tournament field and updated as your event evolves. This experience is UI-only for now.
+                  </p>
+
+                  <div className="mt-6 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-6 shadow-inner">
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                      Draft Schedule Preview
+                    </p>
+                    <div className="mt-4 rounded-[20px] border border-dashed border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center text-[#51635C]">
+                      Draft pairing groups will appear here once the next phase is connected.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === "Live Scoring" ? (
+              <div className="space-y-6">
+                <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                        Live Scoring
+                      </p>
+                      <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                        Round Setup
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={generateScorecards}
+                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                    >
+                      Generate Scorecards
+                    </button>
+                  </div>
+
+                  <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Round Number</span>
+                      <input
+                        name="roundNumber"
+                        value={roundSetup.roundNumber}
+                        onChange={handleRoundSetupChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Starting Hole</span>
+                      <input
+                        name="startingHole"
+                        value={roundSetup.startingHole}
+                        onChange={handleRoundSetupChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Number of Holes</span>
+                      <input
+                        name="numberOfHoles"
+                        value={roundSetup.numberOfHoles}
+                        onChange={handleRoundSetupChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Tee Time</span>
+                      <input
+                        name="teeTime"
+                        value={roundSetup.teeTime}
+                        onChange={handleRoundSetupChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {scorecardsGenerated ? (
+                  scorecardRows.length > 0 ? (
+                    <div className="space-y-6">
+                      <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                              Live Leaderboard
+                            </p>
+                            <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                              Individual Standings
+                            </h4>
+                          </div>
+                          <div className="rounded-full border border-[#E8DCC8] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                            Updated Live
+                          </div>
+                        </div>
+
+                        <div className="mt-6 overflow-x-auto">
+                          <table className="min-w-full border-separate border-spacing-0">
+                            <thead className="bg-[#F6F1E6] text-left text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                              <tr>
+                                <th className="px-4 py-4">Position</th>
+                                <th className="px-4 py-4">Player</th>
+                                <th className="px-4 py-4">Team</th>
+                                <th className="px-4 py-4 text-center">Total</th>
+                                <th className="px-4 py-4 text-center">To Par</th>
+                                <th className="px-4 py-4 text-center">Through</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {individualLeaderboard.map((player, index) => (
+                                <tr key={player.id} className="border-t border-[#E8DCC8] bg-white/70">
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{index + 1}</td>
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{player.playerName}</td>
+                                  <td className="px-4 py-4 text-sm text-[#51635C]">{player.team}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{player.total}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#B8892D]">{player.toPar}</td>
+                                  <td className="px-4 py-4 text-center text-sm text-[#51635C]">{player.through}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                        <div>
+                          <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                            Team Scores
+                          </p>
+                          <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                            Four-Best Player Total
+                          </h4>
+                        </div>
+
+                        <div className="mt-6 overflow-x-auto">
+                          <table className="min-w-full border-separate border-spacing-0">
+                            <thead className="bg-[#F6F1E6] text-left text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                              <tr>
+                                <th className="px-4 py-4">Position</th>
+                                <th className="px-4 py-4">Team</th>
+                                <th className="px-4 py-4 text-center">Team Total</th>
+                                <th className="px-4 py-4 text-center">To Par</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {teamLeaderboard.map((team, index) => (
+                                <tr key={team.team} className="border-t border-[#E8DCC8] bg-white/70">
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{index + 1}</td>
+                                  <td className="px-4 py-4 font-black text-[#0B3D2E]">{team.team}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{team.teamTotal}</td>
+                                  <td className="px-4 py-4 text-center font-black text-[#B8892D]">{team.toPar}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="overflow-hidden rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full border-separate border-spacing-0">
+                            <thead className="bg-[#F6F1E6] text-left text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                              <tr>
+                                <th className="px-4 py-4">Player Name</th>
+                                <th className="px-4 py-4">Team</th>
+                                {Array.from({ length: displayHoleCount }, (_, index) => (
+                                  <th key={index + 1} className="px-2 py-4 text-center">
+                                    {index + 1}
+                                  </th>
+                                ))}
+                                <th className="px-4 py-4 text-center">Total</th>
+                                <th className="px-4 py-4 text-center">To Par</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {scorecardRows.map((row) => {
+                                const total = calculateTotal(row.scores);
+                                const toPar = formatToPar(total);
+
+                                return (
+                                  <tr key={row.id} className="border-t border-[#E8DCC8] bg-white/70">
+                                    <td className="px-4 py-4 font-black text-[#0B3D2E]">{row.playerName}</td>
+                                    <td className="px-4 py-4 text-sm text-[#51635C]">{row.team}</td>
+                                    {row.scores.map((score, holeIndex) => (
+                                      <td key={`${row.id}-${holeIndex}`} className="px-2 py-3 text-center">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="12"
+                                          value={score}
+                                          onChange={(event) => handleScoreInputChange(row.id, holeIndex, event.target.value)}
+                                          className="h-9 w-12 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-2 py-1 text-center text-sm font-semibold text-[#0B3D2E] outline-none"
+                                        />
+                                      </td>
+                                    ))}
+                                    <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{total}</td>
+                                    <td className="px-4 py-4 text-center font-black text-[#B8892D]">{toPar}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner">
+                      <h4 className="text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                        No players have been added yet.
+                      </h4>
+                      <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-[#51635C]">
+                        Add players in the Players tab first, then generate scorecards for the tournament field.
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner">
+                    <h4 className="text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                      Scorecards ready to generate.
+                    </h4>
+                    <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-[#51635C]">
+                      Use the button above to generate scorecards for each player in the roster and begin editing strokes hole by hole.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : activeTab === "Clippd Export" ? (
+              <div className="space-y-6">
+                <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                      Clippd Export
+                    </p>
+                    <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                      Prepare tournament results for submission.
+                    </h3>
+                  </div>
+                  <p className="mt-4 max-w-3xl text-lg leading-8 text-[#51635C]">
+                    Clubhouse HQ can prepare your tournament results for submission to Scoreboard powered by Clippd.
+                  </p>
+
+                  <div className="mt-6 grid gap-5 md:grid-cols-2">
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Clippd Tournament ID</span>
+                      <input
+                        name="tournamentId"
+                        value={clippdExportState.tournamentId}
+                        onChange={handleClippdInputChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                        placeholder="e.g. 10482"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Clippd Tournament Key</span>
+                      <input
+                        name="tournamentKey"
+                        value={clippdExportState.tournamentKey}
+                        onChange={handleClippdInputChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                        placeholder="e.g. 6f8a2c"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] md:col-span-2">
+                      <span>Export Format</span>
+                      <select
+                        name="exportFormat"
+                        value={clippdExportState.exportFormat}
+                        onChange={handleClippdInputChange}
+                        className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                      >
+                        <option>Final Results CSV</option>
+                        <option>Hole-by-Hole CSV</option>
+                        <option>Team Results CSV</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleClippdSave}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                    >
+                      Save Clippd Info
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openScoreboardImportModal}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                    >
+                      Import from Scoreboard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClippdGenerate}
+                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                    >
+                      Generate Export
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 shadow-inner">
+                <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                  {activeTab}
+                </p>
+                <h3 className="mt-3 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                  {activeTab === "Overview"
+                    ? "Tournament overview coming soon."
+                    : "Live scoring view coming soon."}
+                </h3>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-[#51635C]">
+                  This screen is a UI-only placeholder for the selected section. The existing Clubhouse HQ visual language is preserved for the next phase.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {isAutoRepairModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closeAutoRepairModal}
+        >
+          <div
+            className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Pairings Automation
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    Auto Re-Pair by Results
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAutoRepairModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <form className="px-7 py-7" onSubmit={handleAutoRepairSubmit}>
+              <p className="text-base leading-8 text-[#51635C]">
+                After a completed round, Clubhouse HQ will automatically reorder teams and players based on results. Worst teams go out first. Leading teams go out last. Players are also reordered within team groups from highest score to lowest score.
+              </p>
+
+              <div className="mt-6 grid gap-5 md:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Source Round</span>
+                  <select
+                    name="sourceRound"
+                    value={autoRepairState.sourceRound}
+                    onChange={handleAutoRepairInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                  >
+                    <option>Round 1</option>
+                    <option>Round 2</option>
+                    <option>Round 3</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Target Round</span>
+                  <select
+                    name="targetRound"
+                    value={autoRepairState.targetRound}
+                    onChange={handleAutoRepairInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                  >
+                    <option>Round 2</option>
+                    <option>Round 3</option>
+                    <option>Round 4</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Pairing Order</span>
+                  <select
+                    name="pairingOrder"
+                    value={autoRepairState.pairingOrder}
+                    onChange={handleAutoRepairInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                  >
+                    <option>Worst to Best</option>
+                    <option>Best to Worst</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Tee Time Interval</span>
+                  <select
+                    name="teeTimeInterval"
+                    value={autoRepairState.teeTimeInterval}
+                    onChange={handleAutoRepairInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                  >
+                    <option>8 minutes</option>
+                    <option>9 minutes</option>
+                    <option>10 minutes</option>
+                    <option>12 minutes</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeAutoRepairModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                >
+                  Generate Draft Pairings
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isScoreboardImportModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closeScoreboardImportModal}
+        >
+          <div
+            className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Scoreboard Import
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    Import Tournament from Scoreboard
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeScoreboardImportModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <form className="px-7 py-7" onSubmit={handleScoreboardImportSubmit}>
+              <p className="text-base leading-8 text-[#51635C]">
+                Enter your Scoreboard Tournament ID and Tournament Key to import event details, teams, players, course setup, scorecards, tee times, and starting holes.
+              </p>
+
+              <div className="mt-6 grid gap-5 md:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] md:col-span-2">
+                  <span>Scoreboard Tournament ID</span>
+                  <input
+                    name="tournamentId"
+                    value={scoreboardImportState.tournamentId}
+                    onChange={handleScoreboardImportInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. 10482"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] md:col-span-2">
+                  <span>Tournament Key</span>
+                  <input
+                    name="tournamentKey"
+                    value={scoreboardImportState.tournamentKey}
+                    onChange={handleScoreboardImportInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. 6f8a2c"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-8">
+                <p className="text-sm font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                  Import Options
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {[
+                    ["tournamentDetails", "Tournament details"],
+                    ["teams", "Teams"],
+                    ["players", "Players"],
+                    ["courseSetup", "Course setup"],
+                    ["scorecards", "Scorecards"],
+                    ["teeTimes", "Tee times"],
+                    ["startingHoles", "Starting holes"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-3 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-sm font-semibold text-[#0B3D2E]">
+                      <input
+                        type="checkbox"
+                        name={key}
+                        checked={Boolean(scoreboardImportState.options[key as keyof typeof scoreboardImportState.options])}
+                        onChange={handleScoreboardImportInputChange}
+                        className="h-4 w-4 rounded border-[#E8DCC8] text-[#0B3D2E] focus:ring-[#0B3D2E]"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeScoreboardImportModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                >
+                  Import Preview
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isTeamModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closeTeamModal}
+        >
+          <div
+            className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Team Management
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    {editingTeamId ? "Edit Team" : "Add Team"}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeTeamModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <form className="px-7 py-7" onSubmit={handleTeamSubmit}>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] sm:col-span-2">
+                  <span>School Name</span>
+                  <input
+                    name="schoolName"
+                    value={teamFormState.schoolName}
+                    onChange={handleTeamInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. Bluffton University"
+                  />
+                  {teamErrors.schoolName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.schoolName}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Short Name</span>
+                  <input
+                    name="shortName"
+                    value={teamFormState.shortName}
+                    onChange={handleTeamInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. BU"
+                  />
+                  {teamErrors.shortName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.shortName}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Team Color</span>
+                  <input
+                    name="teamColor"
+                    value={teamFormState.teamColor}
+                    onChange={handleTeamInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. #0B3D2E"
+                  />
+                  {teamErrors.teamColor ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.teamColor}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] sm:col-span-2">
+                  <span>Coach Name</span>
+                  <input
+                    name="coachName"
+                    value={teamFormState.coachName}
+                    onChange={handleTeamInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. Coach Smith"
+                  />
+                  {teamErrors.coachName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.coachName}</p> : null}
+                </label>
+              </div>
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeTeamModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                >
+                  {editingTeamId ? "Save Team" : "Add Team"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isPlayerModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          onClick={closePlayerModal}
+        >
+          <div
+            className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Player Management
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    {editingPlayerId ? "Edit Player" : "Add Player"}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePlayerModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <form className="px-7 py-7" onSubmit={handlePlayerSubmit}>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>First Name</span>
+                  <input
+                    name="firstName"
+                    value={playerFormState.firstName}
+                    onChange={handlePlayerInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. Alex"
+                  />
+                  {playerErrors.firstName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{playerErrors.firstName}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Last Name</span>
+                  <input
+                    name="lastName"
+                    value={playerFormState.lastName}
+                    onChange={handlePlayerInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. Thompson"
+                  />
+                  {playerErrors.lastName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{playerErrors.lastName}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Team</span>
+                  <select
+                    name="teamId"
+                    value={playerFormState.teamId}
+                    onChange={handlePlayerInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                  >
+                    <option value="">Select a team</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={String(team.id)}>
+                        {team.schoolName}
+                      </option>
+                    ))}
+                  </select>
+                  {playerErrors.teamId ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{playerErrors.teamId}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  <span>Handicap</span>
+                  <input
+                    name="handicap"
+                    value={playerFormState.handicap}
+                    onChange={handlePlayerInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. +2"
+                  />
+                  {playerErrors.handicap ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{playerErrors.handicap}</p> : null}
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] sm:col-span-2">
+                  <span>Email (optional)</span>
+                  <input
+                    name="email"
+                    type="email"
+                    value={playerFormState.email}
+                    onChange={handlePlayerInputChange}
+                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                    placeholder="e.g. alex@example.com"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closePlayerModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                >
+                  {editingPlayerId ? "Save Player" : "Add Player"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      <footer className="bg-[#0B3D2E] px-6 py-10 text-[#F6F1E6] lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 md:flex-row md:items-center">
+          <div>
+            <h3 className="text-2xl font-black">Clubhouse HQ</h3>
+            <p className="mt-1 text-sm uppercase tracking-[0.35em] text-[#F0C96A]">
+              College Golf Operations
+            </p>
+          </div>
+          <p className="text-sm text-white/70">
+            © 2026 Clubhouse HQ. All rights reserved.
+          </p>
+        </div>
+      </footer>
+    </main>
+  );
+}
