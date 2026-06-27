@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
+import {
+  getTournamentStateStorageKey,
+  loadTournamentsFromStorage,
+  saveTournamentsToStorage,
+  type StoredTournament,
+} from "../lib/tournamentStorage";
 
 const stats = [
   ["Live Tournaments", "0"],
@@ -23,16 +29,7 @@ const formatOptions = [
 const eventTypeOptions = ["Team Event", "Individual Event", "Both"];
 const steps = ["Basic Information", "Format", "Round Setup", "Integrations", "Review"];
 
-type Tournament = {
-  id: number;
-  name: string;
-  date: string;
-  course: string;
-  city: string;
-  state: string;
-  rounds: string;
-  scoringFormat: string;
-};
+type Tournament = StoredTournament & { settings: FormState };
 
 type RoundSetup = {
   date: string;
@@ -52,12 +49,53 @@ type FormState = {
   rounds: string;
   scoringFormat: string;
   eventType: string;
+  teamSize: string;
+  countingScores: string;
+  startFormat: "Tee" | "Shotgun";
+  startingHoles: string;
   roundSetup: RoundSetup[];
   integrations: {
     clubhouseLiveScoring: boolean;
     clippdTournamentId: string;
     clippdTournamentKey: string;
   };
+};
+
+type TournamentTemplate = {
+  id: number;
+  tournamentName: string;
+  numberOfRounds: string;
+  teamSize: string;
+  countingScores: string;
+  startFormat: "Tee" | "Shotgun";
+  startingHoles: string;
+  roundSettings: RoundSetup[];
+  liveScoringSettings: {
+    clubhouseLiveScoring: boolean;
+    clippdTournamentId: string;
+    clippdTournamentKey: string;
+  };
+  formState: FormState;
+};
+
+const TEMPLATE_STORAGE_KEY = "clubhouse-hq-tournament-templates";
+
+const loadTemplatesFromStorage = (): TournamentTemplate[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(TEMPLATE_STORAGE_KEY);
+    if (!rawValue) {
+      return [];
+    }
+
+    const parsed = JSON.parse(rawValue) as unknown;
+    return Array.isArray(parsed) ? (parsed as TournamentTemplate[]) : [];
+  } catch {
+    return [];
+  }
 };
 
 const createRoundSetup = (count: number): RoundSetup[] =>
@@ -79,6 +117,10 @@ const defaultFormState: FormState = {
   rounds: "1",
   scoringFormat: "Stroke Play",
   eventType: "Both",
+  teamSize: "5",
+  countingScores: "4",
+  startFormat: "Tee",
+  startingHoles: "1",
   roundSetup: createRoundSetup(1),
   integrations: {
     clubhouseLiveScoring: true,
@@ -90,18 +132,51 @@ const defaultFormState: FormState = {
 export default function DashboardPage() {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>(() => loadTournamentsFromStorage() as Tournament[]);
+  const [templates, setTemplates] = useState<TournamentTemplate[]>(() => loadTemplatesFromStorage());
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
+  const saveTemplates = (nextValue: SetStateAction<TournamentTemplate[]>) => {
+    setTemplates((current) => {
+      const nextTemplates = typeof nextValue === "function" ? nextValue(current) : nextValue;
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(nextTemplates));
+      }
+
+      return nextTemplates;
+    });
+  };
+
+  const saveTournaments = (nextValue: SetStateAction<Tournament[]>) => {
+    setTournaments((current) => {
+      const nextTournaments = typeof nextValue === "function" ? nextValue(current) : nextValue;
+      saveTournamentsToStorage(nextTournaments);
+      return nextTournaments;
+    });
+  };
+
+  const normalizeFormState = (value: FormState): FormState => {
+    const rounds = Math.max(1, Number(value.rounds) || 1);
+    return {
+      ...value,
+      rounds: String(rounds),
+      roundSetup: createRoundSetup(rounds).map((round, index) => value.roundSetup[index] ?? round),
+    };
+  };
+
   const resetForm = () => {
     setFormState(defaultFormState);
+    setSelectedTemplateId("");
     setCurrentStep(1);
     setErrors({});
   };
 
   const openModal = () => {
+    setTemplates(loadTemplatesFromStorage());
     resetForm();
     setIsModalOpen(true);
   };
@@ -183,19 +258,115 @@ export default function DashboardPage() {
   const handleCreateTournament = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    const normalizedFormState = normalizeFormState(formState);
+    const nextId = String(
+      tournaments.reduce((maxId, tournament) => {
+        const parsedId = Number(tournament.id);
+        return Number.isFinite(parsedId) ? Math.max(maxId, parsedId) : maxId;
+      }, 0) + 1
+    );
+
     const newTournament: Tournament = {
-      id: Date.now(),
-      name: formState.name.trim(),
-      date: formState.date,
-      course: formState.course.trim(),
-      city: formState.city.trim(),
-      state: formState.state.trim(),
-      rounds: formState.rounds,
-      scoringFormat: formState.scoringFormat,
+      id: nextId,
+      name: normalizedFormState.name.trim(),
+      date: normalizedFormState.date,
+      course: normalizedFormState.course.trim(),
+      city: normalizedFormState.city.trim(),
+      state: normalizedFormState.state.trim(),
+      rounds: normalizedFormState.rounds,
+      scoringFormat: normalizedFormState.scoringFormat,
+      status: "Upcoming",
+      settings: normalizedFormState,
     };
 
-    setTournaments((current) => [newTournament, ...current]);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        getTournamentStateStorageKey(newTournament.id),
+        JSON.stringify({
+          teams: [],
+          players: [],
+          pairings: [],
+          scorecards: {
+            scorecardsGenerated: false,
+            scorecardRows: [],
+            roundSetup: {
+              roundNumber: "1",
+              startingHole: normalizedFormState.startingHoles || "1",
+              numberOfHoles: normalizedFormState.roundSetup[0]?.holes || "18",
+              teeTime: normalizedFormState.roundSetup[0]?.teeTime || "7:30 AM",
+              countingScores: normalizedFormState.countingScores || "4",
+            },
+          },
+          clippdExportState: {
+            tournamentId: normalizedFormState.integrations.clippdTournamentId,
+            tournamentKey: normalizedFormState.integrations.clippdTournamentKey,
+            exportFormat: "Final Results CSV",
+          },
+          scoreboardImportState: {
+            tournamentId: "",
+            tournamentKey: "",
+            options: {
+              tournamentDetails: true,
+              teams: true,
+              players: true,
+              courseSetup: true,
+              scorecards: false,
+              teeTimes: false,
+              startingHoles: false,
+            },
+          },
+          autoRepairState: {
+            sourceRound: "Round 1",
+            targetRound: "Round 2",
+            pairingOrder: "Worst to Best",
+            teeTimeInterval: "8 minutes",
+          },
+        })
+      );
+    }
+
+    saveTournaments((current) => [newTournament, ...current]);
     closeModal();
+  };
+
+  const handleSaveTournamentAsTemplate = (tournament: Tournament) => {
+    const sourceSettings = normalizeFormState(tournament.settings ?? defaultFormState);
+
+    saveTemplates((current) => {
+      const nextId = current.reduce((maxId, template) => Math.max(maxId, template.id), 0) + 1;
+
+      const nextTemplate: TournamentTemplate = {
+        id: nextId,
+        tournamentName: sourceSettings.name || tournament.name,
+        numberOfRounds: sourceSettings.rounds,
+        teamSize: sourceSettings.teamSize,
+        countingScores: sourceSettings.countingScores,
+        startFormat: sourceSettings.startFormat,
+        startingHoles: sourceSettings.startingHoles,
+        roundSettings: sourceSettings.roundSetup,
+        liveScoringSettings: {
+          ...sourceSettings.integrations,
+        },
+        formState: sourceSettings,
+      };
+
+      return [nextTemplate, ...current];
+    });
+  };
+
+  const handleApplyTemplate = () => {
+    if (!selectedTemplateId) {
+      return;
+    }
+
+    const selectedTemplate = templates.find((template) => String(template.id) === selectedTemplateId);
+    if (!selectedTemplate) {
+      return;
+    }
+
+    const nextFormState = normalizeFormState(selectedTemplate.formState);
+    setFormState(nextFormState);
+    setErrors({});
   };
 
   return (
@@ -275,6 +446,12 @@ export default function DashboardPage() {
             >
               Create Tournament
             </button>
+            <Link
+              href="/dashboard/templates"
+              className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+            >
+              Templates
+            </Link>
             <a className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10" href="#">
               Import Teams
             </a>
@@ -313,7 +490,7 @@ export default function DashboardPage() {
                       </h3>
                     </div>
                     <span className="rounded-full border border-[#E8DCC8] bg-[#F6F1E6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
-                      Upcoming
+                      {tournament.status}
                     </span>
                   </div>
 
@@ -332,21 +509,33 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="font-semibold uppercase tracking-[0.25em]">Status</span>
-                      <span className="text-right font-black text-[#0B3D2E]">Upcoming</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{tournament.status}</span>
                     </div>
                   </div>
 
                   <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                     <button
                       type="button"
-                      onClick={() => router.push("/tournament/test")}
+                      onClick={() => router.push(`/tournament/${tournament.id}`)}
                       className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
                     >
                       Open Tournament
                     </button>
                     <button
                       type="button"
-                      onClick={() => setTournaments((current) => current.filter((item) => item.id !== tournament.id))}
+                      onClick={() => handleSaveTournamentAsTemplate(tournament)}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                    >
+                      Save as Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window !== "undefined") {
+                          window.localStorage.removeItem(getTournamentStateStorageKey(tournament.id));
+                        }
+                        saveTournaments((current) => current.filter((item) => item.id !== tournament.id));
+                      }}
                       className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                     >
                       Delete
@@ -389,6 +578,32 @@ export default function DashboardPage() {
             </div>
 
             <form className="px-7 py-7" onSubmit={handleCreateTournament}>
+              <div className="mb-5 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Create From Template</p>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                    className="w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-sm font-semibold normal-case tracking-normal text-[#0B3D2E] outline-none"
+                  >
+                    <option value="">Select a template</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={String(template.id)}>
+                        {template.tournamentName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleApplyTemplate}
+                    disabled={!selectedTemplateId}
+                    className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Apply Template
+                  </button>
+                </div>
+              </div>
+
               <div className="mb-6 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-4">
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.35em] text-[#51635C]">
                   <span>Step {currentStep} of 5</span>
@@ -518,6 +733,57 @@ export default function DashboardPage() {
                           {option}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                  <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Tournament Setup</p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                        <span>Team Size</span>
+                        <input
+                          name="teamSize"
+                          type="number"
+                          min="1"
+                          max="12"
+                          value={formState.teamSize}
+                          onChange={handleInputChange}
+                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                        <span>Counting Scores</span>
+                        <input
+                          name="countingScores"
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={formState.countingScores}
+                          onChange={handleInputChange}
+                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                        <span>Tee or Shotgun</span>
+                        <select
+                          name="startFormat"
+                          value={formState.startFormat}
+                          onChange={handleInputChange}
+                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                        >
+                          <option value="Tee">Tee</option>
+                          <option value="Shotgun">Shotgun</option>
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                        <span>Starting Holes</span>
+                        <input
+                          name="startingHoles"
+                          value={formState.startingHoles}
+                          onChange={handleInputChange}
+                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
+                          placeholder="1 or 1,10"
+                        />
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -670,9 +936,25 @@ export default function DashboardPage() {
                       <span className="font-semibold uppercase tracking-[0.25em]">Format</span>
                       <span className="text-right font-black text-[#0B3D2E]">{formState.scoringFormat}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
                       <span className="font-semibold uppercase tracking-[0.25em]">Event Type</span>
                       <span className="text-right font-black text-[#0B3D2E]">{formState.eventType}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Team Size</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{formState.teamSize}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Counting Scores</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{formState.countingScores}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Start Format</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{formState.startFormat}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Starting Holes</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{formState.startingHoles}</span>
                     </div>
                   </div>
                 </div>

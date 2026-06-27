@@ -2,31 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-
-type Tournament = {
-  id: number;
-  name: string;
-  date: string;
-  course: string;
-  city: string;
-  state: string;
-  rounds: string;
-  scoringFormat: string;
-};
-
-const tournaments: Tournament[] = [
-  {
-    id: 1,
-    name: "Spring Invitational",
-    date: "2026-06-20",
-    course: "Glen Oaks",
-    city: "Findlay",
-    state: "OH",
-    rounds: "2",
-    scoringFormat: "Stroke Play",
-  },
-];
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { getTournamentStateStorageKey, loadTournamentsFromStorage } from "../../lib/tournamentStorage";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -137,8 +114,6 @@ const defaultClippdExportState: ClippdExportState = {
   exportFormat: "Final Results CSV",
 };
 
-const STORAGE_KEY = "clubhouse-hq-tournament-test";
-
 type PersistedTournamentState = {
   teams: Team[];
   players: Player[];
@@ -172,6 +147,18 @@ type PersistedTournamentState = {
 
 export default function TournamentPage() {
   const params = useParams();
+  const tournamentId = useMemo(() => {
+    const rawId = params?.id;
+    if (typeof rawId === "string") {
+      return rawId;
+    }
+    if (Array.isArray(rawId) && rawId.length > 0) {
+      return rawId[0];
+    }
+    return "";
+  }, [params]);
+
+  const storageKey = useMemo(() => (tournamentId ? getTournamentStateStorageKey(tournamentId) : ""), [tournamentId]);
   const [activeTab, setActiveTab] = useState("Overview");
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -192,6 +179,8 @@ export default function TournamentPage() {
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>([]);
   const [pairings, setPairings] = useState<PairingGroup[]>([]);
   const [pairingsMessage, setPairingsMessage] = useState("");
+  const hasLoadedFromStorageRef = useRef(false);
+  const hydrationPendingRef = useRef(false);
   const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
   const [scoreboardImportState, setScoreboardImportState] = useState({
@@ -218,23 +207,51 @@ export default function TournamentPage() {
   });
 
   const tournament = useMemo(() => {
-    const id = Number(params?.id);
-    return tournaments.find((item) => item.id === id) ?? tournaments[0];
-  }, [params?.id]);
+    const savedTournaments = loadTournamentsFromStorage();
+    return (
+      savedTournaments.find((item) => item.id === tournamentId) ?? {
+        id: tournamentId,
+        name: "Tournament",
+        date: "",
+        course: "",
+        city: "",
+        state: "",
+        rounds: "1",
+        scoringFormat: "Stroke Play",
+        status: "Upcoming",
+        settings: null,
+      }
+    );
+  }, [tournamentId]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !tournamentId || !storageKey) {
       return;
     }
 
+    hasLoadedFromStorageRef.current = false;
+    hydrationPendingRef.current = false;
+
+    console.log("[TournamentStorage] load:start", {
+      tournamentId,
+      storageKey,
+    });
+
     try {
-      const storedValue = window.localStorage.getItem(STORAGE_KEY);
+      const storedValue = window.localStorage.getItem(storageKey);
 
       if (!storedValue) {
+        hasLoadedFromStorageRef.current = true;
+        console.log("[TournamentStorage] load:empty", {
+          tournamentId,
+          storageKey,
+          loadedTeamsCount: 0,
+        });
         return;
       }
 
       const parsedValue = JSON.parse(storedValue) as Partial<PersistedTournamentState>;
+      const loadedTeamsCount = Array.isArray(parsedValue.teams) ? parsedValue.teams.length : 0;
 
       if (parsedValue.teams) {
         setTeams(parsedValue.teams);
@@ -262,13 +279,37 @@ export default function TournamentPage() {
       if (parsedValue.autoRepairState) {
         setAutoRepairState(parsedValue.autoRepairState);
       }
+
+      console.log("[TournamentStorage] load:success", {
+        tournamentId,
+        storageKey,
+        loadedTeamsCount,
+      });
+
+      hasLoadedFromStorageRef.current = true;
+      hydrationPendingRef.current = true;
     } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
+      // Keep existing storage value in place even if parsing fails.
+      hasLoadedFromStorageRef.current = true;
+      console.log("[TournamentStorage] load:error", {
+        tournamentId,
+        storageKey,
+        loadedTeamsCount: 0,
+      });
     }
-  }, []);
+  }, [storageKey, tournamentId]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !tournamentId || !storageKey) {
+      return;
+    }
+
+    if (!hasLoadedFromStorageRef.current) {
+      return;
+    }
+
+    if (hydrationPendingRef.current) {
+      hydrationPendingRef.current = false;
       return;
     }
 
@@ -286,8 +327,13 @@ export default function TournamentPage() {
       autoRepairState,
     };
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
-  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState]);
+    window.localStorage.setItem(storageKey, JSON.stringify(persistedState));
+    console.log("[TournamentStorage] save", {
+      tournamentId,
+      storageKey,
+      savedTeamsCount: teams.length,
+    });
+  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState, storageKey, tournamentId]);
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);
@@ -833,6 +879,8 @@ export default function TournamentPage() {
   const handlePrintScorecard = () => {
     window.print();
   };
+
+  const mobileScorecardUrl = "/scorecard/test";
 
   const handlePrintFromQrModal = () => {
     if (!activeQrPlayer) {
@@ -1957,6 +2005,9 @@ export default function TournamentPage() {
                 <p className="mt-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
                   QR Code placeholder
                 </p>
+                <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                  Scorecard URL: {mobileScorecardUrl}
+                </div>
               </div>
 
               <p className="mt-6 text-center text-base leading-8 text-[#51635C]">
@@ -1977,6 +2028,12 @@ export default function TournamentPage() {
                 >
                   Download QR
                 </button>
+                <Link
+                  href={mobileScorecardUrl}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Open Mobile Scorecard
+                </Link>
                 <button
                   type="button"
                   onClick={handlePrintFromQrModal}
