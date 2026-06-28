@@ -352,7 +352,7 @@ export default function TournamentPage() {
       const loadedRoundId = `round-${String(Number(loadedRoundSetup.roundNumber) || 1)}`;
       const submittedScoreMap = new Map<string, number[]>();
       for (const score of storedEnvelope.tournament.scores) {
-        if (score.roundId === loadedRoundId) {
+        if (score.roundId === loadedRoundId && score.enteredBy === "marker") {
           submittedScoreMap.set(score.playerId, score.holeScores);
         }
       }

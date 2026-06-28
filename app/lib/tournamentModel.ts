@@ -68,6 +68,7 @@ export type Score = {
   holeScores: number[];
   total: number;
   status: ScoreStatus;
+  enteredBy: "self" | "marker";
 };
 
 export type Tournament = {
@@ -350,6 +351,7 @@ export const legacyUiStateToTournamentModel = (
         holeScores,
         total,
         status: isComplete ? "complete" : hasAnyScore ? "live" : "pending",
+        enteredBy: "self" as const,
       };
     });
 

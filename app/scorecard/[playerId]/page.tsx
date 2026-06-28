@@ -296,10 +296,10 @@ export default function PlayerScorecardPage() {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
       
-      mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores);
+      mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores, "self");
       
       if (scorecard.markerPlayerId && markerScores[currentHoleIndex] > 0) {
-        mergeTournamentScoreSubmission(requestedTournamentId, scorecard.markerPlayerId, roundId, markerScores);
+        mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, markerScores, "marker");
       }
     }
 

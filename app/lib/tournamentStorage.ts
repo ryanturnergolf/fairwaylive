@@ -406,6 +406,8 @@ const normalizeScores = (value: unknown): Tournament["scores"] => {
       ? record.holeScores.map((holeScore) => asNumber(holeScore, 0))
       : [];
     const total = asNumber(record?.total, holeScores.reduce((sum, holeScore) => sum + holeScore, 0));
+    const enteredByValue = asString(record?.enteredBy);
+    const enteredBy = (enteredByValue === "marker" ? "marker" : "self") as "self" | "marker";
 
     return {
       playerId: asString(record?.playerId, `player-${index + 1}`),
@@ -413,6 +415,7 @@ const normalizeScores = (value: unknown): Tournament["scores"] => {
       holeScores,
       total,
       status: asString(record?.status, "pending") as Tournament["scores"][number]["status"],
+      enteredBy,
     };
   });
 };
@@ -625,7 +628,8 @@ export const mergeTournamentScoreSubmission = (
   tournamentId: string,
   playerId: string,
   roundId: string,
-  holeScores: number[]
+  holeScores: number[],
+  enteredBy: "self" | "marker" = "self"
 ): boolean => {
   if (typeof window === "undefined" || !tournamentId || !playerId || !roundId || holeScores.length === 0) {
     return false;
@@ -648,7 +652,7 @@ export const mergeTournamentScoreSubmission = (
   const isComplete = holeScores.length > 0 && holeScores.every((score) => score > 0);
 
   const nextScores = envelope.tournament.scores.filter(
-    (score) => !(score.playerId === playerId && score.roundId === roundId)
+    (score) => !(score.playerId === playerId && score.roundId === roundId && score.enteredBy === enteredBy)
   );
 
   nextScores.push({
@@ -657,6 +661,7 @@ export const mergeTournamentScoreSubmission = (
     holeScores: [...holeScores],
     total,
     status: isComplete ? "complete" : hasAnyScore ? "live" : "pending",
+    enteredBy,
   });
 
   const nextTournament: Tournament = {
