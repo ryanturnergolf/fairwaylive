@@ -298,8 +298,8 @@ export default function PlayerScorecardPage() {
       
       mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores, "self");
       
-      if (scorecard.markerPlayerId && markerScores[currentHoleIndex] > 0) {
-        mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, markerScores, "marker");
+      if (scorecard.markerPlayerId) {
+        mergeTournamentScoreSubmission(requestedTournamentId, scorecard.markerPlayerId, roundId, markerScores, "marker");
       }
     }
 
@@ -329,7 +329,7 @@ export default function PlayerScorecardPage() {
     }
     const roundNumber = String(Number(scorecard.round) || 1);
     const roundId = `round-${roundNumber}`;
-    const ok = mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores);
+    const ok = mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores, "self");
     if (!ok) {
       setSaveError("Unable to submit. Please try again.");
       return;
