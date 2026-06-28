@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   loadTournamentStateFromStorage,
   loadTournamentsFromStorage,
+  loadTournamentStorageEnvelope,
   mergeTournamentScoreSubmission,
 } from "../../lib/tournamentStorage";
 
@@ -135,8 +136,22 @@ export default function PlayerScorecardPage() {
     const featuredPlayer = pairing.players[0];
     const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
 
+    const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+    let resolvedPlayerId = routePlayerId;
+    
+    if (storedEnvelope && storedEnvelope.tournament.players.length > 0) {
+      const matchedPlayer = storedEnvelope.tournament.players.find(
+        (p) =>
+          `${p.firstName} ${p.lastName}`.trim() === featuredPlayer.playerName &&
+          (p.teamId ? storedEnvelope.tournament.teams.find((t) => t.id === p.teamId)?.name : "Unassigned") === featuredPlayer.teamName
+      );
+      if (matchedPlayer) {
+        resolvedPlayerId = matchedPlayer.id;
+      }
+    }
+
     return {
-      playerId: routePlayerId || `group-${pairing.groupNumber}`,
+      playerId: resolvedPlayerId || `group-${pairing.groupNumber}`,
       tournamentName: tournament.name,
       playerName: featuredPlayer.playerName,
       team: featuredPlayer.teamName,
@@ -233,10 +248,10 @@ export default function PlayerScorecardPage() {
     });
     setSaveError("");
 
-    if (requestedTournamentId && routePlayerId) {
+    if (requestedTournamentId && scorecard.playerId) {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
-      mergeTournamentScoreSubmission(requestedTournamentId, routePlayerId, roundId, scores);
+      mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores);
     }
 
     if (currentHoleIndex < scorecard.holes.length - 1) {
@@ -259,13 +274,13 @@ export default function PlayerScorecardPage() {
   };
 
   const handleConfirmSubmit = () => {
-    if (!requestedTournamentId || !routePlayerId) {
+    if (!requestedTournamentId || !scorecard.playerId) {
       setSaveError("Unable to submit. Please try again.");
       return;
     }
     const roundNumber = String(Number(scorecard.round) || 1);
     const roundId = `round-${roundNumber}`;
-    const ok = mergeTournamentScoreSubmission(requestedTournamentId, routePlayerId, roundId, scores);
+    const ok = mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores);
     if (!ok) {
       setSaveError("Unable to submit. Please try again.");
       return;
