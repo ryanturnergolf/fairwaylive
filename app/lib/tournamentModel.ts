@@ -280,26 +280,27 @@ export const legacyUiStateToTournamentModel = (
   const playerIdsByName = new Map(
     legacyPlayers
       .map((player) => (isRecord(player) ? player : null))
-      .filter((player): player is Record<string, unknown> => Boolean(player))
+      .filter((player): player is LegacyPlayer => Boolean(player))
       .map((player) => [`${asString(player.firstName).trim()} ${asString(player.lastName).trim()}`.trim(), String(player.id)])
   );
   const roundId = createRoundId(0);
 
   const teams: Team[] = legacyTeams
     .map((team) => (isRecord(team) ? team : null))
-    .filter((team): team is Record<string, unknown> => Boolean(team))
+    .filter((team): team is LegacyTeam => Boolean(team))
     .map((team) => ({
       id: String(team.id),
-      name: asString(team.name, asString(team.schoolName, "")),
+      name: asString((team as unknown as Record<string, unknown>).name, asString(team.schoolName, "")),
       players: legacyPlayers
         .map((player) => (isRecord(player) ? player : null))
-        .filter((player): player is Record<string, unknown> => Boolean(player) && asString(player.teamId) === String(team.id))
+        .filter((player): player is LegacyPlayer => Boolean(player))
+        .filter((player) => asString(player.teamId) === String(team.id))
         .map((player) => String(player.id)),
     }));
 
   const players: Player[] = legacyPlayers
     .map((player) => (isRecord(player) ? player : null))
-    .filter((player): player is Record<string, unknown> => Boolean(player))
+    .filter((player): player is LegacyPlayer => Boolean(player))
     .map((player) => ({
       id: String(player.id),
       firstName: asString(player.firstName),
@@ -315,7 +316,7 @@ export const legacyUiStateToTournamentModel = (
 
   const pairings: Pairing[] = legacyPairings
     .map((pairing) => (isRecord(pairing) ? pairing : null))
-    .filter((pairing): pairing is Record<string, unknown> => Boolean(pairing))
+    .filter((pairing): pairing is LegacyPairingGroup => Boolean(pairing))
     .map((pairing, index) => ({
       id: `pairing-${asNumber(pairing.groupNumber, index + 1)}`,
       roundId,
@@ -325,7 +326,7 @@ export const legacyUiStateToTournamentModel = (
       players: Array.isArray(pairing.players)
         ? pairing.players
             .map((player) => (isRecord(player) ? player : null))
-            .filter((player): player is Record<string, unknown> => Boolean(player))
+            .filter((player): player is LegacyPairingPlayer => Boolean(player))
             .map((player) => ({
               playerId: asString(player.playerId, asString(player.playerName, "")) || playerIdsByName.get(asString(player.playerName, "")) || asString(player.playerName, ""),
               playerName: asString(player.playerName),
@@ -336,7 +337,7 @@ export const legacyUiStateToTournamentModel = (
 
   const scores: Score[] = legacyScorecardRows
     .map((row) => (isRecord(row) ? row : null))
-    .filter((row): row is Record<string, unknown> => Boolean(row))
+    .filter((row): row is LegacyScorecardRow => Boolean(row))
     .map((row) => {
       const holeScores = Array.isArray(row.scores) ? row.scores.map((score) => (Number.isFinite(Number(score)) ? Number(score) : 0)) : [];
       const total = holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0);
@@ -441,11 +442,11 @@ export const tournamentModelToLegacyUiState = (
             team: model.teams.find((team) => team.players.includes(score.playerId))?.name || "Unassigned",
             scores: [...score.holeScores],
           })),
-      roundSetup: legacyRoundSetup,
+      roundSetup,
     },
-    clippdExportState: legacyClippdExportState,
-    scoreboardImportState: legacyScoreboardImportState,
-    autoRepairState: legacyAutoRepairState,
+    clippdExportState: uiState.clippdExportState,
+    scoreboardImportState: uiState.scoreboardImportState,
+    autoRepairState: uiState.autoRepairState,
   };
 };
 
@@ -463,7 +464,7 @@ export const normalizeTournamentStorageEnvelope = (
 
   if (rawValue.version === 2 && isRecord(rawValue.tournament)) {
     const tournament = rawValue.tournament as Tournament;
-    const uiState = normalizeLegacyUiState(isRecord(rawValue.uiState) ? (rawValue.uiState as LegacyTournamentUiState) : defaultUiState());
+    const uiState = isRecord(rawValue.uiState) ? (rawValue.uiState as LegacyTournamentUiState) : defaultUiState();
 
     return {
       version: 2,

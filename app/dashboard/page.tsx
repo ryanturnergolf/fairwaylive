@@ -295,6 +295,8 @@ export default function DashboardPage() {
       settings: normalizedFormState,
     };
 
+    const normalizedRoundCount = Number(normalizedFormState.rounds) || 1;
+
     if (typeof window !== "undefined") {
       window.localStorage.setItem(
         getTournamentStateStorageKey(newTournament.id),
@@ -344,7 +346,7 @@ export default function DashboardPage() {
               },
             },
             normalizedFormState,
-            normalizedFormState.rounds
+            normalizedRoundCount
           )
         )
       );

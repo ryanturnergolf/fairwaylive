@@ -306,20 +306,30 @@ const normalizeSettings = (primary: unknown, secondary: unknown, roundCount: num
 
 const normalizeLegacyUiState = (value: LegacyTournamentUiState | undefined | null): LegacyTournamentUiState => {
   const fallback = defaultLegacyTournamentUiState();
-  const scorecards = isRecord(value?.scorecards) ? value.scorecards : null;
+  const scorecards = asRecord(value?.scorecards);
+  const legacyScorecards = scorecards ?? fallback.scorecards;
+  const legacyValue = asRecord(value) ?? {};
 
   return {
-    teams: Array.isArray(value?.teams) ? value.teams : fallback.teams,
-    players: Array.isArray(value?.players) ? value.players : fallback.players,
-    pairings: Array.isArray(value?.pairings) ? value.pairings : fallback.pairings,
+    teams: Array.isArray(legacyValue.teams) ? legacyValue.teams : fallback.teams,
+    players: Array.isArray(legacyValue.players) ? legacyValue.players : fallback.players,
+    pairings: Array.isArray(legacyValue.pairings) ? legacyValue.pairings : fallback.pairings,
     scorecards: {
-      scorecardsGenerated: Boolean(scorecards?.scorecardsGenerated),
-      scorecardRows: Array.isArray(scorecards?.scorecardRows) ? scorecards.scorecardRows : fallback.scorecards.scorecardRows,
-      roundSetup: isRecord(scorecards?.roundSetup) ? scorecards.roundSetup : fallback.scorecards.roundSetup,
+      scorecardsGenerated: Boolean(legacyScorecards.scorecardsGenerated),
+      scorecardRows: Array.isArray(legacyScorecards.scorecardRows) ? legacyScorecards.scorecardRows : fallback.scorecards.scorecardRows,
+      roundSetup: asRecord(legacyScorecards.roundSetup)
+        ? (legacyScorecards.roundSetup as LegacyTournamentUiState["scorecards"]["roundSetup"])
+        : fallback.scorecards.roundSetup,
     },
-    clippdExportState: isRecord(value?.clippdExportState) ? value.clippdExportState : fallback.clippdExportState,
-    scoreboardImportState: isRecord(value?.scoreboardImportState) ? value.scoreboardImportState : fallback.scoreboardImportState,
-    autoRepairState: isRecord(value?.autoRepairState) ? value.autoRepairState : fallback.autoRepairState,
+    clippdExportState: asRecord(legacyValue.clippdExportState)
+      ? (legacyValue.clippdExportState as LegacyTournamentUiState["clippdExportState"])
+      : fallback.clippdExportState,
+    scoreboardImportState: asRecord(legacyValue.scoreboardImportState)
+      ? (legacyValue.scoreboardImportState as LegacyTournamentUiState["scoreboardImportState"])
+      : fallback.scoreboardImportState,
+    autoRepairState: asRecord(legacyValue.autoRepairState)
+      ? (legacyValue.autoRepairState as LegacyTournamentUiState["autoRepairState"])
+      : fallback.autoRepairState,
   };
 };
 

@@ -351,9 +351,9 @@ export default function TournamentPage() {
       setTeams(hydratedTournamentState.teams);
       setPlayers(hydratedTournamentState.players);
       setPairings(hydratedTournamentState.pairings);
-      setScorecardsGenerated(hydratedTournamentState.scorecardsGenerated);
-      setScorecardRows(hydratedTournamentState.scorecardRows);
-      setRoundSetup(hydratedTournamentState.roundSetup);
+      setScorecardsGenerated(hydratedTournamentState.scorecards.scorecardsGenerated);
+      setScorecardRows(hydratedTournamentState.scorecards.scorecardRows);
+      setRoundSetup(hydratedTournamentState.scorecards.roundSetup);
       setClippdExportState(hydratedTournamentState.clippdExportState);
       setScoreboardImportState(hydratedTournamentState.scoreboardImportState);
       setAutoRepairState(hydratedTournamentState.autoRepairState);
@@ -1378,7 +1378,8 @@ export default function TournamentPage() {
         groupNumber: generatedPairings.length + 1,
           teeTime: normalizedRoundSetup.teeTime || "--",
           startingHole: String(normalizedRoundSetup.startingHole),
-          players: fallbackRows.slice(index, index + normalizedRoundSetup.defaultGroupSize).map((row) => ({
+          players: fallbackRows.slice(index, index + normalizedRoundSetup.defaultGroupSize).map((row, rowIndex) => ({
+          playerId: row.id != null ? String(row.id) : `fallback-${row.playerName}-${rowIndex}`,
           playerName: row.playerName,
           teamName: row.team,
         })),
