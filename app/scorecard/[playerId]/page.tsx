@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import {
+  loadTournamentStateFromStorage,
+  loadTournamentsFromStorage,
+  mergeTournamentScoreSubmission,
+} from "../../lib/tournamentStorage";
 
 type Hole = {
   holeNumber: number;
@@ -17,6 +22,26 @@ type PlayerScorecard = {
   team: string;
   round: string;
   holes: Hole[];
+};
+
+type PairingGroup = {
+  groupNumber: number;
+  teeTime: string;
+  startingHole: string;
+  players: Array<{
+    playerName: string;
+    teamName: string;
+  }>;
+};
+
+type PersistedTournamentState = {
+  pairings: PairingGroup[];
+  scorecards: {
+    roundSetup: {
+      roundNumber: string;
+      numberOfHoles: string;
+    };
+  };
 };
 
 const defaultHoles: Hole[] = [
@@ -77,9 +102,52 @@ const formatToPar = (value: number) => {
 
 export default function PlayerScorecardPage() {
   const params = useParams<{ playerId: string }>();
+  const searchParams = useSearchParams();
   const routePlayerId = Array.isArray(params?.playerId) ? params.playerId[0] : params?.playerId;
+  const requestedTournamentId = searchParams.get("tournamentId") ?? "";
+  const requestedPairingId = searchParams.get("pairing") ?? "";
 
-  const scorecard = sampleScorecards[routePlayerId || ""] ?? fallbackScorecard;
+  const qrResolvedScorecard = useMemo(() => {
+    if (!requestedTournamentId && !requestedPairingId) {
+      return null;
+    }
+
+    if (!requestedTournamentId || !requestedPairingId) {
+      return { error: "Missing tournament or pairing information in this QR code." } as const;
+    }
+
+    const tournament = loadTournamentsFromStorage().find((item) => item.id === requestedTournamentId);
+    if (!tournament) {
+      return { error: "We could not find that tournament. Please request a new mobile scoring link." } as const;
+    }
+
+    const tournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(requestedTournamentId);
+    if (!tournamentState || !Array.isArray(tournamentState.pairings) || tournamentState.pairings.length === 0) {
+      return { error: "This tournament does not have any saved pairings yet." } as const;
+    }
+
+    const pairingNumber = Number(requestedPairingId);
+    const pairing = tournamentState.pairings.find((item) => item.groupNumber === pairingNumber);
+    if (!pairing || pairing.players.length === 0) {
+      return { error: "We could not find that pairing. Please request a new mobile scoring link." } as const;
+    }
+
+    const featuredPlayer = pairing.players[0];
+    const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
+
+    return {
+      playerId: routePlayerId || `group-${pairing.groupNumber}`,
+      tournamentName: tournament.name,
+      playerName: featuredPlayer.playerName,
+      team: featuredPlayer.teamName,
+      round: tournamentState.scorecards?.roundSetup?.roundNumber || "1",
+      holes: defaultHoles.slice(0, holeCount),
+    } satisfies PlayerScorecard;
+  }, [requestedTournamentId, requestedPairingId, routePlayerId]);
+
+  const scorecard = (qrResolvedScorecard && "error" in qrResolvedScorecard
+    ? fallbackScorecard
+    : qrResolvedScorecard ?? sampleScorecards[routePlayerId || ""] ?? fallbackScorecard);
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
@@ -99,6 +167,43 @@ export default function PlayerScorecardPage() {
       toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
     };
   }, [scorecard.holes, scores]);
+
+  if (qrResolvedScorecard && "error" in qrResolvedScorecard) {
+    return (
+      <main className="min-h-screen bg-[#F6F1E6] px-4 py-8 text-[#0B3D2E]">
+        <div className="mx-auto max-w-md rounded-[28px] border border-[#E8DCC8] bg-white/90 p-6 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
+              HQ
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-[-0.02em]">Clubhouse HQ</h1>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#B8892D]">
+                Mobile Scorecard
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-6 text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
+            Mobile Score Entry Unavailable
+          </p>
+          <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
+            This scoring link is not valid.
+          </h2>
+          <p className="mt-4 text-base leading-8 text-[#51635C]">
+            {qrResolvedScorecard.error}
+          </p>
+
+          <Link
+            href="/dashboard"
+            className="mt-6 inline-flex rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   const updateScore = (value: string) => {
     const parsed = Number(value);
@@ -128,6 +233,21 @@ export default function PlayerScorecardPage() {
   };
 
   const handleSubmitRound = () => {
+    const roundNumber = String(Number(scorecard.round) || 1);
+    const roundId = `round-${roundNumber}`;
+
+    if (!requestedTournamentId || !routePlayerId) {
+      setSubmitMessage("Unable to save this round.");
+      return;
+    }
+
+    const saved = mergeTournamentScoreSubmission(requestedTournamentId, routePlayerId, roundId, scores);
+
+    if (!saved) {
+      setSubmitMessage("Unable to save this round.");
+      return;
+    }
+
     setSubmitMessage("Round submitted locally. Network sync will be connected in a future phase.");
   };
 

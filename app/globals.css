@@ -73,4 +73,27 @@ body {
   .print-notes-area {
     min-height: 120px !important;
   }
+
+  body.printing-batch-scorecards * {
+    visibility: hidden;
+  }
+
+  body.printing-batch-scorecards .print-batch-scorecards-root,
+  body.printing-batch-scorecards .print-batch-scorecards-root * {
+    visibility: visible;
+  }
+
+  body.printing-batch-scorecards .print-batch-scorecards-root {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    padding: 24px;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  body.printing-batch-scorecards .print-batch-sheet {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }

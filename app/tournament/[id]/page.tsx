@@ -1,9 +1,18 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { toDataURL } from "qrcode";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { getTournamentStateStorageKey, loadTournamentsFromStorage } from "../../lib/tournamentStorage";
+import {
+  buildTournamentStorageEnvelope,
+  getTournamentStateStorageKey,
+  loadTournamentsFromStorage,
+  loadTournamentStorageEnvelope,
+  saveTournamentStorageEnvelope,
+  type StoredTournament,
+} from "../../lib/tournamentStorage";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -33,6 +42,7 @@ type Player = {
 };
 
 type PairingGroupPlayer = {
+  playerId: string;
   playerName: string;
   teamName: string;
 };
@@ -145,6 +155,48 @@ type PersistedTournamentState = {
   };
 };
 
+type TournamentMeta = {
+  id: string;
+  name: string;
+  date: string;
+  course: string;
+  city: string;
+  state: string;
+  rounds: string;
+  scoringFormat: string;
+  status: string;
+  settings: unknown;
+};
+
+const tournamentMetaFromEnvelope = (tournamentId: string, tournament: StoredTournament | null): TournamentMeta =>
+  tournament
+    ? {
+        id: tournament.id,
+        name: tournament.name,
+        date: tournament.date,
+        course: tournament.course,
+        city: tournament.city,
+        state: tournament.state,
+        rounds: tournament.rounds,
+        scoringFormat: tournament.scoringFormat,
+        status: tournament.status,
+        settings: tournament.settings,
+      }
+    : createFallbackTournamentMeta(tournamentId);
+
+const createFallbackTournamentMeta = (tournamentId: string): TournamentMeta => ({
+  id: tournamentId,
+  name: "Tournament",
+  date: "",
+  course: "",
+  city: "",
+  state: "",
+  rounds: "1",
+  scoringFormat: "Stroke Play",
+  status: "Upcoming",
+  settings: null,
+});
+
 export default function TournamentPage() {
   const params = useParams();
   const tournamentId = useMemo(() => {
@@ -181,6 +233,7 @@ export default function TournamentPage() {
   const [pairingsMessage, setPairingsMessage] = useState("");
   const hasLoadedFromStorageRef = useRef(false);
   const hydrationPendingRef = useRef(false);
+  const previousValidPairingsRef = useRef<PairingGroup[] | null>(null);
   const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
   const [scoreboardImportState, setScoreboardImportState] = useState({
@@ -199,30 +252,72 @@ export default function TournamentPage() {
   const [isAutoRepairModalOpen, setIsAutoRepairModalOpen] = useState(false);
   const [activeQrPlayer, setActiveQrPlayer] = useState<ScorecardRow | null>(null);
   const [activePrintPlayer, setActivePrintPlayer] = useState<ScorecardRow | null>(null);
+  const [activeQrCodeDataUrl, setActiveQrCodeDataUrl] = useState("");
+  const [isClientMounted, setIsClientMounted] = useState(false);
+  const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [autoRepairState, setAutoRepairState] = useState({
     sourceRound: "Round 1",
     targetRound: "Round 2",
     pairingOrder: "Worst to Best",
     teeTimeInterval: "8 minutes",
   });
+  const normalizedRoundSetup = {
+    roundNumber: Math.max(1, Number(roundSetup?.roundNumber) || 1),
+    numberOfHoles: Math.max(1, Math.min(18, Number(roundSetup?.numberOfHoles) || 18)),
+    countingScores: Math.max(1, Math.min(6, Number(roundSetup?.countingScores) || 4)),
+    startingHole: Math.max(1, Number(roundSetup?.startingHole) || 1),
+    teeIntervalMinutes: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.teeIntervalMinutes) || 10),
+    defaultGroupSize: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.defaultGroupSize) || 4),
+    teeTime: roundSetup?.teeTime || defaultRoundSetupState.teeTime,
+  };
+  const latestStateRef = useRef({
+    teams,
+    players,
+    pairings,
+    scorecardsGenerated,
+    scorecardRows,
+    roundSetup,
+    clippdExportState,
+    scoreboardImportState,
+    autoRepairState,
+  });
 
-  const tournament = useMemo(() => {
+  const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
+
+  const activeQrPairing = useMemo(() => {
+    if (!activeQrPlayer) {
+      return null;
+    }
+
+    return pairingExistsForPlayer(pairings, activeQrPlayer.playerName) ?? null;
+  }, [activeQrPlayer, pairings]);
+
+  useEffect(() => {
+    setIsClientMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClientMounted) {
+      return;
+    }
+
     const savedTournaments = loadTournamentsFromStorage();
-    return (
-      savedTournaments.find((item) => item.id === tournamentId) ?? {
-        id: tournamentId,
-        name: "Tournament",
-        date: "",
-        course: "",
-        city: "",
-        state: "",
-        rounds: "1",
-        scoringFormat: "Stroke Play",
-        status: "Upcoming",
-        settings: null,
-      }
-    );
-  }, [tournamentId]);
+    setTournamentMeta(savedTournaments.find((item) => item.id === tournamentId) ?? createFallbackTournamentMeta(tournamentId));
+  }, [isClientMounted, tournamentId]);
+
+  useEffect(() => {
+    latestStateRef.current = {
+      teams,
+      players,
+      pairings,
+      scorecardsGenerated,
+      scorecardRows,
+      roundSetup,
+      clippdExportState,
+      scoreboardImportState,
+      autoRepairState,
+    };
+  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
@@ -238,9 +333,9 @@ export default function TournamentPage() {
     });
 
     try {
-      const storedValue = window.localStorage.getItem(storageKey);
+      const storedEnvelope = loadTournamentStorageEnvelope(tournamentId);
 
-      if (!storedValue) {
+      if (!storedEnvelope) {
         hasLoadedFromStorageRef.current = true;
         console.log("[TournamentStorage] load:empty", {
           tournamentId,
@@ -250,35 +345,18 @@ export default function TournamentPage() {
         return;
       }
 
-      const parsedValue = JSON.parse(storedValue) as Partial<PersistedTournamentState>;
-      const loadedTeamsCount = Array.isArray(parsedValue.teams) ? parsedValue.teams.length : 0;
+      const hydratedTournamentState = storedEnvelope.uiState;
+      const loadedTeamsCount = hydratedTournamentState.teams.length;
 
-      if (parsedValue.teams) {
-        setTeams(parsedValue.teams);
-      }
-      if (parsedValue.players) {
-        setPlayers(parsedValue.players);
-      }
-      if (parsedValue.pairings) {
-        const storedPairings = parsedValue.pairings.filter(
-          (pairing): pairing is PairingGroup => typeof pairing === "object" && pairing !== null && "groupNumber" in pairing && "teeTime" in pairing && "startingHole" in pairing && "players" in pairing
-        );
-        setPairings(storedPairings);
-      }
-      if (parsedValue.scorecards) {
-        setScorecardsGenerated(Boolean(parsedValue.scorecards.scorecardsGenerated));
-        setScorecardRows(parsedValue.scorecards.scorecardRows || []);
-        setRoundSetup(parsedValue.scorecards.roundSetup || defaultRoundSetupState);
-      }
-      if (parsedValue.clippdExportState) {
-        setClippdExportState(parsedValue.clippdExportState);
-      }
-      if (parsedValue.scoreboardImportState) {
-        setScoreboardImportState(parsedValue.scoreboardImportState);
-      }
-      if (parsedValue.autoRepairState) {
-        setAutoRepairState(parsedValue.autoRepairState);
-      }
+      setTeams(hydratedTournamentState.teams);
+      setPlayers(hydratedTournamentState.players);
+      setPairings(hydratedTournamentState.pairings);
+      setScorecardsGenerated(hydratedTournamentState.scorecardsGenerated);
+      setScorecardRows(hydratedTournamentState.scorecardRows);
+      setRoundSetup(hydratedTournamentState.roundSetup);
+      setClippdExportState(hydratedTournamentState.clippdExportState);
+      setScoreboardImportState(hydratedTournamentState.scoreboardImportState);
+      setAutoRepairState(hydratedTournamentState.autoRepairState);
 
       console.log("[TournamentStorage] load:success", {
         tournamentId,
@@ -327,13 +405,104 @@ export default function TournamentPage() {
       autoRepairState,
     };
 
-    window.localStorage.setItem(storageKey, JSON.stringify(persistedState));
+    saveTournamentStorageEnvelope(
+      tournamentId,
+      buildTournamentStorageEnvelope(
+        tournamentId,
+        tournament.name,
+        tournament.course,
+        persistedState,
+        typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {},
+        Number(tournament.rounds) || 1
+      )
+    );
     console.log("[TournamentStorage] save", {
       tournamentId,
       storageKey,
       savedTeamsCount: teams.length,
     });
   }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState, storageKey, tournamentId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !tournamentId || !storageKey) {
+      return;
+    }
+
+    const syncFromStorage = () => {
+      try {
+        const storedValue = window.localStorage.getItem(storageKey);
+        if (!storedValue) {
+          return;
+        }
+
+        const parsedValue = JSON.parse(storedValue) as Partial<PersistedTournamentState>;
+        const latestState = latestStateRef.current;
+
+        if (parsedValue.teams && JSON.stringify(parsedValue.teams) !== JSON.stringify(latestState.teams)) {
+          setTeams(parsedValue.teams);
+        }
+
+        if (parsedValue.players && JSON.stringify(parsedValue.players) !== JSON.stringify(latestState.players)) {
+          setPlayers(parsedValue.players);
+        }
+
+        if (parsedValue.pairings) {
+          const storedPairings = hydratePairingsWithPlayerIds(
+            parsedValue.pairings.filter(
+              (pairing): pairing is PairingGroup =>
+                typeof pairing === "object" &&
+                pairing !== null &&
+                "groupNumber" in pairing &&
+                "teeTime" in pairing &&
+                "startingHole" in pairing &&
+                "players" in pairing
+            ),
+            parsedValue.players ?? latestState.players
+          );
+
+          if (JSON.stringify(storedPairings) !== JSON.stringify(latestState.pairings)) {
+            setPairings(storedPairings);
+          }
+        }
+
+        if (parsedValue.scorecards) {
+          const nextScorecardsGenerated = Boolean(parsedValue.scorecards.scorecardsGenerated);
+
+          if (nextScorecardsGenerated !== latestState.scorecardsGenerated) {
+            setScorecardsGenerated(nextScorecardsGenerated);
+          }
+
+          if (JSON.stringify(parsedValue.scorecards.scorecardRows || []) !== JSON.stringify(latestState.scorecardRows)) {
+            setScorecardRows(parsedValue.scorecards.scorecardRows || []);
+          }
+
+          if (JSON.stringify(parsedValue.scorecards.roundSetup || defaultRoundSetupState) !== JSON.stringify(latestState.roundSetup)) {
+            setRoundSetup(parsedValue.scorecards.roundSetup || defaultRoundSetupState);
+          }
+        }
+
+        if (parsedValue.clippdExportState && JSON.stringify(parsedValue.clippdExportState) !== JSON.stringify(latestState.clippdExportState)) {
+          setClippdExportState(parsedValue.clippdExportState);
+        }
+
+        if (parsedValue.scoreboardImportState && JSON.stringify(parsedValue.scoreboardImportState) !== JSON.stringify(latestState.scoreboardImportState)) {
+          setScoreboardImportState(parsedValue.scoreboardImportState);
+        }
+
+        if (parsedValue.autoRepairState && JSON.stringify(parsedValue.autoRepairState) !== JSON.stringify(latestState.autoRepairState)) {
+          setAutoRepairState(parsedValue.autoRepairState);
+        }
+      } catch {
+        // Ignore polling errors so the page remains responsive.
+      }
+    };
+
+    const intervalId = window.setInterval(syncFromStorage, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [storageKey, tournamentId]);
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);
@@ -764,6 +933,7 @@ export default function TournamentPage() {
         teeTime: formatMinutesToTime(startingMinutes + generatedPairings.length * 10),
         startingHole: "1",
         players: groupPlayers.map((player) => ({
+          playerId: String(player.id),
           playerName: `${player.firstName} ${player.lastName}`.trim(),
           teamName: player.teamName || "Unassigned",
         })),
@@ -772,6 +942,153 @@ export default function TournamentPage() {
 
     setPairings(generatedPairings);
     setPairingsMessage("");
+  };
+
+  const normalizePairings = (nextPairings: PairingGroup[]) =>
+    nextPairings
+      .filter((pairing) => pairing.players.length > 0)
+      .map((pairing, index) => ({
+        ...pairing,
+        groupNumber: index + 1,
+      }));
+
+  const hydratePairingsWithPlayerIds = (groupings: PairingGroup[], roster: Player[]) => {
+    const rosterByIdentity = new Map(
+      roster.map((player) => [
+        `${`${player.firstName} ${player.lastName}`.trim()}::${player.teamName || "Unassigned"}`,
+        String(player.id),
+      ])
+    );
+
+    return groupings.map((pairing) => ({
+      ...pairing,
+      players: pairing.players.map((player) => ({
+        ...player,
+        playerId:
+          player.playerId || rosterByIdentity.get(`${player.playerName}::${player.teamName}`) || `${player.playerName}::${player.teamName}`,
+      })),
+    }));
+  };
+
+  const snapshotPairings = (groupings: PairingGroup[]) =>
+    groupings.map((pairing) => ({
+      ...pairing,
+      players: pairing.players.map((player) => ({ ...player })),
+    }));
+
+  const createPairingPlayerKeyList = (groupings: PairingGroup[]) =>
+    groupings
+      .flatMap((pairing) => pairing.players.map((player) => player.playerId))
+      .sort();
+
+  const findPairingPlayerLocation = (groupings: PairingGroup[], playerId: string) => {
+    for (let pairingIndex = 0; pairingIndex < groupings.length; pairingIndex += 1) {
+      const playerIndex = groupings[pairingIndex].players.findIndex((player) => player.playerId === playerId);
+
+      if (playerIndex !== -1) {
+        return { pairingIndex, playerIndex };
+      }
+    }
+
+    return null;
+  };
+
+  const findPairingIndexByGroupId = (groupings: PairingGroup[], groupId: number) =>
+    groupings.findIndex((pairing) => pairing.groupNumber === groupId);
+
+  const isValidPairingMutation = (candidatePairings: PairingGroup[], baselinePairings: PairingGroup[]) => {
+    const candidateKeys = createPairingPlayerKeyList(candidatePairings);
+    const baselineKeys = createPairingPlayerKeyList(baselinePairings);
+
+    return JSON.stringify(candidateKeys) === JSON.stringify(baselineKeys);
+  };
+
+  const commitPairingMutation = (mutator: (current: PairingGroup[]) => PairingGroup[]) => {
+    setPairings((current) => {
+      const baselinePairings = previousValidPairingsRef.current ?? snapshotPairings(current);
+      const nextPairings = mutator(snapshotPairings(current));
+      const normalizedPairings = normalizePairings(nextPairings);
+
+      if (!isValidPairingMutation(normalizedPairings, baselinePairings)) {
+        return snapshotPairings(baselinePairings);
+      }
+
+      previousValidPairingsRef.current = snapshotPairings(normalizedPairings);
+      return normalizedPairings;
+    });
+    setPairingsMessage("");
+  };
+
+  const relocatePairingPlayer = (
+    sourcePairingIndex: number,
+    sourcePlayerIndex: number,
+    targetPairingIndex: number,
+    targetPlayerIndex: number
+  ) => {
+    commitPairingMutation((current) => {
+      if (
+        sourcePairingIndex < 0 ||
+        targetPairingIndex < 0 ||
+        sourcePairingIndex >= current.length ||
+        targetPairingIndex >= current.length
+      ) {
+        return current;
+      }
+
+      const nextPairings = current.map((pairing) => ({
+        ...pairing,
+        players: [...pairing.players],
+      }));
+
+      const sourcePairing = nextPairings[sourcePairingIndex];
+      const targetPairing = nextPairings[targetPairingIndex];
+
+      if (
+        sourcePlayerIndex < 0 ||
+        sourcePlayerIndex >= sourcePairing.players.length ||
+        targetPlayerIndex < 0
+      ) {
+        return current;
+      }
+
+      const [movedPlayer] = sourcePairing.players.splice(sourcePlayerIndex, 1);
+
+      if (!movedPlayer) {
+        return current;
+      }
+
+      const adjustedTargetIndex =
+        sourcePairingIndex === targetPairingIndex && sourcePlayerIndex < targetPlayerIndex
+          ? targetPlayerIndex - 1
+          : targetPlayerIndex;
+
+      targetPairing.players.splice(
+        Math.min(adjustedTargetIndex, targetPairing.players.length),
+        0,
+        movedPlayer
+      );
+
+      return nextPairings;
+    });
+  };
+
+  const movePlayerWithinPairing = (pairingIndex: number, playerIndex: number, direction: -1 | 1) => {
+    relocatePairingPlayer(pairingIndex, playerIndex, pairingIndex, playerIndex + direction);
+  };
+
+  const movePlayerBetweenPairings = (pairingIndex: number, playerIndex: number, direction: -1 | 1) => {
+    const targetPairingIndex = pairingIndex + direction;
+
+    if (targetPairingIndex < 0 || targetPairingIndex >= pairings.length) {
+      return;
+    }
+
+    relocatePairingPlayer(
+      pairingIndex,
+      playerIndex,
+      targetPairingIndex,
+      pairings[targetPairingIndex].players.length
+    );
   };
 
   const formatToPar = (total: number) => {
@@ -783,7 +1100,7 @@ export default function TournamentPage() {
   };
 
   const generateScorecards = () => {
-    const holeCount = Math.max(1, Math.min(18, Number(roundSetup.numberOfHoles) || 18));
+    const holeCount = normalizedRoundSetup.numberOfHoles;
     const nextRows = players.map((player) => ({
       id: player.id,
       playerName: `${player.firstName} ${player.lastName}`.trim(),
@@ -795,8 +1112,8 @@ export default function TournamentPage() {
     setScorecardRows(nextRows);
   };
 
-  const displayHoleCount = Math.max(1, Math.min(18, Number(roundSetup.numberOfHoles) || 18));
-  const countingScores = Math.max(1, Math.min(6, Number(roundSetup.countingScores) || 4));
+  const displayHoleCount = normalizedRoundSetup.numberOfHoles;
+  const countingScores = normalizedRoundSetup.countingScores;
   const fullRoundPar = displayHoleCount * 4;
 
   const handleClippdInputChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -861,10 +1178,12 @@ export default function TournamentPage() {
   };
 
   const openQrModal = (player: ScorecardRow) => {
+    setActiveQrCodeDataUrl("");
     setActiveQrPlayer(player);
   };
 
   const closeQrModal = () => {
+    setActiveQrCodeDataUrl("");
     setActiveQrPlayer(null);
   };
 
@@ -880,7 +1199,77 @@ export default function TournamentPage() {
     window.print();
   };
 
+  const handlePrintTournamentScorecards = () => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.body.classList.add("printing-batch-scorecards");
+
+    try {
+      window.print();
+    } finally {
+      document.body.classList.remove("printing-batch-scorecards");
+    }
+  };
+
   const mobileScorecardUrl = "/scorecard/test";
+
+  const resolvedMobileScorecardUrl = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    if (!tournamentId || !activeQrPairing) {
+      return `${window.location.origin}/scorecard/test`;
+    }
+
+    return `${window.location.origin}/scorecard/group-${activeQrPairing.groupNumber}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+  }, [activeQrPairing, tournamentId]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !activeQrPlayer) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [activeQrPlayer]);
+
+  useEffect(() => {
+    if (!activeQrPlayer || !resolvedMobileScorecardUrl) {
+      return;
+    }
+
+    let isActive = true;
+
+    toDataURL(resolvedMobileScorecardUrl, {
+      margin: 1,
+      width: 256,
+      color: {
+        dark: "#0B3D2E",
+        light: "#FFFFFF",
+      },
+    })
+      .then((dataUrl) => {
+        if (isActive) {
+          setActiveQrCodeDataUrl(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setActiveQrCodeDataUrl("");
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [activeQrPlayer, resolvedMobileScorecardUrl]);
 
   const handlePrintFromQrModal = () => {
     if (!activeQrPlayer) {
@@ -890,6 +1279,10 @@ export default function TournamentPage() {
     closeQrModal();
     openPrintScorecardModal(activeQrPlayer);
   };
+
+  function pairingExistsForPlayer(groupings: PairingGroup[], playerName: string) {
+    return groupings.find((pairing) => pairing.players.some((player) => player.playerName === playerName));
+  }
 
   const individualLeaderboard = useMemo(() => {
     if (!scorecardsGenerated || scorecardRows.length === 0) {
@@ -967,6 +1360,35 @@ export default function TournamentPage() {
 
     return addTiePositions(standings, (row) => row.totalScore);
   }, [countingScores, displayHoleCount, fullRoundPar, scorecardRows, scorecardsGenerated]);
+
+  const printablePairings = useMemo(() => {
+    if (pairings.length > 0) {
+      return pairings;
+    }
+
+    if (scorecardRows.length === 0) {
+      return [] as PairingGroup[];
+    }
+
+    const fallbackRows = [...scorecardRows].sort((a, b) => a.playerName.localeCompare(b.playerName));
+    const generatedPairings: PairingGroup[] = [];
+
+    for (let index = 0; index < fallbackRows.length; index += 4) {
+      generatedPairings.push({
+        groupNumber: generatedPairings.length + 1,
+          teeTime: normalizedRoundSetup.teeTime || "--",
+          startingHole: String(normalizedRoundSetup.startingHole),
+          players: fallbackRows.slice(index, index + normalizedRoundSetup.defaultGroupSize).map((row) => ({
+          playerName: row.playerName,
+          teamName: row.team,
+        })),
+      });
+    }
+
+    return generatedPairings;
+  }, [normalizedRoundSetup.defaultGroupSize, normalizedRoundSetup.startingHole, normalizedRoundSetup.teeTime, pairings, scorecardRows]);
+
+  const safeScorecardRows = Array.isArray(scorecardRows) ? scorecardRows : [];
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
@@ -1254,8 +1676,12 @@ export default function TournamentPage() {
 
                     {pairings.length > 0 ? (
                       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                        {pairings.map((pairing) => (
-                          <div key={pairing.groupNumber} className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-5">
+                        {/* TODO: Rebuild pairing drag-and-drop with a dedicated library such as dnd-kit. */}
+                        {pairings.map((pairing, pairingIndex) => (
+                          <div
+                            key={pairing.groupNumber}
+                            className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-5"
+                          >
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Group {pairing.groupNumber}</p>
                               <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
@@ -1265,10 +1691,47 @@ export default function TournamentPage() {
                             </div>
 
                             <div className="mt-4 space-y-2">
-                              {pairing.players.map((player) => (
-                                <div key={`${pairing.groupNumber}-${player.playerName}`} className="rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3">
+                              {pairing.players.map((player, playerIndex) => (
+                                <div
+                                  key={`${pairing.groupNumber}-${player.playerName}`}
+                                  className="rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 transition duration-200"
+                                >
                                   <p className="font-black text-[#0B3D2E]">{player.playerName}</p>
                                   <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">{player.teamName}</p>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => movePlayerBetweenPairings(pairingIndex, playerIndex, -1)}
+                                      disabled={pairingIndex === 0}
+                                      className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      ← Group
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => movePlayerWithinPairing(pairingIndex, playerIndex, -1)}
+                                      disabled={playerIndex === 0}
+                                      className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      ↑
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => movePlayerWithinPairing(pairingIndex, playerIndex, 1)}
+                                      disabled={playerIndex === pairing.players.length - 1}
+                                      className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      ↓
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => movePlayerBetweenPairings(pairingIndex, playerIndex, 1)}
+                                      disabled={pairingIndex === pairings.length - 1}
+                                      className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Group →
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -1295,13 +1758,22 @@ export default function TournamentPage() {
                         Round Setup
                       </h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={generateScorecards}
-                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
-                    >
-                      Generate Scorecards
-                    </button>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={handlePrintTournamentScorecards}
+                        className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      >
+                        Print Scorecards
+                      </button>
+                      <button
+                        type="button"
+                        onClick={generateScorecards}
+                        className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                      >
+                        Generate Scorecards
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-5">
@@ -1309,7 +1781,7 @@ export default function TournamentPage() {
                       <span>Round Number</span>
                       <input
                         name="roundNumber"
-                        value={roundSetup.roundNumber}
+                        value={normalizedRoundSetup.roundNumber}
                         onChange={handleRoundSetupChange}
                         className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                       />
@@ -1318,7 +1790,7 @@ export default function TournamentPage() {
                       <span>Starting Hole</span>
                       <input
                         name="startingHole"
-                        value={roundSetup.startingHole}
+                        value={normalizedRoundSetup.startingHole}
                         onChange={handleRoundSetupChange}
                         className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                       />
@@ -1327,7 +1799,7 @@ export default function TournamentPage() {
                       <span>Number of Holes</span>
                       <input
                         name="numberOfHoles"
-                        value={roundSetup.numberOfHoles}
+                        value={normalizedRoundSetup.numberOfHoles}
                         onChange={handleRoundSetupChange}
                         className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                       />
@@ -1336,7 +1808,7 @@ export default function TournamentPage() {
                       <span>Tee Time</span>
                       <input
                         name="teeTime"
-                        value={roundSetup.teeTime}
+                        value={normalizedRoundSetup.teeTime}
                         onChange={handleRoundSetupChange}
                         className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                       />
@@ -1348,7 +1820,7 @@ export default function TournamentPage() {
                         type="number"
                         min="1"
                         max="6"
-                        value={roundSetup.countingScores}
+                        value={normalizedRoundSetup.countingScores}
                         onChange={handleRoundSetupChange}
                         className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                       />
@@ -1955,11 +2427,11 @@ export default function TournamentPage() {
 
       {activeQrPlayer ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-8 backdrop-blur-sm"
           onClick={closeQrModal}
         >
           <div
-            className="w-full max-w-xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            className="flex max-h-[calc(100vh-4rem)] w-full max-w-xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -1982,7 +2454,7 @@ export default function TournamentPage() {
               </div>
             </div>
 
-            <div className="px-7 py-7">
+            <div className="min-h-0 overflow-y-auto px-7 py-7">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Player Name</p>
@@ -1994,19 +2466,30 @@ export default function TournamentPage() {
                 </div>
                 <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5 md:col-span-2">
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Round</p>
-                  <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.roundNumber}</p>
+                  <p className="mt-2 font-black text-[#0B3D2E]">{normalizedRoundSetup.roundNumber}</p>
                 </div>
               </div>
 
               <div className="mt-6 rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner">
                 <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-[24px] border border-dashed border-[#B8892D] bg-white text-4xl font-black text-[#0B3D2E]">
-                  QR
+                  {activeQrCodeDataUrl ? (
+                    <Image
+                      src={activeQrCodeDataUrl}
+                      alt={`QR code for ${activeQrPairing ? `group ${activeQrPairing.groupNumber}` : activeQrPlayer.playerName}`}
+                      width={128}
+                      height={128}
+                      unoptimized
+                      className="h-full w-full rounded-[20px] object-contain p-2"
+                    />
+                  ) : (
+                    "QR"
+                  )}
                 </div>
                 <p className="mt-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  QR Code placeholder
+                  {activeQrPairing ? `Group ${activeQrPairing.groupNumber} mobile scoring access` : "QR Code unavailable"}
                 </p>
                 <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  Scorecard URL: {mobileScorecardUrl}
+                  Scorecard URL: {resolvedMobileScorecardUrl || mobileScorecardUrl}
                 </div>
               </div>
 
@@ -2029,7 +2512,7 @@ export default function TournamentPage() {
                   Download QR
                 </button>
                 <Link
-                  href={mobileScorecardUrl}
+                  href={resolvedMobileScorecardUrl || mobileScorecardUrl}
                   className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Open Mobile Scorecard
@@ -2097,7 +2580,7 @@ export default function TournamentPage() {
                 <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Round Number</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.roundNumber}</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{normalizedRoundSetup.roundNumber}</p>
                   </div>
                   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Player</p>
@@ -2109,11 +2592,11 @@ export default function TournamentPage() {
                   </div>
                   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Tee Time</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.teeTime}</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{normalizedRoundSetup.teeTime}</p>
                   </div>
                   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Starting Hole</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{roundSetup.startingHole}</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{normalizedRoundSetup.startingHole}</p>
                   </div>
                   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Course</p>
@@ -2210,6 +2693,76 @@ export default function TournamentPage() {
           </div>
         </div>
       ) : null}
+
+      <section className="print-batch-scorecards-root hidden">
+        {printablePairings.map((pairing) => {
+          const pairingPlayers = Array.isArray(pairing.players) ? pairing.players : [];
+
+          const rowsForGroup = pairingPlayers.map((player) => {
+            const matchingScorecardRow = safeScorecardRows.find((row) => row.playerName === player.playerName);
+            const scores = Array.from({ length: 18 }, (_, index) => matchingScorecardRow?.scores[index] ?? 0);
+            const total = scores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
+
+            return {
+              playerName: player.playerName,
+              teamName: player.teamName,
+              scores,
+              total,
+            };
+          });
+
+          return (
+            <article key={`print-group-${pairing.groupNumber}`} className="print-batch-sheet mb-8 border border-black p-4 text-black">
+              <header className="mb-4 border-b border-black pb-2">
+                <h2 className="text-xl font-black">{tournament.name}</h2>
+                <p className="mt-1 text-sm font-semibold">Round {normalizedRoundSetup.roundNumber}</p>
+                <p className="text-sm font-semibold">Group {pairing.groupNumber}</p>
+                <p className="text-sm font-semibold">Players: {pairingPlayers.map((player) => player.playerName).join(", ")}</p>
+              </header>
+
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr>
+                    <th className="border border-black px-2 py-1 text-left">Player</th>
+                    {Array.from({ length: 18 }, (_, index) => (
+                      <th key={`print-hole-${pairing.groupNumber}-${index + 1}`} className="border border-black px-2 py-1 text-center">
+                        {index + 1}
+                      </th>
+                    ))}
+                    <th className="border border-black px-2 py-1 text-center">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-black px-2 py-1 font-semibold">Par</td>
+                    {Array.from({ length: 18 }, (_, index) => (
+                      <td key={`print-par-${pairing.groupNumber}-${index + 1}`} className="border border-black px-2 py-1 text-center">
+                        4
+                      </td>
+                    ))}
+                    <td className="border border-black px-2 py-1 text-center font-semibold">72</td>
+                  </tr>
+
+                  {rowsForGroup.map((row) => (
+                    <tr key={`print-player-row-${pairing.groupNumber}-${row.playerName}`}>
+                      <td className="border border-black px-2 py-1">
+                        <div className="font-semibold">{row.playerName}</div>
+                        <div className="text-[10px]">{row.teamName}</div>
+                      </td>
+                      {row.scores.map((score, index) => (
+                        <td key={`print-score-${pairing.groupNumber}-${row.playerName}-${index + 1}`} className="border border-black px-2 py-1 text-center">
+                          {score > 0 ? score : ""}
+                        </td>
+                      ))}
+                      <td className="border border-black px-2 py-1 text-center font-semibold">{row.total > 0 ? row.total : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </article>
+          );
+        })}
+      </section>
 
       {isTeamModalOpen ? (
         <div

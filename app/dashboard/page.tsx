@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
 import {
+  buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
   loadTournamentsFromStorage,
   saveTournamentsToStorage,
+  seedTestTournament,
   type StoredTournament,
 } from "../lib/tournamentStorage";
 
@@ -132,12 +134,18 @@ const defaultFormState: FormState = {
 export default function DashboardPage() {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [tournaments, setTournaments] = useState<Tournament[]>(() => loadTournamentsFromStorage() as Tournament[]);
+  const [isClientMounted, setIsClientMounted] = useState(false);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [templates, setTemplates] = useState<TournamentTemplate[]>(() => loadTemplatesFromStorage());
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+
+  useEffect(() => {
+    setTournaments(loadTournamentsFromStorage() as Tournament[]);
+    setIsClientMounted(true);
+  }, []);
 
   const saveTemplates = (nextValue: SetStateAction<TournamentTemplate[]>) => {
     setTemplates((current) => {
@@ -157,6 +165,14 @@ export default function DashboardPage() {
       saveTournamentsToStorage(nextTournaments);
       return nextTournaments;
     });
+  };
+
+  const handleSeedTestTournament = () => {
+    const seededTournament = seedTestTournament();
+
+    if (seededTournament) {
+      setTournaments(loadTournamentsFromStorage() as Tournament[]);
+    }
   };
 
   const normalizeFormState = (value: FormState): FormState => {
@@ -282,46 +298,55 @@ export default function DashboardPage() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(
         getTournamentStateStorageKey(newTournament.id),
-        JSON.stringify({
-          teams: [],
-          players: [],
-          pairings: [],
-          scorecards: {
-            scorecardsGenerated: false,
-            scorecardRows: [],
-            roundSetup: {
-              roundNumber: "1",
-              startingHole: normalizedFormState.startingHoles || "1",
-              numberOfHoles: normalizedFormState.roundSetup[0]?.holes || "18",
-              teeTime: normalizedFormState.roundSetup[0]?.teeTime || "7:30 AM",
-              countingScores: normalizedFormState.countingScores || "4",
+        JSON.stringify(
+          buildTournamentStorageEnvelope(
+            newTournament.id,
+            newTournament.name,
+            newTournament.course,
+            {
+              teams: [],
+              players: [],
+              pairings: [],
+              scorecards: {
+                scorecardsGenerated: false,
+                scorecardRows: [],
+                roundSetup: {
+                  roundNumber: "1",
+                  startingHole: normalizedFormState.startingHoles || "1",
+                  numberOfHoles: normalizedFormState.roundSetup[0]?.holes || "18",
+                  teeTime: normalizedFormState.roundSetup[0]?.teeTime || "7:30 AM",
+                  countingScores: normalizedFormState.countingScores || "4",
+                },
+              },
+              clippdExportState: {
+                tournamentId: normalizedFormState.integrations.clippdTournamentId,
+                tournamentKey: normalizedFormState.integrations.clippdTournamentKey,
+                exportFormat: "Final Results CSV",
+              },
+              scoreboardImportState: {
+                tournamentId: "",
+                tournamentKey: "",
+                options: {
+                  tournamentDetails: true,
+                  teams: true,
+                  players: true,
+                  courseSetup: true,
+                  scorecards: false,
+                  teeTimes: false,
+                  startingHoles: false,
+                },
+              },
+              autoRepairState: {
+                sourceRound: "Round 1",
+                targetRound: "Round 2",
+                pairingOrder: "Worst to Best",
+                teeTimeInterval: "8 minutes",
+              },
             },
-          },
-          clippdExportState: {
-            tournamentId: normalizedFormState.integrations.clippdTournamentId,
-            tournamentKey: normalizedFormState.integrations.clippdTournamentKey,
-            exportFormat: "Final Results CSV",
-          },
-          scoreboardImportState: {
-            tournamentId: "",
-            tournamentKey: "",
-            options: {
-              tournamentDetails: true,
-              teams: true,
-              players: true,
-              courseSetup: true,
-              scorecards: false,
-              teeTimes: false,
-              startingHoles: false,
-            },
-          },
-          autoRepairState: {
-            sourceRound: "Round 1",
-            targetRound: "Round 2",
-            pairingOrder: "Worst to Best",
-            teeTimeInterval: "8 minutes",
-          },
-        })
+            normalizedFormState,
+            normalizedFormState.rounds
+          )
+        )
       );
     }
 
@@ -446,6 +471,15 @@ export default function DashboardPage() {
             >
               Create Tournament
             </button>
+            {isClientMounted ? (
+              <button
+                type="button"
+                onClick={handleSeedTestTournament}
+                className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+              >
+                Seed Test Tournament
+              </button>
+            ) : null}
             <Link
               href="/dashboard/templates"
               className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
@@ -457,7 +491,7 @@ export default function DashboardPage() {
             </a>
           </div>
 
-          {tournaments.length === 0 ? (
+          {!isClientMounted || tournaments.length === 0 ? (
             <div className="mt-10 rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-10 text-center shadow-inner">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#0B3D2E] text-2xl font-black text-[#F0C96A]">
                 HQ

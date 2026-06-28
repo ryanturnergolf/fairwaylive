@@ -1,4 +1,8 @@
-﻿import Link from "next/link";
+﻿"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 
 const teams = [
   {
@@ -89,6 +93,12 @@ const features = [
 ];
 
 export default function Home() {
+  const [savedTournaments, setSavedTournaments] = useState<StoredTournament[]>([]);
+
+  useEffect(() => {
+    setSavedTournaments(loadTournamentsFromStorage());
+  }, []);
+
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
@@ -264,46 +274,72 @@ export default function Home() {
           <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
-                Live Tournament
+                Saved Tournaments
               </p>
               <h3 className="mt-2 text-3xl font-black tracking-[-0.02em]">
-                A true operating layer for every round.
+                Open any tournament already created in Clubhouse HQ.
               </h3>
             </div>
-            <a className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] transition duration-300 hover:-translate-y-0.5" href="#">
-              View Full Leaderboard
-            </a>
+            <Link className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] transition duration-300 hover:-translate-y-0.5" href="/dashboard">
+              Open Dashboard
+            </Link>
           </div>
 
-          <div className="overflow-hidden rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5]">
-            <div className="grid grid-cols-[70px_1fr_90px_90px_90px] bg-[#F6F1E6] px-5 py-4 text-[11px] font-black uppercase tracking-[0.3em] text-[#51635C]">
-              <div>Pos</div>
-              <div>Team</div>
-              <div>To Par</div>
-              <div>Thru</div>
-              <div>Today</div>
+          {savedTournaments.length === 0 ? (
+            <div className="rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center text-[#51635C] shadow-inner">
+              Create a tournament from the dashboard and it will appear here automatically.
             </div>
-
-            {teams.map((team, index) => (
-              <div key={team.name} className={`grid grid-cols-[70px_1fr_90px_90px_90px] items-center border-t border-[#E8DCC8] px-5 py-5 text-sm transition duration-300 hover:bg-white ${index === 0 ? "bg-[#FFFDF7]" : "bg-transparent"}`}>
-                <div className="font-semibold">{team.pos}</div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0B3D2E] text-[10px] font-black uppercase tracking-[0.2em] text-[#F6F1E6]">
-                    {team.short}
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-2">
+              {savedTournaments.map((tournament) => (
+                <div key={tournament.id} className="rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                        {tournament.status}
+                      </p>
+                      <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                        {tournament.name}
+                      </h3>
+                    </div>
+                    <span className="rounded-full border border-[#E8DCC8] bg-[#F6F1E6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
+                      {tournament.rounds} Rounds
+                    </span>
                   </div>
-                  <div>
-                    <div className="font-black">{team.name}</div>
-                    <div className="text-[10px] uppercase tracking-[0.25em] text-[#6F7C74]">
-                      {team.status} • {team.update}
+
+                  <div className="mt-6 space-y-3 text-sm text-[#51635C]">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Course</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{tournament.course || "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Date</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{tournament.date || "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Status</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{tournament.status}</span>
                     </div>
                   </div>
+
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <Link
+                      href={`/tournament/${tournament.id}`}
+                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                    >
+                      Open Tournament
+                    </Link>
+                    <Link
+                      href="/dashboard"
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                    >
+                      Manage
+                    </Link>
+                  </div>
                 </div>
-                <div className="font-black text-[#B8892D]">{team.toPar}</div>
-                <div>{team.thru}</div>
-                <div className="font-black text-[#0B3D2E]">{team.today}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
