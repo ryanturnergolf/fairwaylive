@@ -23,6 +23,9 @@ type PlayerScorecard = {
   team: string;
   round: string;
   holes: Hole[];
+  markerPlayerId?: string;
+  markerPlayerName?: string;
+  markerTeam?: string;
 };
 
 type PairingGroup = {
@@ -138,6 +141,7 @@ export default function PlayerScorecardPage() {
 
     const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
     let resolvedPlayerId = routePlayerId;
+    let markerPlayerId: string | undefined;
     
     if (storedEnvelope && storedEnvelope.tournament.players.length > 0) {
       const matchedPlayer = storedEnvelope.tournament.players.find(
@@ -148,7 +152,21 @@ export default function PlayerScorecardPage() {
       if (matchedPlayer) {
         resolvedPlayerId = matchedPlayer.id;
       }
+
+      if (pairing.players.length > 1) {
+        const markerPlayerData = pairing.players[1];
+        const matchedMarkerPlayer = storedEnvelope.tournament.players.find(
+          (p) =>
+            `${p.firstName} ${p.lastName}`.trim() === markerPlayerData.playerName &&
+            (p.teamId ? storedEnvelope.tournament.teams.find((t) => t.id === p.teamId)?.name : "Unassigned") === markerPlayerData.teamName
+        );
+        if (matchedMarkerPlayer) {
+          markerPlayerId = matchedMarkerPlayer.id;
+        }
+      }
     }
+
+    const markerPlayerData = pairing.players.length > 1 ? pairing.players[1] : null;
 
     return {
       playerId: resolvedPlayerId || `group-${pairing.groupNumber}`,
@@ -157,6 +175,9 @@ export default function PlayerScorecardPage() {
       team: featuredPlayer.teamName,
       round: tournamentState.scorecards?.roundSetup?.roundNumber || "1",
       holes: defaultHoles.slice(0, holeCount),
+      markerPlayerId,
+      markerPlayerName: markerPlayerData?.playerName,
+      markerTeam: markerPlayerData?.teamName,
     } satisfies PlayerScorecard;
   }, [requestedTournamentId, requestedPairingId, routePlayerId]);
 
@@ -165,6 +186,7 @@ export default function PlayerScorecardPage() {
     : qrResolvedScorecard ?? sampleScorecards[routePlayerId || ""] ?? fallbackScorecard);
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
+  const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const [savedHoles, setSavedHoles] = useState<number[]>([]);
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
@@ -239,6 +261,15 @@ export default function PlayerScorecardPage() {
     );
   };
 
+  const updateMarkerScore = (value: string) => {
+    const parsed = Number(value);
+    const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+
+    setMarkerScores((current) =>
+      current.map((score, index) => (index === currentHoleIndex ? safeValue : score))
+    );
+  };
+
   const handleSaveHole = () => {
     if (scores[currentHoleIndex] === 0) return;
 
@@ -251,7 +282,12 @@ export default function PlayerScorecardPage() {
     if (requestedTournamentId && scorecard.playerId) {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
+      
       mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores);
+      
+      if (scorecard.markerPlayerId && markerScores[currentHoleIndex] > 0) {
+        mergeTournamentScoreSubmission(requestedTournamentId, scorecard.markerPlayerId, roundId, markerScores);
+      }
     }
 
     if (currentHoleIndex < scorecard.holes.length - 1) {
@@ -568,7 +604,7 @@ export default function PlayerScorecardPage() {
           </div>
 
           <label className="mt-4 block text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
-            Score
+            {scorecard.playerName}'s Score
             <input
               type="number"
               min="1"
@@ -579,6 +615,21 @@ export default function PlayerScorecardPage() {
               className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
             />
           </label>
+
+          {scorecard.markerPlayerName ? (
+            <label className="mt-4 block text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+              {scorecard.markerPlayerName}'s Score
+              <input
+                type="number"
+                min="1"
+                max="12"
+                value={markerScores[currentHoleIndex] === 0 ? "" : markerScores[currentHoleIndex]}
+                onChange={(event) => updateMarkerScore(event.target.value)}
+                placeholder="Enter score"
+                className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
+              />
+            </label>
+          ) : null}
 
           <button
             type="button"
