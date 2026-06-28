@@ -136,48 +136,61 @@ export default function PlayerScorecardPage() {
       return { error: "We could not find that pairing. Please request a new mobile scoring link." } as const;
     }
 
-    const featuredPlayer = pairing.players[0];
-    const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
-
     const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
-    let resolvedPlayerId = routePlayerId;
-    let markerPlayerId: string | undefined;
-    
-    if (storedEnvelope && storedEnvelope.tournament.players.length > 0) {
-      const matchedPlayer = storedEnvelope.tournament.players.find(
-        (p) =>
-          `${p.firstName} ${p.lastName}`.trim() === featuredPlayer.playerName &&
-          (p.teamId ? storedEnvelope.tournament.teams.find((t) => t.id === p.teamId)?.name : "Unassigned") === featuredPlayer.teamName
-      );
-      if (matchedPlayer) {
-        resolvedPlayerId = matchedPlayer.id;
-      }
+    if (!storedEnvelope || storedEnvelope.tournament.players.length === 0) {
+      return { error: "This tournament has no player data. Please request a new mobile scoring link." } as const;
+    }
 
-      if (pairing.players.length > 1) {
-        const markerPlayerData = pairing.players[1];
-        const matchedMarkerPlayer = storedEnvelope.tournament.players.find(
-          (p) =>
-            `${p.firstName} ${p.lastName}`.trim() === markerPlayerData.playerName &&
-            (p.teamId ? storedEnvelope.tournament.teams.find((t) => t.id === p.teamId)?.name : "Unassigned") === markerPlayerData.teamName
+    let selectedPlayer = null;
+    let selectedPlayerId = routePlayerId;
+    let markerPlayer = null;
+    let markerPlayerId: string | undefined;
+
+    if (routePlayerId && !routePlayerId.startsWith("group-")) {
+      const matchedPlayer = storedEnvelope.tournament.players.find((p) => String(p.id) === routePlayerId);
+      if (matchedPlayer) {
+        selectedPlayerId = matchedPlayer.id;
+        const matchedInPairing = pairing.players.find(
+          (player) =>
+            player.playerName === `${matchedPlayer.firstName} ${matchedPlayer.lastName}`.trim() &&
+            player.teamName === (storedEnvelope.tournament.teams.find((t) => t.id === matchedPlayer.teamId)?.name || "Unassigned")
         );
-        if (matchedMarkerPlayer) {
-          markerPlayerId = matchedMarkerPlayer.id;
+        if (matchedInPairing) {
+          selectedPlayer = matchedInPairing;
+          const selectedIndex = pairing.players.indexOf(matchedInPairing);
+          const markerIndex = (selectedIndex + 1) % pairing.players.length;
+          const markerPlayerData = pairing.players[markerIndex];
+          if (markerPlayerData) {
+            const matchedMarker = storedEnvelope.tournament.players.find(
+              (p) =>
+                `${p.firstName} ${p.lastName}`.trim() === markerPlayerData.playerName &&
+                (p.teamId ? storedEnvelope.tournament.teams.find((t) => t.id === p.teamId)?.name : "Unassigned") === markerPlayerData.teamName
+            );
+            if (matchedMarker) {
+              markerPlayerId = matchedMarker.id;
+              markerPlayer = markerPlayerData;
+            }
+          }
         }
       }
     }
 
-    const markerPlayerData = pairing.players.length > 1 ? pairing.players[1] : null;
+    if (!selectedPlayer) {
+      return { error: "Invalid scoring link. Please request a new mobile scoring link." } as const;
+    }
+
+    const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
 
     return {
-      playerId: resolvedPlayerId || `group-${pairing.groupNumber}`,
+      playerId: String(selectedPlayerId),
       tournamentName: tournament.name,
-      playerName: featuredPlayer.playerName,
-      team: featuredPlayer.teamName,
+      playerName: selectedPlayer.playerName,
+      team: selectedPlayer.teamName,
       round: tournamentState.scorecards?.roundSetup?.roundNumber || "1",
       holes: defaultHoles.slice(0, holeCount),
       markerPlayerId,
-      markerPlayerName: markerPlayerData?.playerName,
-      markerTeam: markerPlayerData?.teamName,
+      markerPlayerName: markerPlayer?.playerName,
+      markerTeam: markerPlayer?.teamName,
     } satisfies PlayerScorecard;
   }, [requestedTournamentId, requestedPairingId, routePlayerId]);
 

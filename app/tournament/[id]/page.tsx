@@ -1234,12 +1234,12 @@ export default function TournamentPage() {
       return "";
     }
 
-    if (!tournamentId || !activeQrPairing) {
+    if (!tournamentId || !activeQrPairing || !activeQrPlayer) {
       return `${window.location.origin}/scorecard/test`;
     }
 
-    return `${window.location.origin}/scorecard/group-${activeQrPairing.groupNumber}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
-  }, [activeQrPairing, tournamentId]);
+    return `${window.location.origin}/scorecard/${activeQrPlayer.id}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+  }, [activeQrPairing, activeQrPlayer, tournamentId]);
 
   useEffect(() => {
     if (typeof document === "undefined" || !activeQrPlayer) {
