@@ -348,12 +348,26 @@ export default function TournamentPage() {
       const hydratedTournamentState = storedEnvelope.uiState;
       const loadedTeamsCount = hydratedTournamentState.teams.length;
 
+      const loadedRoundSetup = hydratedTournamentState.scorecards.roundSetup;
+      const loadedRoundId = `round-${String(Number(loadedRoundSetup.roundNumber) || 1)}`;
+      const submittedScoreMap = new Map<string, number[]>();
+      for (const score of storedEnvelope.tournament.scores) {
+        if (score.roundId === loadedRoundId) {
+          submittedScoreMap.set(score.playerId, score.holeScores);
+        }
+      }
+      const mergedScorecardRows = hydratedTournamentState.scorecards.scorecardRows.map((row) => {
+        const submitted = submittedScoreMap.get(String(row.id));
+        if (!submitted) return row;
+        return { ...row, scores: submitted };
+      });
+
       setTeams(hydratedTournamentState.teams);
       setPlayers(hydratedTournamentState.players);
       setPairings(hydratedTournamentState.pairings);
       setScorecardsGenerated(hydratedTournamentState.scorecards.scorecardsGenerated);
-      setScorecardRows(hydratedTournamentState.scorecards.scorecardRows);
-      setRoundSetup(hydratedTournamentState.scorecards.roundSetup);
+      setScorecardRows(mergedScorecardRows);
+      setRoundSetup(loadedRoundSetup);
       setClippdExportState(hydratedTournamentState.clippdExportState);
       setScoreboardImportState(hydratedTournamentState.scoreboardImportState);
       setAutoRepairState(hydratedTournamentState.autoRepairState);
