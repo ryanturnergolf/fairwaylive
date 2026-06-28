@@ -152,9 +152,19 @@ export default function PlayerScorecardPage() {
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const [savedHoles, setSavedHoles] = useState<number[]>([]);
-  const [submitMessage, setSubmitMessage] = useState("");
+  const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const currentHole = scorecard.holes[currentHoleIndex];
+  const allHolesScored = scorecard.holes.length > 0 && scores.every((s) => s > 0);
+
+  const front9Holes = scorecard.holes.slice(0, 9);
+  const back9Holes = scorecard.holes.slice(9);
+  const front9Total = scores.slice(0, 9).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
+  const back9Total = scores.slice(9, scorecard.holes.length).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
+  const front9Par = front9Holes.reduce((sum, h) => sum + h.par, 0);
+  const back9Par = back9Holes.reduce((sum, h) => sum + h.par, 0);
 
   const totals = useMemo(() => {
     const playedHoles = scores.filter((score) => score > 0).length;
@@ -215,13 +225,23 @@ export default function PlayerScorecardPage() {
   };
 
   const handleSaveHole = () => {
+    if (scores[currentHoleIndex] === 0) return;
+
     setSavedHoles((current) => {
-      if (current.includes(currentHole.holeNumber)) {
-        return current;
-      }
+      if (current.includes(currentHole.holeNumber)) return current;
       return [...current, currentHole.holeNumber];
     });
-    setSubmitMessage("");
+    setSaveError("");
+
+    if (requestedTournamentId && routePlayerId) {
+      const roundNumber = String(Number(scorecard.round) || 1);
+      const roundId = `round-${roundNumber}`;
+      mergeTournamentScoreSubmission(requestedTournamentId, routePlayerId, roundId, scores);
+    }
+
+    if (currentHoleIndex < scorecard.holes.length - 1) {
+      setCurrentHoleIndex((current) => current + 1);
+    }
   };
 
   const handlePreviousHole = () => {
@@ -232,47 +252,245 @@ export default function PlayerScorecardPage() {
     setCurrentHoleIndex((current) => Math.min(current + 1, scorecard.holes.length - 1));
   };
 
-  const handleSubmitRound = () => {
+  const handleReviewRound = () => {
+    setView("review");
+    setShowConfirm(false);
+    setSaveError("");
+  };
+
+  const handleConfirmSubmit = () => {
+    if (!requestedTournamentId || !routePlayerId) {
+      setSaveError("Unable to submit. Please try again.");
+      return;
+    }
     const roundNumber = String(Number(scorecard.round) || 1);
     const roundId = `round-${roundNumber}`;
-
-    if (!requestedTournamentId || !routePlayerId) {
-      setSubmitMessage("Unable to save this round.");
+    const ok = mergeTournamentScoreSubmission(requestedTournamentId, routePlayerId, roundId, scores);
+    if (!ok) {
+      setSaveError("Unable to submit. Please try again.");
       return;
     }
-
-    const saved = mergeTournamentScoreSubmission(requestedTournamentId, routePlayerId, roundId, scores);
-
-    if (!saved) {
-      setSubmitMessage("Unable to save this round.");
-      return;
-    }
-
-    setSubmitMessage("Round submitted locally. Network sync will be connected in a future phase.");
+    setView("submitted");
   };
 
   const isHoleSaved = savedHoles.includes(currentHole.holeNumber);
 
+  const sharedHeader = (
+    <header className="sticky top-0 z-10 border-b border-[#E8DCC8] bg-[#F6F1E6]/95 backdrop-blur">
+      <div className="mx-auto flex max-w-md items-center justify-between px-4 py-4">
+        <Link href="/" className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
+            HQ
+          </div>
+          <div>
+            <h1 className="text-sm font-black tracking-[-0.02em]">Clubhouse HQ</h1>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#B8892D]">
+              Mobile Scorecard
+            </p>
+          </div>
+        </Link>
+        <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
+          Round {scorecard.round}
+        </span>
+      </div>
+    </header>
+  );
+
+  if (view === "submitted") {
+    return (
+      <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+        {sharedHeader}
+        <section className="mx-auto max-w-md px-4 py-5">
+          <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Round Submitted</p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
+              Scorecard Saved
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#51635C]">
+              {scorecard.playerName}&rsquo;s round {scorecard.round} scorecard has been recorded.
+            </p>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              {front9Holes.length > 0 ? (
+                <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9</p>
+                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{front9Total}</p>
+                </div>
+              ) : null}
+              {back9Holes.length > 0 ? (
+                <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9</p>
+                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{back9Total}</p>
+                </div>
+              ) : null}
+              <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Total</p>
+                <p className="mt-2 text-lg font-black text-[#0B3D2E]">{totals.total}</p>
+              </div>
+            </div>
+            <div className="mt-3 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+              {totals.toPar} to par
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (view === "review") {
+    return (
+      <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+        {sharedHeader}
+        <section className="mx-auto max-w-md px-4 py-5">
+          <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Review Scorecard</p>
+            <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#0B3D2E]">
+              {scorecard.playerName}
+            </h2>
+            <p className="mt-0.5 text-xs text-[#51635C]">{scorecard.team}</p>
+
+            {front9Holes.length > 0 ? (
+              <div className="mt-5">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9</p>
+                <div className="overflow-hidden rounded-2xl border border-[#E8DCC8]">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
+                        <th className="px-3 py-2 text-left font-black uppercase tracking-[0.2em] text-[#51635C]">Hole</th>
+                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Par</th>
+                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Score</th>
+                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">+/-</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {front9Holes.map((hole, i) => {
+                        const score = scores[i];
+                        const diff = score > 0 ? score - hole.par : null;
+                        return (
+                          <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
+                            <td className="px-3 py-2 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
+                            <td className="px-3 py-2 text-center text-[#51635C]">{hole.par}</td>
+                            <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{score > 0 ? score : "—"}</td>
+                            <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
+                              {diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-[#FCFAF5]">
+                        <td className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]" colSpan={2}>Front 9</td>
+                        <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{front9Total}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
+                          {front9Total > 0 ? (front9Total - front9Par === 0 ? "E" : front9Total - front9Par > 0 ? `+${front9Total - front9Par}` : `${front9Total - front9Par}`) : "—"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {back9Holes.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9</p>
+                <div className="overflow-hidden rounded-2xl border border-[#E8DCC8]">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
+                        <th className="px-3 py-2 text-left font-black uppercase tracking-[0.2em] text-[#51635C]">Hole</th>
+                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Par</th>
+                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Score</th>
+                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">+/-</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {back9Holes.map((hole, i) => {
+                        const score = scores[9 + i];
+                        const diff = score > 0 ? score - hole.par : null;
+                        return (
+                          <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
+                            <td className="px-3 py-2 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
+                            <td className="px-3 py-2 text-center text-[#51635C]">{hole.par}</td>
+                            <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{score > 0 ? score : "—"}</td>
+                            <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
+                              {diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-[#FCFAF5]">
+                        <td className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]" colSpan={2}>Back 9</td>
+                        <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{back9Total}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
+                          {back9Total > 0 ? (back9Total - back9Par === 0 ? "E" : back9Total - back9Par > 0 ? `+${back9Total - back9Par}` : `${back9Total - back9Par}`) : "—"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Total</span>
+              <div className="text-right">
+                <span className="text-xl font-black text-[#0B3D2E]">{totals.total}</span>
+                <span className="ml-2 text-sm font-semibold text-[#51635C]">({totals.toPar})</span>
+              </div>
+            </div>
+          </div>
+
+          {!showConfirm ? (
+            <div className="mt-4 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setView("scoring")}
+                className="w-full rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300"
+              >
+                Edit Scores
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConfirm(true)}
+                className="w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5"
+              >
+                Submit Round
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-[28px] border border-[#B8892D]/40 bg-[#B8892D]/8 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Confirm Submission</p>
+              <p className="mt-3 text-sm leading-6 text-[#0B3D2E]">
+                Please verify all scores are correct before submitting. Incorrect submitted scores may result in disqualification.
+              </p>
+              {saveError ? (
+                <p className="mt-3 text-sm font-semibold text-red-700">{saveError}</p>
+              ) : null}
+              <div className="mt-4 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleConfirmSubmit}
+                  className="w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5"
+                >
+                  Confirm Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(false)}
+                  className="w-full rounded-full border border-[#E8DCC8] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#51635C] transition duration-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="sticky top-0 z-10 border-b border-[#E8DCC8] bg-[#F6F1E6]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-md items-center justify-between px-4 py-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
-              HQ
-            </div>
-            <div>
-              <h1 className="text-sm font-black tracking-[-0.02em]">Clubhouse HQ</h1>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#B8892D]">
-                Mobile Scorecard
-              </p>
-            </div>
-          </Link>
-          <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
-            Round {scorecard.round}
-          </span>
-        </div>
-      </header>
+      {sharedHeader}
 
       <section className="mx-auto max-w-md px-4 py-5">
         <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
@@ -303,7 +521,7 @@ export default function PlayerScorecardPage() {
           </div>
 
           <div className="mt-3 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-            Through {totals.playedHoles}/18
+            Through {totals.playedHoles}/{scorecard.holes.length}
           </div>
         </div>
 
@@ -350,7 +568,8 @@ export default function PlayerScorecardPage() {
           <button
             type="button"
             onClick={handleSaveHole}
-            className="mt-4 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5"
+            disabled={scores[currentHoleIndex] === 0}
+            className="mt-4 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Save Hole
           </button>
@@ -377,16 +596,17 @@ export default function PlayerScorecardPage() {
 
         <button
           type="button"
-          onClick={handleSubmitRound}
-          className="mt-5 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5"
+          onClick={handleReviewRound}
+          disabled={!allHolesScored}
+          className="mt-5 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Submit Round
+          Review &amp; Submit Round
         </button>
 
-        {submitMessage ? (
-          <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/90 px-4 py-3 text-center text-sm font-semibold text-[#0B3D2E]">
-            {submitMessage}
-          </div>
+        {!allHolesScored ? (
+          <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-[#51635C]">
+            Save all {scorecard.holes.length} holes to submit
+          </p>
         ) : null}
       </section>
     </main>
