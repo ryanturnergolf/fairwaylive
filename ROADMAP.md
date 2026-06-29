@@ -151,10 +151,65 @@ Self scores = Reserved for verification & discrepancy checking
 - Export scorecards (PDF, Excel, Scorecard.com integration)
 - Photo verification of scores
 - Draft lineups based on analytics
+- **Schedule Optimizer** (AI-powered team scheduling: practice windows, tee times, availability conflict flagging)
 
 ---
 
-## Future Analytics & Stats
+## Schedule Optimizer — Coach Time-Saving Workflow
+
+**Strategic Importance**: High-value future differentiator that solves one of golf coaching's most time-consuming problems: scheduling around player availability.
+
+**Coach Problem**:
+Managing 15+ players with different class schedules, work commitments, and personal obligations is logistically complex. Coaches typically spend 2–4 hours per week manually finding practice times, resolving conflicts, and often default to "one-size-fits-all" schedules that exclude committed players. This reduces participation and team cohesion.
+
+### Capabilities
+
+**Schedule Input & Data Collection**
+- Players enter class schedule (recurring weekly blocks)
+- Players enter work schedule (shifts, job locations, estimated commute)
+- Coaches upload institutional calendars, class rosters (PDF), or team commitment calendars
+- AI extracts availability windows from uploaded documents (reduces manual entry)
+- Custom availability notes (known conflicts, travel dates, exemptions)
+- Integration with calendar systems (future: Google Calendar, Outlook sync)
+
+**Practice Time Optimization**
+- **Full-Team Windows**: Algorithm identifies slots when all (or N%) of players are available; recommends best recurring time
+- **Small-Group Practice Scheduling**: Suggests ideal times for skill-work groups (e.g., short-game specialists, distance throwers) without conflicts
+- **Coverage Analysis**: Shows which practices achieve 90%+ attendance vs. partial participation
+- **Coach Deployment**: Optimizes coaching time across multiple simultaneous groups
+
+**Tournament & Qualifying Scheduling**
+- **Tee Time Recommendations**: Suggests qualifying/tournament tee times compatible with player availability
+- **Conflict Detection**: Red flags players unavailable for scheduled tournament dates
+- **Backup Player Suggestions**: Auto-recommends alternates if starters have conflicts
+- **Hole Completion Estimates**: Given course difficulty and available time, predicts hole completion (helps decide 9-hole vs. 18-hole format)
+
+**Conflict Resolution & Alerts**
+- **Unavailability Patterns**:
+  - Red flag: Player unavailable 3+ consecutive weeks (early warning for retention/engagement issues)
+  - Yellow flag: Player conflicts with 2+ key practices (discuss alternatives or exemptions)
+  - Green flag: Committed players highlighted for team recognition
+- **What-If Scenarios**: Coaches test "What if we move practice to Friday 3pm?" or "Drop Player X from Tuesday qualifiers?" to see impact
+- **Player Communication**: Auto-generates calendar invites, sends notifications for schedule changes, enables "request exemption" workflow
+
+**Reporting**
+- **Weekly Coach Report**: Team availability summary, recommended practice times, conflict resolution suggestions
+- **Player Roster View**: Color-coded availability matrix (who's free when)
+- **Tournament Planning Dashboard**: Upcoming events, conflicts, and recommended tee times
+
+### Why This Matters
+
+- **Time Savings**: Reduces scheduling from 2–4 hours/week to 15 minutes; coaches reclaim time for coaching
+- **Equity**: All committed players get fair practice/tournament opportunities; no one left behind due to scheduling
+- **Early Intervention**: Flags players with chronic conflicts for one-on-one conversations
+- **Team Cohesion**: Full-team practices when possible strengthen culture; small-group work develops skills
+- **Competitive Edge**: Data-driven scheduling removes guesswork; coaches focus on execution, not logistics
+- **Retention**: Players appreciate transparency and fair scheduling; reduces frustration from last-minute conflicts
+
+### Timeline
+Post-launch feature. Requires core tournament module to be stable and widely adopted. Best implemented after competitive intelligence module.
+
+---
 
 ### Player Performance Tracking
 - **Strokes Gained/Lost**: By hole, by round, by course
