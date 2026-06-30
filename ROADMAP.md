@@ -176,24 +176,28 @@ Self scores = Reserved for verification & discrepancy checking
 **Scoring Rule:**
 - Top 4 player scores count toward team total by default
 - Configurable per tournament if coaches need different formats (e.g., top 5, all scores)
-- Visual divider line clearly separates counting vs. non-counting players
+- Visual divider (bold/solid line) clearly separates counting vs. non-counting players
+
+**Visual Display:**
+- Keep team player display simple: name and score only
+- Players sorted best to worst; divider alone indicates counting-score cutoff
+- No large labels like "COUNTING" or "NOT COUNTING" required
 
 **Dynamic Counting Status:**
-- Players above divider marked "COUNTING" (score contributes to team total)
-- Players below divider marked "NOT COUNTING" (score does not count)
 - Status updates automatically as live scores change during round
 - If a player above the line scores worse than a player below, positions swap and divider moves
 
 **Example:**
 ```
-STATE UNIVERSITY TEAM SCORE: 312
+STATE UNIVERSITY        312
 
-Alice Johnson      78    [COUNTING #1]
-Bob Chen           79    [COUNTING #2]
-Carol Smith        80    [COUNTING #3]
-David Lee          81    [COUNTING #4]
-─────────────────────────────────────── ← Visual Divider
-Emma Davis         82    [NOT COUNTING #5]
+Alice Johnson      78
+Bob Chen           79
+Carol Smith        80
+David Lee          81
+═══════════════════════════ ← Visual Divider
+Emma Davis         82
+Fiona Green        85
 ```
 
 ### Individual Players
@@ -226,16 +230,68 @@ Individual players retain complete access to all scoring features:
 
 ---
 
+## Tournament Director Dashboard & Coach Alerts
+
+### Tournament Director Dashboard
+
+**Purpose:** Real-time tournament health monitoring with quick access to group status, score tracking, and discrepancy resolution.
+
+**Core Displays:**
+- **Tournament Health Summary**: Total players/groups, recent score entry rate, unfinished/unsubmitted rounds, unresolved discrepancies
+- **Group Status Tracking**: Current hole for each group, players with stalled score entry (>15min with no entry), entry status per player
+- **Discrepancy Management**: Flagged discrepancies with quick-access resolution UI, penalty/withdrawal/DQ history, coach override log
+- **System Health**: Last leaderboard update timestamp, data sync status, storage health
+
+**Future Enhancements:**
+- Pace-of-play warnings (groups behind pace)
+- Weather alerts and course condition updates
+- Real-time group location tracking
+
+**UI Implementation:**
+- Tournament page gains new "Dashboard" tab (alongside "Live Leaderboard" tab)
+- Dashboard displays status cards for each group
+- Tap group card → full scorecard view + one-click resolution UI
+
+### Coach Alerts
+
+**Purpose:** Deliver contextual, team-specific alerts to coaches for pressing issues that require immediate attention.
+
+**Alert Strategy:**
+- **Scope:** Team-specific; coaches only see alerts affecting their players
+- **Priority:** High (unresolved discrepancy, withdrawal, stalled entry) > Medium (unsubmitted round) > Low (recent entry)
+- **Delivery:** In-app notifications during tournament; push notifications planned for future
+- **Dismissible:** Coaches can dismiss low-priority alerts; critical alerts persist
+
+**Alert Types & Examples:**
+
+| Trigger | Message | Priority |
+|---------|---------|----------|
+| No score entry in 20+ min | "Sarah Chen — no score entry for 22min" | HIGH |
+| Unresolved discrepancy > 2 strokes | "Alice Johnson — 3-stroke discrepancy on Hole 7 (self: 4, marker: 1)" | HIGH |
+| Round complete, unsubmitted | "Tom's scorecard complete but not submitted" | MEDIUM |
+| Penalty/Withdrawal/DQ | "Bob marked as withdrawn (injury)" | HIGH |
+| Coach override logged | "Coach entered score for Emma on Hole 5 (mobile unavailable)" | MEDIUM |
+| Group pace behind schedule | "Group 3 is 1.5 holes behind pace (Hole 10, target Hole 11.5)" | MEDIUM |
+
+**Alert Suppression:**
+- Coaches can mute low-priority alerts for specific players during round
+- Critical alerts (discrepancy, withdrawal, DQ) cannot be suppressed
+- Alerts auto-resume after round completes
+
+---
+
 ### Current Scope
 - Create and edit tournament structure (teams, players, pairings, rounds)
 - Generate scorecards and QR codes
 - View live leaderboard
+- Tournament director dashboard for group monitoring
 
 ### Near-Term Scope
-- Live group monitoring dashboard
+- Coach alerts for team player issues
 - Discrepancy resolution UI
 - Manual score entry override (for groups stuck/unable to use mobile)
 - Quick stats (strokes gained/lost vs. par, avg by hole, etc.)
+- Pace-of-play tracking and warnings
 
 ### Future Scope
 - Team vs. team comparisons
