@@ -84,6 +84,38 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ---
 
+### 4. Beta Tournament Requirements: Team Leaderboard & Individual Players
+**Goal**: Launch beta tournaments with proper team scoring and support for individual competitors
+
+**Required Changes - Team Leaderboard:**
+- [ ] Tournament page displays team leaderboard as primary view (not individual leaderboard)
+- [ ] Teams ranked best to worst by team score (live)
+- [ ] Players within each team ranked best to worst (live)
+- [ ] Top 4 player scores count toward team total (configurable per tournament)
+- [ ] Visual divider line between 4th (counting) and 5th (not counting) player
+- [ ] Label counting players as "COUNTING" and non-counting as "NOT COUNTING"
+- [ ] Dynamic status updates: as scores change, players swap positions across divider if needed
+- [ ] Team score recalculates automatically as marker scores update
+
+**Required Changes - Individual Players:**
+- [ ] Tournament setup: support "Individual" player designation
+- [ ] Individual players do not count toward any team score
+- [ ] Individual players appear on separate "Individual Leaderboard"
+- [ ] Individual players display "(IND)" next to name on all leaderboard views
+- [ ] Individual players support full feature set: pairings, QR codes, markers, scoring, verification, stats
+- [ ] Tournament director can mix team and individual players in same tournament
+
+**Storage Impact**: Extend Player type with `isIndividual: boolean` flag
+
+**UI Impact**: 
+- Tournament page: two leaderboard tabs (Team / Individual) with separate sorting
+- Dashboard: display team leaderboard by default
+- Scorecard: no changes required (markers work with any player type)
+
+**Testing Scope**: Test with 3-5 player teams, 4-player teams, and mixed tournaments
+
+---
+
 ## Scoring Workflow
 
 ### Mobile Scorecard Flow (Self + Marker Mode)
@@ -132,7 +164,67 @@ Self scores = Reserved for verification & discrepancy checking
 
 ---
 
-## Tournament Director / Coach Tools
+## Tournament Engine: Leaderboard Display & Player Rules
+
+### Team Leaderboard (Primary Format)
+
+**Sorting & Display:**
+- Team leaderboard is the primary leaderboard view for team tournaments
+- Teams ranked best to worst by team score (live, continuously updated)
+- Players within each team ranked best to worst by individual score (live)
+
+**Scoring Rule:**
+- Top 4 player scores count toward team total by default
+- Configurable per tournament if coaches need different formats (e.g., top 5, all scores)
+- Visual divider line clearly separates counting vs. non-counting players
+
+**Dynamic Counting Status:**
+- Players above divider marked "COUNTING" (score contributes to team total)
+- Players below divider marked "NOT COUNTING" (score does not count)
+- Status updates automatically as live scores change during round
+- If a player above the line scores worse than a player below, positions swap and divider moves
+
+**Example:**
+```
+STATE UNIVERSITY TEAM SCORE: 312
+
+Alice Johnson      78    [COUNTING #1]
+Bob Chen           79    [COUNTING #2]
+Carol Smith        80    [COUNTING #3]
+David Lee          81    [COUNTING #4]
+─────────────────────────────────────── ← Visual Divider
+Emma Davis         82    [NOT COUNTING #5]
+```
+
+### Individual Players
+
+**Tournament Setup:**
+- Players can be marked as "Individual" during tournament import
+- Individual players do not belong to any team
+- Individual players appear on separate "Individual Leaderboard"
+
+**Leaderboard Display:**
+- Individual players sorted by score (live) on individual leaderboard
+- Individual players appear with **(IND)** designation next to their name
+- Individual players do not count toward any team score
+
+**Full Feature Support:**
+Individual players retain complete access to all scoring features:
+- [ ] Group pairings and rotations
+- [ ] QR codes and manual group codes
+- [ ] Marker assignments and verification
+- [ ] Live scoring and self + marker entry
+- [ ] Score verification and discrepancy resolution
+- [ ] End-of-round reporting and stats
+- [ ] Historical performance tracking
+
+**Use Cases:**
+- Coaches competing in tournament (often individual)
+- Invited guest players
+- Alumni or representative players
+- Individuals in otherwise team format
+
+---
 
 ### Current Scope
 - Create and edit tournament structure (teams, players, pairings, rounds)
