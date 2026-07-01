@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   loadTournamentStateFromStorage,
   loadTournamentsFromStorage,
@@ -26,6 +26,8 @@ type PlayerScorecard = {
   markerPlayerId?: string;
   markerPlayerName?: string;
   markerTeam?: string;
+  playerScoreIds?: string[];
+  markerScoreIds?: string[];
 };
 
 type PairingGroup = {
@@ -33,6 +35,7 @@ type PairingGroup = {
   teeTime: string;
   startingHole: string;
   players: Array<{
+    playerId?: string;
     playerName: string;
     teamName: string;
   }>;
@@ -141,39 +144,85 @@ export default function PlayerScorecardPage() {
       return { error: "This tournament has no player data. Please request a new mobile scoring link." } as const;
     }
 
-    let selectedPlayer = null;
-    let selectedPlayerId = routePlayerId;
-    let markerPlayer = null;
-    let markerPlayerId: string | undefined;
+    const scorecardRows = storedEnvelope.uiState?.scorecards?.scorecardRows || [];
+    const teamNameById = new Map(storedEnvelope.tournament.teams.map((team) => [team.id, team.name]));
+    const getTournamentPlayerName = (player: (typeof storedEnvelope.tournament.players)[number]) =>
+      `${player.firstName} ${player.lastName}`.trim();
+    const getTournamentPlayerTeam = (player: (typeof storedEnvelope.tournament.players)[number]) =>
+      (player.teamId ? teamNameById.get(player.teamId) : undefined) || "Unassigned";
+    const isSamePairingPlayer = (
+      left: { playerName: string; teamName: string },
+      right: { playerName: string; teamName: string }
+    ) => left.playerName === right.playerName && left.teamName === right.teamName;
 
-    if (routePlayerId && !routePlayerId.startsWith("group-")) {
-      const matchedPlayer = storedEnvelope.tournament.players.find((p) => String(p.id) === routePlayerId);
-      if (matchedPlayer) {
-        selectedPlayerId = matchedPlayer.id;
-        const matchedInPairing = pairing.players.find(
-          (player) =>
-            player.playerName === `${matchedPlayer.firstName} ${matchedPlayer.lastName}`.trim() &&
-            player.teamName === (storedEnvelope.tournament.teams.find((t) => t.id === matchedPlayer.teamId)?.name || "Unassigned")
-        );
-        if (matchedInPairing) {
-          selectedPlayer = matchedInPairing;
-          const selectedIndex = pairing.players.indexOf(matchedInPairing);
-          const markerIndex = (selectedIndex + 1) % pairing.players.length;
-          const markerPlayerData = pairing.players[markerIndex];
-          if (markerPlayerData) {
-            const matchedMarker = storedEnvelope.tournament.players.find(
-              (p) =>
-                `${p.firstName} ${p.lastName}`.trim() === markerPlayerData.playerName &&
-                (p.teamId ? storedEnvelope.tournament.teams.find((t) => t.id === p.teamId)?.name : "Unassigned") === markerPlayerData.teamName
-            );
-            if (matchedMarker) {
-              markerPlayerId = matchedMarker.id;
-              markerPlayer = markerPlayerData;
-            }
-          }
-        }
+    const getIdCandidates = (player: { playerId?: string; playerName: string; teamName: string }) => {
+      const candidates = new Set<string>();
+      if (player.playerId) {
+        candidates.add(String(player.playerId));
       }
-    }
+
+      const matchedTournamentPlayer = storedEnvelope.tournament.players.find(
+        (item) => getTournamentPlayerName(item) === player.playerName && getTournamentPlayerTeam(item) === player.teamName
+      );
+      if (matchedTournamentPlayer) {
+        candidates.add(String(matchedTournamentPlayer.id));
+      }
+
+      const matchedScorecard = scorecardRows.find(
+        (row) => row.playerName === player.playerName && row.team === player.teamName
+      );
+      if (matchedScorecard) {
+        candidates.add(String(matchedScorecard.id));
+      }
+
+      return Array.from(candidates);
+    };
+
+    const routeMatchedTournamentPlayer = storedEnvelope.tournament.players.find(
+      (player) => String(player.id) === String(routePlayerId)
+    );
+    const routeMatchedScorecard = scorecardRows.find((row) => String(row.id) === String(routePlayerId));
+    const routeMatchedPairingPlayer = pairing.players.find((player) => {
+      if (player.playerId && String(player.playerId) === String(routePlayerId)) {
+        return true;
+      }
+
+      if (
+        routeMatchedTournamentPlayer &&
+        isSamePairingPlayer(player, {
+          playerName: getTournamentPlayerName(routeMatchedTournamentPlayer),
+          teamName: getTournamentPlayerTeam(routeMatchedTournamentPlayer),
+        })
+      ) {
+        return true;
+      }
+
+      return Boolean(
+        routeMatchedScorecard &&
+          isSamePairingPlayer(player, {
+            playerName: routeMatchedScorecard.playerName,
+            teamName: routeMatchedScorecard.team,
+          })
+      );
+    });
+
+    const selectedPlayer =
+      routePlayerId && routePlayerId.startsWith("group-")
+        ? pairing.players[0]
+        : routeMatchedPairingPlayer;
+
+    const selectedIndex = selectedPlayer ? pairing.players.indexOf(selectedPlayer) : -1;
+    const markerPlayer =
+      selectedIndex >= 0 ? pairing.players[(selectedIndex + 1) % pairing.players.length] : undefined;
+    const selectedPlayerIds = selectedPlayer ? getIdCandidates(selectedPlayer) : [];
+    const markerPlayerIds = markerPlayer ? getIdCandidates(markerPlayer) : [];
+    const selectedPlayerId =
+      selectedPlayerIds.find((id) => scorecardRows.some((row) => String(row.id) === id)) ||
+      selectedPlayerIds[0] ||
+      routePlayerId;
+    const markerPlayerId =
+      markerPlayerIds.find((id) => scorecardRows.some((row) => String(row.id) === id)) ||
+      markerPlayerIds[0];
 
     if (!selectedPlayer) {
       return { error: "Invalid scoring link. Please request a new mobile scoring link." } as const;
@@ -191,8 +240,30 @@ export default function PlayerScorecardPage() {
       markerPlayerId,
       markerPlayerName: markerPlayer?.playerName,
       markerTeam: markerPlayer?.teamName,
+      playerScoreIds: selectedPlayerIds,
+      markerScoreIds: markerPlayerIds,
     } satisfies PlayerScorecard;
   }, [requestedTournamentId, requestedPairingId, routePlayerId]);
+
+  // Extract resolved player IDs for reliable hydration
+  const resolvedPlayerIds = useMemo(() => {
+    if (!qrResolvedScorecard || "error" in qrResolvedScorecard) {
+      return null;
+    }
+    return {
+      selectedPlayerId: qrResolvedScorecard.playerId,
+      markerPlayerId: qrResolvedScorecard.markerPlayerId,
+      selectedPlayerIds: qrResolvedScorecard.playerScoreIds?.length
+        ? qrResolvedScorecard.playerScoreIds
+        : [qrResolvedScorecard.playerId],
+      markerPlayerIds: qrResolvedScorecard.markerScoreIds?.length
+        ? qrResolvedScorecard.markerScoreIds
+        : qrResolvedScorecard.markerPlayerId
+          ? [qrResolvedScorecard.markerPlayerId]
+          : [],
+      roundId: `round-${String(Number(qrResolvedScorecard.round) || 1)}`,
+    };
+  }, [qrResolvedScorecard]);
 
   const scorecard = (qrResolvedScorecard && "error" in qrResolvedScorecard
     ? fallbackScorecard
@@ -200,11 +271,190 @@ export default function PlayerScorecardPage() {
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
+  const [markedPlayerSelfScores, setMarkedPlayerSelfScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const [savedHoles, setSavedHoles] = useState<number[]>([]);
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [scoresLoaded, setScoresLoaded] = useState(false);
+
+  // Hydrate scores from storage on mount
+  useEffect(() => {
+    if (!requestedTournamentId || !scorecard.playerId || scorecard.playerId === "demo") {
+      return;
+    }
+
+    const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
+    if (!envelope) {
+      return;
+    }
+
+    const roundId = `round-${Number(scorecard.round) || 1}`;
+
+    // Find self score
+    const playerScoreIds = scorecard.playerScoreIds?.length ? scorecard.playerScoreIds : [scorecard.playerId];
+    const markerScoreIds = scorecard.markerScoreIds?.length
+      ? scorecard.markerScoreIds
+      : scorecard.markerPlayerId
+        ? [scorecard.markerPlayerId]
+        : [];
+    const scorecardRows = envelope.uiState?.scorecards?.scorecardRows || [];
+    const selfScorecardRow = scorecardRows.find(
+      (row) => playerScoreIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
+    );
+    const markerScorecardRow = scorecardRows.find(
+      (row) => markerScoreIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
+    );
+
+    const selfScore = envelope.tournament.scores.find(
+      (s) =>
+        playerScoreIds.includes(String(s.playerId)) &&
+        s.enteredBy === "self" &&
+        s.roundId === roundId
+    );
+
+    // Find marker score
+    const markerScore = envelope.tournament.scores.find(
+      (s) =>
+        markerScoreIds.includes(String(s.playerId)) &&
+        s.enteredBy === "marker" &&
+        s.roundId === roundId
+    );
+
+    const loadedSelfScores = selfScore?.holeScores.length ? selfScore.holeScores : selfScorecardRow?.scores;
+    const loadedMarkerScores = markerScore?.holeScores.length ? markerScore.holeScores : markerScorecardRow?.scores;
+
+    // Load scores if found
+    if (loadedSelfScores && loadedSelfScores.length > 0) {
+      setScores(loadedSelfScores);
+    }
+
+    if (loadedMarkerScores && loadedMarkerScores.length > 0) {
+      setMarkerScores(loadedMarkerScores);
+    }
+
+    // Set savedHoles to hole numbers where either score is greater than 0
+    const savedHoleNumbers: number[] = [];
+    const loadedScores = loadedSelfScores && loadedSelfScores.length > 0 ? loadedSelfScores : scores;
+    const resolvedLoadedMarkerScores = loadedMarkerScores && loadedMarkerScores.length > 0 ? loadedMarkerScores : markerScores;
+
+    for (let i = 0; i < scorecard.holes.length; i++) {
+      if (loadedScores[i] > 0 || resolvedLoadedMarkerScores[i] > 0) {
+        savedHoleNumbers.push(scorecard.holes[i].holeNumber);
+      }
+    }
+
+    if (savedHoleNumbers.length > 0) {
+      setSavedHoles(savedHoleNumbers);
+    }
+
+    // Determine first incomplete hole (where either score is missing)
+    let firstIncompleteIndex = -1;
+    for (let i = 0; i < scorecard.holes.length; i++) {
+      if (loadedScores[i] === 0 || resolvedLoadedMarkerScores[i] === 0) {
+        firstIncompleteIndex = i;
+        break;
+      }
+    }
+
+    // Set hole index or go to review if all complete
+    if (firstIncompleteIndex >= 0) {
+      setCurrentHoleIndex(firstIncompleteIndex);
+    } else {
+      // All holes complete - go to review
+      setView("review");
+    }
+  }, [requestedTournamentId, scorecard.playerId, scorecard.markerPlayerId, scorecard.playerScoreIds, scorecard.markerScoreIds, scorecard.round, scorecard.holes]);
+
+  // Load existing scores from storage on component mount using resolved player IDs
+  useMemo(() => {
+    if (!scoresLoaded && requestedTournamentId && resolvedPlayerIds) {
+      const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
+      if (envelope) {
+        const scorecardRows = envelope.uiState?.scorecards?.scorecardRows || [];
+        const selfScorecardRow = scorecardRows.find(
+          (row) => resolvedPlayerIds.selectedPlayerIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
+        );
+        const markerScorecardRow = scorecardRows.find(
+          (row) => resolvedPlayerIds.markerPlayerIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
+        );
+
+        // Load current player's self scores using String() comparison for robust ID matching
+        const selfScore = envelope.tournament.scores.find(
+          (s) => resolvedPlayerIds.selectedPlayerIds.includes(String(s.playerId)) &&
+                 s.roundId === resolvedPlayerIds.roundId &&
+                 s.enteredBy === "self"
+        );
+        const loadedSelfScores = selfScore?.holeScores.length ? selfScore.holeScores : selfScorecardRow?.scores;
+        if (loadedSelfScores && loadedSelfScores.length > 0) {
+          setScores([...loadedSelfScores]);
+        }
+
+        // Load marked player's marker scores using String() comparison
+        const markerScore = envelope.tournament.scores.find(
+          (s) => resolvedPlayerIds.markerPlayerIds.includes(String(s.playerId)) &&
+                 s.roundId === resolvedPlayerIds.roundId &&
+                 s.enteredBy === "marker"
+        );
+        const loadedMarkerScores = markerScore?.holeScores.length ? markerScore.holeScores : markerScorecardRow?.scores;
+        if (loadedMarkerScores && loadedMarkerScores.length > 0) {
+          setMarkerScores([...loadedMarkerScores]);
+        }
+
+        // Load marked player's self scores (for review) using String() comparison
+        if (resolvedPlayerIds.markerPlayerId) {
+          const markedPlayerSelf = envelope.tournament.scores.find(
+            (s) => resolvedPlayerIds.markerPlayerIds.includes(String(s.playerId)) &&
+                   s.roundId === resolvedPlayerIds.roundId &&
+                   s.enteredBy === "self"
+          );
+          if (markedPlayerSelf && markedPlayerSelf.holeScores.length > 0) {
+            setMarkedPlayerSelfScores([...markedPlayerSelf.holeScores]);
+          }
+        }
+
+        setScoresLoaded(true);
+      }
+    }
+  }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds]);
+
+  // Determine first incomplete hole (for resume behavior)
+  const firstIncompleteHoleIndex = useMemo(() => {
+    for (let i = 0; i < markerScores.length; i++) {
+      if (markerScores[i] === 0) {
+        return i;
+      }
+    }
+    return -1; // All holes complete
+  }, [markerScores]);
+
+  // Set initial hole to first incomplete if scores are loaded
+  useMemo(() => {
+    if (scoresLoaded && firstIncompleteHoleIndex >= 0 && currentHoleIndex === 0 && markerScores[0] > 0) {
+      setCurrentHoleIndex(firstIncompleteHoleIndex);
+    }
+    if (scoresLoaded && firstIncompleteHoleIndex === -1 && view === "scoring") {
+      setView("review");
+    }
+  }, [scoresLoaded, firstIncompleteHoleIndex, currentHoleIndex, markerScores, view]);
+
+  // Discrepancy detection: compare marked player's self scores vs marker scores
+  const discrepancies = useMemo(() => {
+    return scorecard.holes
+      .map((hole, index) => {
+        const self = markedPlayerSelfScores[index];
+        const marker = markerScores[index];
+        if (self > 0 && marker > 0 && self !== marker) {
+          const diff = Math.abs(self - marker);
+          return { holeNumber: hole.holeNumber, self, marker, diff };
+        }
+        return null;
+      })
+      .filter((d) => d !== null) as Array<{ holeNumber: number; self: number; marker: number; diff: number }>;
+  }, [markedPlayerSelfScores, markerScores, scorecard.holes]);
+
+  const hasDiscrepancies = discrepancies.length > 0;
 
   const currentHole = scorecard.holes[currentHoleIndex];
   const allHolesScored = scorecard.holes.length > 0 && scores.every((s) => s > 0);
@@ -216,6 +466,7 @@ export default function PlayerScorecardPage() {
   const front9Par = front9Holes.reduce((sum, h) => sum + h.par, 0);
   const back9Par = back9Holes.reduce((sum, h) => sum + h.par, 0);
 
+  // Totals for current player (scoring view)
   const totals = useMemo(() => {
     const playedHoles = scores.filter((score) => score > 0).length;
     const total = scores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
@@ -227,6 +478,23 @@ export default function PlayerScorecardPage() {
       toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
     };
   }, [scorecard.holes, scores]);
+
+  // Totals for marked player (review view)
+  const markedPlayerTotals = useMemo(() => {
+    const playedHoles = markedPlayerSelfScores.filter((score) => score > 0).length;
+    const total = markedPlayerSelfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
+    const parPlayed = scorecard.holes.slice(0, playedHoles).reduce((sum, hole) => sum + hole.par, 0);
+
+    return {
+      playedHoles,
+      total,
+      toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
+    };
+  }, [scorecard.holes, markedPlayerSelfScores]);
+
+  // Front/back 9 totals for marked player
+  const markedPlayerFront9Total = markedPlayerSelfScores.slice(0, 9).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
+  const markedPlayerBack9Total = markedPlayerSelfScores.slice(9, scorecard.holes.length).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
 
   if (qrResolvedScorecard && "error" in qrResolvedScorecard) {
     return (
@@ -283,8 +551,19 @@ export default function PlayerScorecardPage() {
     );
   };
 
+  // Validate player ID is real (non-empty, not demo, not a route group)
+  const isValidPlayerId = (id: unknown): boolean => {
+    return typeof id === "string" && id.length > 0 && id !== "demo" && !id.startsWith("group-");
+  };
+
   const handleSaveHole = () => {
     if (scores[currentHoleIndex] === 0) return;
+
+    // Validate playerId before saving
+    if (!isValidPlayerId(scorecard.playerId)) {
+      setSaveError("Unable to save score. Player information is invalid. Please request a new scoring link.");
+      return;
+    }
 
     setSavedHoles((current) => {
       if (current.includes(currentHole.holeNumber)) return current;
@@ -292,14 +571,16 @@ export default function PlayerScorecardPage() {
     });
     setSaveError("");
 
-    if (requestedTournamentId && scorecard.playerId) {
+    if (requestedTournamentId) {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
       
-      mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores, "self");
+      // Save self score with validated playerId
+      mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.playerId), roundId, scores, "self");
       
-      if (scorecard.markerPlayerId) {
-        mergeTournamentScoreSubmission(requestedTournamentId, scorecard.markerPlayerId, roundId, markerScores, "marker");
+      // Save marker score only if markerPlayerId is valid
+      if (isValidPlayerId(scorecard.markerPlayerId)) {
+        mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.markerPlayerId), roundId, markerScores, "marker");
       }
     }
 
@@ -323,13 +604,21 @@ export default function PlayerScorecardPage() {
   };
 
   const handleConfirmSubmit = () => {
-    if (!requestedTournamentId || !scorecard.playerId) {
-      setSaveError("Unable to submit. Please try again.");
+    if (!requestedTournamentId) {
+      setSaveError("Unable to submit. Tournament information is missing.");
       return;
     }
+
+    // Validate markerPlayerId before submitting
+    if (!isValidPlayerId(scorecard.markerPlayerId)) {
+      setSaveError("Unable to submit. Marker player information is invalid.");
+      return;
+    }
+
     const roundNumber = String(Number(scorecard.round) || 1);
     const roundId = `round-${roundNumber}`;
-    const ok = mergeTournamentScoreSubmission(requestedTournamentId, scorecard.playerId, roundId, scores, "self");
+    // Submit marked player's self scores as complete
+    const ok = mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.markerPlayerId), roundId, markedPlayerSelfScores, "self");
     if (!ok) {
       setSaveError("Unable to submit. Please try again.");
       return;
@@ -366,33 +655,33 @@ export default function PlayerScorecardPage() {
         {sharedHeader}
         <section className="mx-auto max-w-md px-4 py-5">
           <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Round Submitted</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verification Submitted</p>
             <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
-              Scorecard Saved
+              Scorecard Verified
             </h2>
             <p className="mt-3 text-sm leading-6 text-[#51635C]">
-              {scorecard.playerName}&rsquo;s round {scorecard.round} scorecard has been recorded.
+              {scorecard.markerPlayerName || "Player"}&rsquo;s round {scorecard.round} scores have been verified and recorded.
             </p>
             <div className="mt-5 grid grid-cols-3 gap-3">
               {front9Holes.length > 0 ? (
                 <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9</p>
-                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{front9Total}</p>
+                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{markedPlayerFront9Total}</p>
                 </div>
               ) : null}
               {back9Holes.length > 0 ? (
                 <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9</p>
-                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{back9Total}</p>
+                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{markedPlayerBack9Total}</p>
                 </div>
               ) : null}
               <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Total</p>
-                <p className="mt-2 text-lg font-black text-[#0B3D2E]">{totals.total}</p>
+                <p className="mt-2 text-lg font-black text-[#0B3D2E]">{markedPlayerTotals.total}</p>
               </div>
             </div>
             <div className="mt-3 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-              {totals.toPar} to par
+              {markedPlayerTotals.toPar} to par
             </div>
           </div>
         </section>
@@ -401,104 +690,94 @@ export default function PlayerScorecardPage() {
   }
 
   if (view === "review") {
+    const renderHolesTable = (holes: Hole[], startIndex: number, sectionLabel: string) => {
+      return (
+        <div className="mt-5">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">{sectionLabel}</p>
+          <div className="overflow-hidden rounded-2xl border border-[#E8DCC8]">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
+                  <th className="px-2 py-2 text-left font-black uppercase tracking-[0.2em] text-[#51635C]">Hole</th>
+                  <th className="px-2 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Self</th>
+                  <th className="px-2 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Marker</th>
+                  <th className="px-2 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Match</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holes.map((hole, i) => {
+                  const index = startIndex + i;
+                  const selfScore = markedPlayerSelfScores[index];
+                  const markerScore = markerScores[index];
+                  const isMatch = selfScore === markerScore;
+                  const discrepancy = Math.abs(selfScore - markerScore);
+
+                  return (
+                    <tr
+                      key={hole.holeNumber}
+                      className={`border-b border-[#E8DCC8] last:border-0 ${
+                        !isMatch && selfScore > 0 && markerScore > 0 ? "bg-red-100" : selfScore > 0 && markerScore > 0 ? "bg-green-50" : ""
+                      }`}
+                    >
+                      <td className="px-2 py-2 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
+                      <td className="px-2 py-2 text-center font-black text-[#0B3D2E]">
+                        {selfScore > 0 ? selfScore : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-center font-black text-[#0B3D2E]">
+                        {markerScore > 0 ? markerScore : "—"}
+                      </td>
+                      <td className={`px-2 py-2 text-center font-black ${
+                        !isMatch && selfScore > 0 && markerScore > 0 ? "text-red-700" : selfScore > 0 && markerScore > 0 ? "text-green-700" : "text-[#51635C]"
+                      }`}>
+                        {selfScore === 0 || markerScore === 0 ? "—" : isMatch ? "✓" : `✗ Δ${discrepancy}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
     return (
       <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
         {sharedHeader}
         <section className="mx-auto max-w-md px-4 py-5">
           <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Review Scorecard</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verify Score</p>
             <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#0B3D2E]">
-              {scorecard.playerName}
+              {scorecard.markerPlayerName || "Player"}
             </h2>
-            <p className="mt-0.5 text-xs text-[#51635C]">{scorecard.team}</p>
+            <p className="mt-0.5 text-xs text-[#51635C]">{scorecard.markerTeam}</p>
 
-            {front9Holes.length > 0 ? (
-              <div className="mt-5">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9</p>
-                <div className="overflow-hidden rounded-2xl border border-[#E8DCC8]">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
-                        <th className="px-3 py-2 text-left font-black uppercase tracking-[0.2em] text-[#51635C]">Hole</th>
-                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Par</th>
-                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Score</th>
-                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">+/-</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {front9Holes.map((hole, i) => {
-                        const score = scores[i];
-                        const diff = score > 0 ? score - hole.par : null;
-                        return (
-                          <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
-                            <td className="px-3 py-2 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
-                            <td className="px-3 py-2 text-center text-[#51635C]">{hole.par}</td>
-                            <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{score > 0 ? score : "—"}</td>
-                            <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
-                              {diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      <tr className="bg-[#FCFAF5]">
-                        <td className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]" colSpan={2}>Front 9</td>
-                        <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{front9Total}</td>
-                        <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
-                          {front9Total > 0 ? (front9Total - front9Par === 0 ? "E" : front9Total - front9Par > 0 ? `+${front9Total - front9Par}` : `${front9Total - front9Par}`) : "—"}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+            {hasDiscrepancies && (
+              <div className="mt-4 rounded-2xl border border-red-500 bg-red-50 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-700">
+                  ⚠ Discrepancies Found
+                </p>
+                <p className="mt-2 text-xs leading-5 text-red-800">
+                  {discrepancies.length} hole{discrepancies.length !== 1 ? "s" : ""} {discrepancies.length !== 1 ? "have" : "has"} score mismatch{discrepancies.length !== 1 ? "es" : ""}. Self and marker scores must match exactly before submitting.
+                </p>
+                <div className="mt-2 space-y-1">
+                  {discrepancies.map((d) => (
+                    <p key={d.holeNumber} className="text-xs text-red-800">
+                      Hole {d.holeNumber}: Self {d.self} vs Marker {d.marker}
+                    </p>
+                  ))}
                 </div>
               </div>
-            ) : null}
+            )}
 
-            {back9Holes.length > 0 ? (
-              <div className="mt-4">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9</p>
-                <div className="overflow-hidden rounded-2xl border border-[#E8DCC8]">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
-                        <th className="px-3 py-2 text-left font-black uppercase tracking-[0.2em] text-[#51635C]">Hole</th>
-                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Par</th>
-                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">Score</th>
-                        <th className="px-3 py-2 text-center font-black uppercase tracking-[0.2em] text-[#51635C]">+/-</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {back9Holes.map((hole, i) => {
-                        const score = scores[9 + i];
-                        const diff = score > 0 ? score - hole.par : null;
-                        return (
-                          <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
-                            <td className="px-3 py-2 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
-                            <td className="px-3 py-2 text-center text-[#51635C]">{hole.par}</td>
-                            <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{score > 0 ? score : "—"}</td>
-                            <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
-                              {diff === null ? "—" : diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      <tr className="bg-[#FCFAF5]">
-                        <td className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]" colSpan={2}>Back 9</td>
-                        <td className="px-3 py-2 text-center font-black text-[#0B3D2E]">{back9Total}</td>
-                        <td className="px-3 py-2 text-center font-semibold text-[#51635C]">
-                          {back9Total > 0 ? (back9Total - back9Par === 0 ? "E" : back9Total - back9Par > 0 ? `+${back9Total - back9Par}` : `${back9Total - back9Par}`) : "—"}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
+            {front9Holes.length > 0 ? renderHolesTable(front9Holes, 0, "Front 9") : null}
+            {back9Holes.length > 0 ? renderHolesTable(back9Holes, 9, "Back 9") : null}
 
             <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3">
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Total</span>
               <div className="text-right">
-                <span className="text-xl font-black text-[#0B3D2E]">{totals.total}</span>
-                <span className="ml-2 text-sm font-semibold text-[#51635C]">({totals.toPar})</span>
+                <span className="text-xl font-black text-[#0B3D2E]">{markedPlayerTotals.total}</span>
+                <span className="ml-2 text-sm font-semibold text-[#51635C]">({markedPlayerTotals.toPar})</span>
               </div>
             </div>
           </div>
@@ -515,16 +794,21 @@ export default function PlayerScorecardPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm(true)}
-                className="w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5"
+                disabled={hasDiscrepancies}
+                className={`w-full rounded-full px-6 py-4 text-sm font-black uppercase tracking-[0.25em] transition duration-300 ${
+                  hasDiscrepancies
+                    ? "cursor-not-allowed border border-[#E8DCC8] bg-[#F6F1E6] text-[#B8892D] opacity-50"
+                    : "bg-[#B8892D] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 active:translate-y-0.5"
+                }`}
               >
-                Submit Round
+                {hasDiscrepancies ? "Fix Score Mismatches to Submit" : "Submit Verification"}
               </button>
             </div>
           ) : (
             <div className="mt-4 rounded-[28px] border border-[#B8892D]/40 bg-[#B8892D]/8 p-5">
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Confirm Submission</p>
               <p className="mt-3 text-sm leading-6 text-[#0B3D2E]">
-                Please verify all scores are correct before submitting. Incorrect submitted scores may result in disqualification.
+                All scores have been verified for {scorecard.markerPlayerName || "Player"}. Please confirm to submit.
               </p>
               {saveError ? (
                 <p className="mt-3 text-sm font-semibold text-red-700">{saveError}</p>
