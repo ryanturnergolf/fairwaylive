@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   loadTournamentStateFromStorage,
   loadTournamentsFromStorage,
@@ -121,36 +121,53 @@ export default function PlayerScorecardPage() {
   const routePlayerId = Array.isArray(params?.playerId) ? params.playerId[0] : params?.playerId;
   const requestedTournamentId = searchParams.get("tournamentId") ?? "";
   const requestedPairingId = searchParams.get("pairing") ?? "";
+  const [qrResolvedScorecard, setQrResolvedScorecard] = useState<PlayerScorecard | { error: string } | null>(null);
+  const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
 
-  const qrResolvedScorecard = useMemo(() => {
-    if (!requestedTournamentId && !requestedPairingId) {
-      return null;
-    }
+  useEffect(() => {
+    setHasResolvedQrScorecard(false);
 
-    if (!requestedTournamentId || !requestedPairingId) {
-      return { error: "Missing tournament or pairing information in this QR code." } as const;
-    }
+    try {
+      if (!requestedTournamentId && !requestedPairingId) {
+        setQrResolvedScorecard(null);
+        setHasResolvedQrScorecard(true);
+        return;
+      }
 
-    const tournament = loadTournamentsFromStorage().find((item) => item.id === requestedTournamentId);
-    if (!tournament) {
-      return { error: "We could not find that tournament. Please request a new mobile scoring link." } as const;
-    }
+      if (!requestedTournamentId || !requestedPairingId) {
+        setQrResolvedScorecard({ error: "Missing tournament or pairing information in this QR code." });
+        setHasResolvedQrScorecard(true);
+        return;
+      }
 
-    const tournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(requestedTournamentId);
-    if (!tournamentState || !Array.isArray(tournamentState.pairings) || tournamentState.pairings.length === 0) {
-      return { error: "This tournament does not have any saved pairings yet." } as const;
-    }
+      const tournament = loadTournamentsFromStorage().find((item) => item.id === requestedTournamentId);
+      if (!tournament) {
+        setQrResolvedScorecard({ error: "We could not find that tournament. Please request a new mobile scoring link." });
+        setHasResolvedQrScorecard(true);
+        return;
+      }
 
-    const pairingNumber = Number(requestedPairingId);
-    const pairing = tournamentState.pairings.find((item) => item.groupNumber === pairingNumber);
-    if (!pairing || pairing.players.length === 0) {
-      return { error: "We could not find that pairing. Please request a new mobile scoring link." } as const;
-    }
+      const tournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(requestedTournamentId);
+      if (!tournamentState || !Array.isArray(tournamentState.pairings) || tournamentState.pairings.length === 0) {
+        setQrResolvedScorecard({ error: "This tournament does not have any saved pairings yet." });
+        setHasResolvedQrScorecard(true);
+        return;
+      }
 
-    const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
-    if (!storedEnvelope || storedEnvelope.tournament.players.length === 0) {
-      return { error: "This tournament has no player data. Please request a new mobile scoring link." } as const;
-    }
+      const pairingNumber = Number(requestedPairingId);
+      const pairing = tournamentState.pairings.find((item) => item.groupNumber === pairingNumber);
+      if (!pairing || pairing.players.length === 0) {
+        setQrResolvedScorecard({ error: "We could not find that pairing. Please request a new mobile scoring link." });
+        setHasResolvedQrScorecard(true);
+        return;
+      }
+
+      const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+      if (!storedEnvelope || storedEnvelope.tournament.players.length === 0) {
+        setQrResolvedScorecard({ error: "This tournament has no player data. Please request a new mobile scoring link." });
+        setHasResolvedQrScorecard(true);
+        return;
+      }
 
     const scorecardRows = storedEnvelope.uiState?.scorecards?.scorecardRows || [];
     const teamNameById = new Map(storedEnvelope.tournament.teams.map((team) => [team.id, team.name]));
@@ -233,12 +250,14 @@ export default function PlayerScorecardPage() {
       markerPlayerIds[0];
 
     if (!selectedPlayer) {
-      return { error: "Invalid scoring link. Please request a new mobile scoring link." } as const;
+      setQrResolvedScorecard({ error: "Invalid scoring link. Please request a new mobile scoring link." });
+      setHasResolvedQrScorecard(true);
+      return;
     }
 
     const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
 
-    return {
+    setQrResolvedScorecard({
       playerId: String(selectedPlayerId),
       tournamentName: tournament.name,
       playerName: selectedPlayer.playerName,
@@ -250,7 +269,12 @@ export default function PlayerScorecardPage() {
       markerTeam: markerPlayer?.teamName,
       playerScoreIds: selectedPlayerIds,
       markerScoreIds: markerPlayerIds,
-    } satisfies PlayerScorecard;
+    });
+      setHasResolvedQrScorecard(true);
+    } catch {
+      setQrResolvedScorecard({ error: "Invalid scoring link. Please request a new mobile scoring link." });
+      setHasResolvedQrScorecard(true);
+    }
   }, [requestedTournamentId, requestedPairingId, routePlayerId]);
 
   // Extract resolved player IDs for reliable hydration
@@ -286,6 +310,7 @@ export default function PlayerScorecardPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
+  const hasAppliedInitialHoleRef = useRef(false);
 
   // Hydrate scores from storage on mount
   useEffect(() => {
@@ -376,7 +401,7 @@ export default function PlayerScorecardPage() {
   }, [requestedTournamentId, scorecard.playerId, scorecard.markerPlayerId, scorecard.playerScoreIds, scorecard.markerScoreIds, scorecard.round, scorecard.holes]);
 
   // Load existing scores from storage on component mount using resolved player IDs
-  useMemo(() => {
+  useEffect(() => {
     if (!scoresLoaded && requestedTournamentId && resolvedPlayerIds) {
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
       if (envelope) {
@@ -438,7 +463,13 @@ export default function PlayerScorecardPage() {
   }, [markerScores]);
 
   // Set initial hole to first incomplete if scores are loaded
-  useMemo(() => {
+  useEffect(() => {
+    if (!scoresLoaded || hasAppliedInitialHoleRef.current) {
+      return;
+    }
+
+    hasAppliedInitialHoleRef.current = true;
+
     if (scoresLoaded && firstIncompleteHoleIndex >= 0 && currentHoleIndex === 0 && markerScores[0] > 0) {
       setCurrentHoleIndex(firstIncompleteHoleIndex);
     }
@@ -504,7 +535,41 @@ export default function PlayerScorecardPage() {
   const markedPlayerFront9Total = markedPlayerSelfScores.slice(0, 9).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
   const markedPlayerBack9Total = markedPlayerSelfScores.slice(9, scorecard.holes.length).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
 
-  if (qrResolvedScorecard && "error" in qrResolvedScorecard) {
+  const isQrScorecardRequest = Boolean(requestedTournamentId && requestedPairingId);
+  const hasLoadedQrScorecardScores =
+    qrResolvedScorecard && !("error" in qrResolvedScorecard) ? scoresLoaded : true;
+
+  if (isQrScorecardRequest && (!hasResolvedQrScorecard || !hasLoadedQrScorecardScores)) {
+    return (
+      <main className="min-h-screen bg-[#F6F1E6] px-4 py-8 text-[#0B3D2E]">
+        <div className="mx-auto max-w-md rounded-[28px] border border-[#E8DCC8] bg-white/90 p-6 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
+              HQ
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-[-0.02em]">Clubhouse HQ</h1>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#B8892D]">
+                Mobile Scorecard
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-6 text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
+            Loading Scorecard
+          </p>
+          <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
+            Resolving scoring link...
+          </h2>
+          <p className="mt-4 text-base leading-8 text-[#51635C]">
+            We are loading the tournament scorecard from this device.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (hasResolvedQrScorecard && qrResolvedScorecard && "error" in qrResolvedScorecard) {
     return (
       <main className="min-h-screen bg-[#F6F1E6] px-4 py-8 text-[#0B3D2E]">
         <div className="mx-auto max-w-md rounded-[28px] border border-[#E8DCC8] bg-white/90 p-6 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
@@ -947,6 +1012,7 @@ export default function PlayerScorecardPage() {
               max="12"
               value={scores[currentHoleIndex] === 0 ? "" : scores[currentHoleIndex]}
               onChange={(event) => updateScore(event.target.value)}
+              onInput={(event) => updateScore(event.currentTarget.value)}
               placeholder="Enter score"
               className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
             />
@@ -961,6 +1027,7 @@ export default function PlayerScorecardPage() {
                 max="12"
                 value={markerScores[currentHoleIndex] === 0 ? "" : markerScores[currentHoleIndex]}
                 onChange={(event) => updateMarkerScore(event.target.value)}
+                onInput={(event) => updateMarkerScore(event.currentTarget.value)}
                 placeholder="Enter score"
                 className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
               />
