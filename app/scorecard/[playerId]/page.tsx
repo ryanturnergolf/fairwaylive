@@ -9,6 +9,7 @@ import {
   loadTournamentStorageEnvelope,
   mergeTournamentScoreSubmission,
 } from "../../lib/tournamentStorage";
+import { saveHole, saveRound } from "../../lib/services/scoreService";
 
 type Hole = {
   holeNumber: number;
@@ -105,6 +106,13 @@ const formatToPar = (value: number) => {
     return "E";
   }
   return value > 0 ? `+${value}` : `${value}`;
+};
+
+const getEntryStatus = (holeScores: number[]) => {
+  const hasAnyScore = holeScores.some((score) => score > 0);
+  const isComplete = holeScores.length > 0 && holeScores.every((score) => score > 0);
+
+  return isComplete ? "complete" : hasAnyScore ? "live" : "pending";
 };
 
 export default function PlayerScorecardPage() {
@@ -556,6 +564,29 @@ export default function PlayerScorecardPage() {
     return typeof id === "string" && id.length > 0 && id !== "demo" && !id.startsWith("group-");
   };
 
+  const saveScoreThroughService = (
+    playerId: string,
+    enteredByPlayerId: string,
+    roundNumber: number,
+    holeScores: number[],
+    scope: "hole" | "round"
+  ) => {
+    const serviceSave = scope === "round" ? saveRound : saveHole;
+
+    void serviceSave({
+      tournamentId: requestedTournamentId,
+      roundNumber,
+      playerId,
+      enteredByPlayerId,
+      holeScores: [...holeScores],
+      total: holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0),
+      entryStatus: getEntryStatus(holeScores),
+      submittedAt: null,
+    }).catch((error) => {
+      console.error("[ScoreService] Unable to save score entry.", error);
+    });
+  };
+
   const handleSaveHole = () => {
     if (scores[currentHoleIndex] === 0) return;
 
@@ -574,13 +605,20 @@ export default function PlayerScorecardPage() {
     if (requestedTournamentId) {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
+      const parsedRoundNumber = Number(roundNumber);
       
       // Save self score with validated playerId
-      mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.playerId), roundId, scores, "self");
+      const selfScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.playerId), roundId, scores, "self");
+      if (selfScoreSaved) {
+        saveScoreThroughService(String(scorecard.playerId), String(scorecard.playerId), parsedRoundNumber, scores, "hole");
+      }
       
       // Save marker score only if markerPlayerId is valid
       if (isValidPlayerId(scorecard.markerPlayerId)) {
-        mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.markerPlayerId), roundId, markerScores, "marker");
+        const markerScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.markerPlayerId), roundId, markerScores, "marker");
+        if (markerScoreSaved) {
+          saveScoreThroughService(String(scorecard.markerPlayerId), String(scorecard.playerId), parsedRoundNumber, markerScores, "hole");
+        }
       }
     }
 
@@ -623,6 +661,7 @@ export default function PlayerScorecardPage() {
       setSaveError("Unable to submit. Please try again.");
       return;
     }
+    saveScoreThroughService(String(scorecard.markerPlayerId), String(scorecard.markerPlayerId), Number(roundNumber), markedPlayerSelfScores, "round");
     setView("submitted");
   };
 
