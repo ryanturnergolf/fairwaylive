@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
+import { createTournament } from "../lib/services/tournamentService";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -141,6 +142,7 @@ export default function DashboardPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [isCreatingTournament, setIsCreatingTournament] = useState(false);
 
   useEffect(() => {
     setTournaments(loadTournamentsFromStorage() as Tournament[]);
@@ -271,8 +273,14 @@ export default function DashboardPage() {
     setCurrentStep((current) => Math.max(current - 1, 1));
   };
 
-  const handleCreateTournament = (event: FormEvent<HTMLFormElement>) => {
+  const handleCreateTournament = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isCreatingTournament) {
+      return;
+    }
+
+    setIsCreatingTournament(true);
 
     const normalizedFormState = normalizeFormState(formState);
     const nextId = String(
@@ -282,8 +290,8 @@ export default function DashboardPage() {
       }, 0) + 1
     );
 
-    const newTournament: Tournament = {
-      id: nextId,
+    const createResult = await createTournament({
+      fallbackId: nextId,
       name: normalizedFormState.name.trim(),
       date: normalizedFormState.date,
       course: normalizedFormState.course.trim(),
@@ -293,7 +301,8 @@ export default function DashboardPage() {
       scoringFormat: normalizedFormState.scoringFormat,
       status: "Upcoming",
       settings: normalizedFormState,
-    };
+    });
+    const newTournament = createResult.tournament as Tournament;
 
     const normalizedRoundCount = Number(normalizedFormState.rounds) || 1;
 
@@ -353,6 +362,7 @@ export default function DashboardPage() {
     }
 
     saveTournaments((current) => [newTournament, ...current]);
+    setIsCreatingTournament(false);
     closeModal();
   };
 
@@ -1017,9 +1027,10 @@ export default function DashboardPage() {
                 ) : (
                   <button
                     type="submit"
-                    className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                    disabled={isCreatingTournament}
+                    className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    Create Tournament
+                    {isCreatingTournament ? "Creating..." : "Create Tournament"}
                   </button>
                 )}
               </div>
