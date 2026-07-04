@@ -20,6 +20,22 @@ export type CreateTournamentRowInput = {
   status: string;
 };
 
+export type TournamentPlayerUpsertRow = {
+  tournament_id: string;
+  player_id: string;
+  player_name: string;
+  team_id: string | null;
+  team_name: string | null;
+  round_number: number;
+  group_number: number | null;
+  tee_number: number | null;
+  starting_hole: number | null;
+  marker_player_id: string | null;
+  is_individual: boolean;
+  position: number | null;
+  status: string;
+};
+
 const tournamentColumns =
   "id,created_by,name,course,tournament_date,number_of_rounds,status,created_at,updated_at";
 
@@ -54,4 +70,19 @@ export const createTournamentRow = async (
   }
 
   return data as TournamentRow;
+};
+
+export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[]) => {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const supabase = getClient();
+  const { error } = await supabase
+    .from("tournament_players")
+    .upsert(rows, { onConflict: "tournament_id,round_number,player_id" });
+
+  if (error) {
+    throw error;
+  }
 };

@@ -13,6 +13,7 @@ import {
   saveTournamentStorageEnvelope,
   type StoredTournament,
 } from "../../lib/tournamentStorage";
+import { syncTournamentPlayers } from "../../lib/services/tournamentService";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -419,17 +420,19 @@ export default function TournamentPage() {
       autoRepairState,
     };
 
-    saveTournamentStorageEnvelope(
+    const envelope = buildTournamentStorageEnvelope(
       tournamentId,
-      buildTournamentStorageEnvelope(
-        tournamentId,
-        tournament.name,
-        tournament.course,
-        persistedState,
-        typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {},
-        Number(tournament.rounds) || 1
-      )
+      tournament.name,
+      tournament.course,
+      persistedState,
+      typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {},
+      Number(tournament.rounds) || 1
     );
+
+    saveTournamentStorageEnvelope(tournamentId, envelope);
+    void syncTournamentPlayers(envelope).catch((error) => {
+      console.error("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
+    });
     console.log("[TournamentStorage] save", {
       tournamentId,
       storageKey,
