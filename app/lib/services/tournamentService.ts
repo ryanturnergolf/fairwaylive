@@ -1,7 +1,10 @@
 import {
   createTournamentRow,
+  getTournamentPlayers,
+  getTournamentRow,
   upsertTournamentPlayers,
   type CreateTournamentRowInput,
+  type TournamentPlayerRow,
   type TournamentRow,
   type TournamentPlayerUpsertRow,
 } from "../repositories/tournamentRepository";
@@ -17,6 +20,30 @@ export type CreateTournamentResult = {
   source: "supabase" | "local";
   row: TournamentRow | null;
   error: unknown;
+};
+
+export type SharedTournamentScorecardState = {
+  tournament: StoredTournament;
+  pairings: Array<{
+    groupNumber: number;
+    teeTime: string;
+    startingHole: string;
+    players: Array<{
+      playerId: string;
+      playerName: string;
+      teamName: string;
+    }>;
+  }>;
+  scorecardRows: Array<{
+    id: number;
+    playerName: string;
+    team: string;
+    scores: number[];
+  }>;
+  roundSetup: {
+    roundNumber: string;
+    numberOfHoles: string;
+  };
 };
 
 const toRoundCount = (rounds: string) => {
@@ -147,4 +174,71 @@ const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): Tournam
 
 export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope) => {
   await upsertTournamentPlayers(buildTournamentPlayerRows(envelope));
+};
+
+const toStoredTournament = (row: TournamentRow): StoredTournament => ({
+  id: row.id,
+  name: row.name,
+  course: row.course ?? "",
+  date: row.tournament_date ?? "",
+  city: "",
+  state: "",
+  rounds: String(row.number_of_rounds || 1),
+  scoringFormat: "",
+  status: row.status,
+  settings: {},
+});
+
+const toScorecardRowId = (playerId: string, fallbackIndex: number) => {
+  const parsed = Number(playerId);
+  return Number.isFinite(parsed) ? parsed : fallbackIndex + 1;
+};
+
+export const loadSharedTournamentScorecardState = async (
+  tournamentId: string,
+  roundNumber = 1,
+  holeCount = 18
+): Promise<SharedTournamentScorecardState | null> => {
+  const [tournamentRow, playerRows] = await Promise.all([
+    getTournamentRow(tournamentId),
+    getTournamentPlayers(tournamentId, roundNumber),
+  ]);
+
+  if (!tournamentRow || playerRows.length === 0) {
+    return null;
+  }
+
+  const groupedPlayers = new Map<number, TournamentPlayerRow[]>();
+  playerRows.forEach((row, index) => {
+    const groupNumber = row.group_number ?? Math.floor(index / 4) + 1;
+    groupedPlayers.set(groupNumber, [...(groupedPlayers.get(groupNumber) ?? []), row]);
+  });
+
+  const pairings = Array.from(groupedPlayers.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([groupNumber, rows]) => ({
+      groupNumber,
+      teeTime: "",
+      startingHole: String(rows[0]?.starting_hole ?? rows[0]?.tee_number ?? 1),
+      players: rows.map((row) => ({
+        playerId: row.player_id,
+        playerName: row.player_name,
+        teamName: row.team_name || "Unassigned",
+      })),
+    }));
+
+  return {
+    tournament: toStoredTournament(tournamentRow),
+    pairings,
+    scorecardRows: playerRows.map((row, index) => ({
+      id: toScorecardRowId(row.player_id, index),
+      playerName: row.player_name,
+      team: row.team_name || "Unassigned",
+      scores: Array.from({ length: holeCount }, () => 0),
+    })),
+    roundSetup: {
+      roundNumber: String(roundNumber),
+      numberOfHoles: String(holeCount),
+    },
+  };
 };

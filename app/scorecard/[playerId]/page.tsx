@@ -9,7 +9,8 @@ import {
   loadTournamentStorageEnvelope,
   mergeTournamentScoreSubmission,
 } from "../../lib/tournamentStorage";
-import { saveHole, saveRound } from "../../lib/services/scoreService";
+import { loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
+import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 
 type Hole = {
   holeNumber: number;
@@ -125,9 +126,11 @@ export default function PlayerScorecardPage() {
   const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
 
   useEffect(() => {
+    let isCancelled = false;
     setHasResolvedQrScorecard(false);
 
-    try {
+    const resolveScorecard = async () => {
+      try {
       if (!requestedTournamentId && !requestedPairingId) {
         setQrResolvedScorecard(null);
         setHasResolvedQrScorecard(true);
@@ -140,14 +143,31 @@ export default function PlayerScorecardPage() {
         return;
       }
 
-      const tournament = loadTournamentsFromStorage().find((item) => item.id === requestedTournamentId);
+      const localTournament = loadTournamentsFromStorage().find((item) => item.id === requestedTournamentId);
+      const localTournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(requestedTournamentId);
+      const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+      const sharedState =
+        localTournament && localTournamentState && storedEnvelope
+          ? null
+          : await loadSharedTournamentScorecardState(requestedTournamentId).catch((error) => {
+              console.error("[TournamentService] Unable to load shared tournament scorecard state.", error);
+              return null;
+            });
+      const tournament = localTournament ?? sharedState?.tournament;
       if (!tournament) {
         setQrResolvedScorecard({ error: "We could not find that tournament. Please request a new mobile scoring link." });
         setHasResolvedQrScorecard(true);
         return;
       }
 
-      const tournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(requestedTournamentId);
+      const tournamentState =
+        localTournamentState ??
+        (sharedState
+          ? {
+              pairings: sharedState.pairings,
+              scorecards: { roundSetup: sharedState.roundSetup },
+            }
+          : null);
       if (!tournamentState || !Array.isArray(tournamentState.pairings) || tournamentState.pairings.length === 0) {
         setQrResolvedScorecard({ error: "This tournament does not have any saved pairings yet." });
         setHasResolvedQrScorecard(true);
@@ -162,19 +182,38 @@ export default function PlayerScorecardPage() {
         return;
       }
 
-      const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
-      if (!storedEnvelope || storedEnvelope.tournament.players.length === 0) {
+      const scorecardRows = storedEnvelope?.uiState?.scorecards?.scorecardRows || sharedState?.scorecardRows || [];
+      const tournamentPlayers =
+        storedEnvelope?.tournament.players ??
+        sharedState?.scorecardRows.map((row) => ({
+          id: String(row.id),
+          firstName: row.playerName.split(" ")[0] || row.playerName,
+          lastName: row.playerName.split(" ").slice(1).join(" "),
+          teamId: row.team,
+          isIndividual: false,
+          statistics: { teamName: row.team },
+        })) ??
+        [];
+      const tournamentTeams =
+        storedEnvelope?.tournament.teams ??
+        Array.from(new Set((sharedState?.scorecardRows ?? []).map((row) => row.team))).map((team) => ({
+          id: team,
+          name: team,
+          players: [],
+        }));
+      if (tournamentPlayers.length === 0) {
         setQrResolvedScorecard({ error: "This tournament has no player data. Please request a new mobile scoring link." });
         setHasResolvedQrScorecard(true);
         return;
       }
 
-    const scorecardRows = storedEnvelope.uiState?.scorecards?.scorecardRows || [];
-    const teamNameById = new Map(storedEnvelope.tournament.teams.map((team) => [team.id, team.name]));
-    const getTournamentPlayerName = (player: (typeof storedEnvelope.tournament.players)[number]) =>
+    const teamNameById = new Map(tournamentTeams.map((team) => [team.id, team.name]));
+    const getTournamentPlayerName = (player: (typeof tournamentPlayers)[number]) =>
       `${player.firstName} ${player.lastName}`.trim();
-    const getTournamentPlayerTeam = (player: (typeof storedEnvelope.tournament.players)[number]) =>
-      (player.teamId ? teamNameById.get(player.teamId) : undefined) || "Unassigned";
+    const getTournamentPlayerTeam = (player: (typeof tournamentPlayers)[number]) =>
+      (player.teamId ? teamNameById.get(player.teamId) : undefined) ||
+      (typeof player.statistics.teamName === "string" ? player.statistics.teamName : undefined) ||
+      "Unassigned";
     const isSamePairingPlayer = (
       left: { playerName: string; teamName: string },
       right: { playerName: string; teamName: string }
@@ -186,7 +225,7 @@ export default function PlayerScorecardPage() {
         candidates.add(String(player.playerId));
       }
 
-      const matchedTournamentPlayer = storedEnvelope.tournament.players.find(
+      const matchedTournamentPlayer = tournamentPlayers.find(
         (item) => getTournamentPlayerName(item) === player.playerName && getTournamentPlayerTeam(item) === player.teamName
       );
       if (matchedTournamentPlayer) {
@@ -203,7 +242,7 @@ export default function PlayerScorecardPage() {
       return Array.from(candidates);
     };
 
-    const routeMatchedTournamentPlayer = storedEnvelope.tournament.players.find(
+    const routeMatchedTournamentPlayer = tournamentPlayers.find(
       (player) => String(player.id) === String(routePlayerId)
     );
     const routeMatchedScorecard = scorecardRows.find((row) => String(row.id) === String(routePlayerId));
@@ -257,6 +296,10 @@ export default function PlayerScorecardPage() {
 
     const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
 
+    if (isCancelled) {
+      return;
+    }
+
     setQrResolvedScorecard({
       playerId: String(selectedPlayerId),
       tournamentName: tournament.name,
@@ -270,11 +313,21 @@ export default function PlayerScorecardPage() {
       playerScoreIds: selectedPlayerIds,
       markerScoreIds: markerPlayerIds,
     });
-      setHasResolvedQrScorecard(true);
-    } catch {
+        setHasResolvedQrScorecard(true);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
       setQrResolvedScorecard({ error: "Invalid scoring link. Please request a new mobile scoring link." });
       setHasResolvedQrScorecard(true);
     }
+    };
+
+    void resolveScorecard();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [requestedTournamentId, requestedPairingId, routePlayerId]);
 
   // Extract resolved player IDs for reliable hydration
@@ -402,7 +455,15 @@ export default function PlayerScorecardPage() {
 
   // Load existing scores from storage on component mount using resolved player IDs
   useEffect(() => {
-    if (!scoresLoaded && requestedTournamentId && resolvedPlayerIds) {
+    let isCancelled = false;
+
+    const loadExistingScores = async () => {
+      if (scoresLoaded || !requestedTournamentId || !resolvedPlayerIds) {
+        return;
+      }
+
+      const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
+      let loadedAnyScore = false;
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
       if (envelope) {
         const scorecardRows = envelope.uiState?.scorecards?.scorecardRows || [];
@@ -422,6 +483,7 @@ export default function PlayerScorecardPage() {
         const loadedSelfScores = selfScore?.holeScores.length ? selfScore.holeScores : selfScorecardRow?.scores;
         if (loadedSelfScores && loadedSelfScores.length > 0) {
           setScores([...loadedSelfScores]);
+          loadedAnyScore = true;
         }
 
         // Load marked player's marker scores using String() comparison
@@ -433,6 +495,7 @@ export default function PlayerScorecardPage() {
         const loadedMarkerScores = markerScore?.holeScores.length ? markerScore.holeScores : markerScorecardRow?.scores;
         if (loadedMarkerScores && loadedMarkerScores.length > 0) {
           setMarkerScores([...loadedMarkerScores]);
+          loadedAnyScore = true;
         }
 
         // Load marked player's self scores (for review) using String() comparison
@@ -444,12 +507,75 @@ export default function PlayerScorecardPage() {
           );
           if (markedPlayerSelf && markedPlayerSelf.holeScores.length > 0) {
             setMarkedPlayerSelfScores([...markedPlayerSelf.holeScores]);
+            loadedAnyScore = true;
+          }
+        }
+      }
+
+      const loadRemoteScore = async (playerIds: string[], enteredByPlayerId: string) => {
+        for (const playerId of playerIds) {
+          const remoteScore = await loadPlayerScores({
+            tournamentId: requestedTournamentId,
+            roundNumber,
+            playerId,
+            enteredByPlayerId,
+          });
+
+          if (remoteScore?.hole_scores?.length) {
+            return remoteScore.hole_scores;
           }
         }
 
+        return null;
+      };
+
+      try {
+        const remoteSelfScores = await loadRemoteScore(
+          resolvedPlayerIds.selectedPlayerIds,
+          resolvedPlayerIds.selectedPlayerId
+        );
+        if (!isCancelled && remoteSelfScores?.length) {
+          setScores([...remoteSelfScores]);
+          loadedAnyScore = true;
+        }
+
+        if (resolvedPlayerIds.markerPlayerId) {
+          const remoteMarkerScores = await loadRemoteScore(
+            resolvedPlayerIds.markerPlayerIds,
+            resolvedPlayerIds.selectedPlayerId
+          );
+          if (!isCancelled && remoteMarkerScores?.length) {
+            setMarkerScores([...remoteMarkerScores]);
+            loadedAnyScore = true;
+          }
+
+          const remoteMarkedPlayerSelfScores = await loadRemoteScore(
+            resolvedPlayerIds.markerPlayerIds,
+            resolvedPlayerIds.markerPlayerId
+          );
+          if (!isCancelled && remoteMarkedPlayerSelfScores?.length) {
+            setMarkedPlayerSelfScores([...remoteMarkedPlayerSelfScores]);
+            loadedAnyScore = true;
+          }
+        }
+      } catch (error) {
+        console.error("[ScoreService] Unable to load shared score entries.", error);
+      } finally {
+        if (!isCancelled) {
+          setScoresLoaded(true);
+        }
+      }
+
+      if (!loadedAnyScore && !isCancelled) {
         setScoresLoaded(true);
       }
-    }
+    };
+
+    void loadExistingScores();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds]);
 
   // Determine first incomplete hole (for resume behavior)

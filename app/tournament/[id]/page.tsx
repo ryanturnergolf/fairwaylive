@@ -13,6 +13,7 @@ import {
   saveTournamentStorageEnvelope,
   type StoredTournament,
 } from "../../lib/tournamentStorage";
+import { loadComparisonScores } from "../../lib/services/scoreService";
 import { syncTournamentPlayers } from "../../lib/services/tournamentService";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
@@ -168,6 +169,8 @@ type TournamentMeta = {
   status: string;
   settings: unknown;
 };
+
+type SharedScoreEntry = Awaited<ReturnType<typeof loadComparisonScores>>[number];
 
 const tournamentMetaFromEnvelope = (tournamentId: string, tournament: StoredTournament | null): TournamentMeta =>
   tournament
@@ -520,6 +523,62 @@ export default function TournamentPage() {
       window.clearInterval(intervalId);
     };
   }, [storageKey, tournamentId]);
+
+  useEffect(() => {
+    if (!isClientMounted || !tournamentId || !scorecardsGenerated || scorecardRows.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+    const roundNumber = Number(roundSetup.roundNumber) || 1;
+
+    const mergeSharedScores = (rows: ScorecardRow[], entries: SharedScoreEntry[]) => {
+      const entriesByPlayerId = new Map<string, SharedScoreEntry[]>();
+      entries.forEach((entry) => {
+        entriesByPlayerId.set(String(entry.player_id), [...(entriesByPlayerId.get(String(entry.player_id)) ?? []), entry]);
+      });
+
+      return rows.map((row) => {
+        const playerEntries = entriesByPlayerId.get(String(row.id)) ?? [];
+        const markerEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id));
+        const selfEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) === String(entry.player_id));
+        const selectedEntry = markerEntry ?? selfEntry;
+
+        if (!selectedEntry?.hole_scores?.length) {
+          return row;
+        }
+
+        return {
+          ...row,
+          scores: selectedEntry.hole_scores.map((score) => (Number.isFinite(Number(score)) ? Number(score) : 0)),
+        };
+      });
+    };
+
+    const refreshSharedScores = async () => {
+      try {
+        const sharedScores = await loadComparisonScores({ tournamentId, roundNumber });
+        if (isCancelled || sharedScores.length === 0) {
+          return;
+        }
+
+        setScorecardRows((currentRows) => {
+          const mergedRows = mergeSharedScores(currentRows, sharedScores);
+          return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
+        });
+      } catch (error) {
+        console.error("[ScoreService] Unable to load shared tournament score entries.", error);
+      }
+    };
+
+    void refreshSharedScores();
+    const intervalId = window.setInterval(refreshSharedScores, 10000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [isClientMounted, roundSetup.roundNumber, scorecardRows.length, scorecardsGenerated, tournamentId]);
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);

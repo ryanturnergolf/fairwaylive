@@ -36,8 +36,17 @@ export type TournamentPlayerUpsertRow = {
   status: string;
 };
 
+export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
+  id: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 const tournamentColumns =
   "id,created_by,name,course,tournament_date,number_of_rounds,status,created_at,updated_at";
+
+const tournamentPlayerColumns =
+  "id,tournament_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
 
 const getClient = () => {
   const supabase = getSupabaseBrowserClient();
@@ -85,4 +94,40 @@ export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[])
   if (error) {
     throw error;
   }
+};
+
+export const getTournamentRow = async (tournamentId: string): Promise<TournamentRow | null> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select(tournamentColumns)
+    .eq("id", tournamentId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as TournamentRow | null;
+};
+
+export const getTournamentPlayers = async (
+  tournamentId: string,
+  roundNumber: number
+): Promise<TournamentPlayerRow[]> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from("tournament_players")
+    .select(tournamentPlayerColumns)
+    .eq("tournament_id", tournamentId)
+    .eq("round_number", roundNumber)
+    .order("group_number", { ascending: true })
+    .order("position", { ascending: true })
+    .order("player_name", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as TournamentPlayerRow[];
 };
