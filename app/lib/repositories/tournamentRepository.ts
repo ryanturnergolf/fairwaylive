@@ -91,8 +91,37 @@ export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[])
     .from("tournament_players")
     .upsert(rows, { onConflict: "tournament_id,round_number,player_id" });
 
-  if (error) {
+  if (!error) {
+    return;
+  }
+
+  if (error.code !== "42P10") {
     throw error;
+  }
+
+  const rowGroups = new Map<string, TournamentPlayerUpsertRow[]>();
+  rows.forEach((row) => {
+    const key = `${row.tournament_id}:${row.round_number}`;
+    rowGroups.set(key, [...(rowGroups.get(key) ?? []), row]);
+  });
+
+  for (const groupRows of rowGroups.values()) {
+    const firstRow = groupRows[0];
+    const { error: deleteError } = await supabase
+      .from("tournament_players")
+      .delete()
+      .eq("tournament_id", firstRow.tournament_id)
+      .eq("round_number", firstRow.round_number);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    const { error: insertError } = await supabase.from("tournament_players").insert(groupRows);
+
+    if (insertError) {
+      throw insertError;
+    }
   }
 };
 
