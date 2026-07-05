@@ -8,13 +8,16 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
+  loadSharedTournamentIdFromStorage,
   loadTournamentsFromStorage,
   loadTournamentStorageEnvelope,
+  saveSharedTournamentIdToStorage,
   saveTournamentStorageEnvelope,
   type StoredTournament,
 } from "../../lib/tournamentStorage";
+import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
 import { loadComparisonScores } from "../../lib/services/scoreService";
-import { syncTournamentPlayers } from "../../lib/services/tournamentService";
+import { ensureSharedTournament, syncTournamentPlayers } from "../../lib/services/tournamentService";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -259,6 +262,7 @@ export default function TournamentPage() {
   const [activeQrCodeDataUrl, setActiveQrCodeDataUrl] = useState("");
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
+  const [sharedTournamentId, setSharedTournamentId] = useState("");
   const [autoRepairState, setAutoRepairState] = useState({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -295,6 +299,17 @@ export default function TournamentPage() {
 
     return pairingExistsForPlayer(pairings, activeQrPlayer.playerName) ?? null;
   }, [activeQrPlayer, pairings]);
+  const activeQrScoringPlayerId = useMemo(() => {
+    if (!activeQrPairing || !activeQrPlayer) {
+      return "";
+    }
+
+    return (
+      activeQrPairing.players.find(
+        (player) => player.playerName === activeQrPlayer.playerName && player.teamName === activeQrPlayer.team
+      )?.playerId || String(activeQrPlayer.id)
+    );
+  }, [activeQrPairing, activeQrPlayer]);
 
   useEffect(() => {
     setIsClientMounted(true);
@@ -307,6 +322,7 @@ export default function TournamentPage() {
 
     const savedTournaments = loadTournamentsFromStorage();
     setTournamentMeta(savedTournaments.find((item) => item.id === tournamentId) ?? createFallbackTournamentMeta(tournamentId));
+    setSharedTournamentId(loadSharedTournamentIdFromStorage(tournamentId));
   }, [isClientMounted, tournamentId]);
 
   useEffect(() => {
@@ -368,7 +384,7 @@ export default function TournamentPage() {
 
       setTeams(hydratedTournamentState.teams);
       setPlayers(hydratedTournamentState.players);
-      setPairings(hydratedTournamentState.pairings);
+      setPairings(hydratePairingsWithPlayerIds(hydratedTournamentState.pairings, hydratedTournamentState.players));
       setScorecardsGenerated(hydratedTournamentState.scorecards.scorecardsGenerated);
       setScorecardRows(mergedScorecardRows);
       setRoundSetup(loadedRoundSetup);
@@ -409,6 +425,14 @@ export default function TournamentPage() {
       return;
     }
 
+    const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
+    const hasPopulatedStoredTournament =
+      Boolean(currentEnvelope) &&
+      ((currentEnvelope?.tournament.teams.length ?? 0) > 0 || (currentEnvelope?.tournament.players.length ?? 0) > 0);
+    if (hasPopulatedStoredTournament && (teams.length === 0 || players.length === 0)) {
+      return;
+    }
+
     const persistedState: PersistedTournamentState = {
       teams,
       players,
@@ -433,7 +457,38 @@ export default function TournamentPage() {
     );
 
     saveTournamentStorageEnvelope(tournamentId, envelope);
-    void syncTournamentPlayers(envelope).catch((error) => {
+    if (teams.length === 0 || players.length === 0) {
+      return;
+    }
+
+    void (async () => {
+      const nextSharedTournamentId = await ensureSharedTournament({
+        fallbackId: tournamentId,
+        existingSharedTournamentId: sharedTournamentId || loadSharedTournamentIdFromStorage(tournamentId),
+        name: tournament.name,
+        course: tournament.course,
+        date: tournament.date,
+        city: tournament.city,
+        state: tournament.state,
+        rounds: tournament.rounds,
+        scoringFormat: tournament.scoringFormat,
+        status: tournament.status,
+        settings: tournament.settings,
+      });
+
+      if (nextSharedTournamentId !== sharedTournamentId) {
+        saveSharedTournamentIdToStorage(tournamentId, nextSharedTournamentId);
+        setSharedTournamentId(nextSharedTournamentId);
+      }
+
+      await syncTournamentPlayers({
+        ...envelope,
+        tournament: {
+          ...envelope.tournament,
+          id: nextSharedTournamentId,
+        },
+      });
+    })().catch((error) => {
       console.error("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
     });
     console.log("[TournamentStorage] save", {
@@ -441,7 +496,7 @@ export default function TournamentPage() {
       storageKey,
       savedTeamsCount: teams.length,
     });
-  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState, storageKey, tournamentId]);
+  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState, storageKey, tournamentId, sharedTournamentId]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
@@ -530,6 +585,10 @@ export default function TournamentPage() {
     }
 
     let isCancelled = false;
+    if (!sharedTournamentId) {
+      return;
+    }
+
     const roundNumber = Number(roundSetup.roundNumber) || 1;
 
     const mergeSharedScores = (rows: ScorecardRow[], entries: SharedScoreEntry[]) => {
@@ -557,7 +616,7 @@ export default function TournamentPage() {
 
     const refreshSharedScores = async () => {
       try {
-        const sharedScores = await loadComparisonScores({ tournamentId, roundNumber });
+        const sharedScores = await loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber });
         if (isCancelled || sharedScores.length === 0) {
           return;
         }
@@ -567,7 +626,7 @@ export default function TournamentPage() {
           return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
         });
       } catch (error) {
-        console.error("[ScoreService] Unable to load shared tournament score entries.", error);
+        console.warn("[ScoreService] Unable to load shared tournament score entries.", error);
       }
     };
 
@@ -578,7 +637,7 @@ export default function TournamentPage() {
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [isClientMounted, roundSetup.roundNumber, scorecardRows.length, scorecardsGenerated, tournamentId]);
+  }, [isClientMounted, roundSetup.roundNumber, scorecardRows.length, scorecardsGenerated, tournamentId, sharedTournamentId]);
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);
@@ -985,6 +1044,9 @@ export default function TournamentPage() {
     return `${hours12}:${String(minutes).padStart(2, "0")} ${meridiem}`;
   };
 
+  const buildStableRosterPlayerIdMap = (roster: Player[]) =>
+    new Map(roster.map((player, index) => [player.id, `player-${index + 1}`]));
+
   const handleGeneratePairings = () => {
     if (players.length === 0) {
       setPairings([]);
@@ -993,6 +1055,7 @@ export default function TournamentPage() {
     }
 
     const shuffledPlayers = [...players];
+    const stablePlayerIdsByRosterId = buildStableRosterPlayerIdMap(players);
 
     for (let index = shuffledPlayers.length - 1; index > 0; index -= 1) {
       const swapIndex = Math.floor(Math.random() * (index + 1));
@@ -1009,7 +1072,7 @@ export default function TournamentPage() {
         teeTime: formatMinutesToTime(startingMinutes + generatedPairings.length * 10),
         startingHole: "1",
         players: groupPlayers.map((player) => ({
-          playerId: String(player.id),
+          playerId: stablePlayerIdsByRosterId.get(player.id) || String(player.id),
           playerName: `${player.firstName} ${player.lastName}`.trim(),
           teamName: player.teamName || "Unassigned",
         })),
@@ -1029,11 +1092,15 @@ export default function TournamentPage() {
       }));
 
   const hydratePairingsWithPlayerIds = (groupings: PairingGroup[], roster: Player[]) => {
+    const stablePlayerIdsByRosterId = buildStableRosterPlayerIdMap(roster);
     const rosterByIdentity = new Map(
       roster.map((player) => [
         `${`${player.firstName} ${player.lastName}`.trim()}::${player.teamName || "Unassigned"}`,
-        String(player.id),
+        stablePlayerIdsByRosterId.get(player.id) || String(player.id),
       ])
+    );
+    const stablePlayerIdsByExistingId = new Map(
+      roster.map((player) => [String(player.id), stablePlayerIdsByRosterId.get(player.id) || String(player.id)])
     );
 
     return groupings.map((pairing) => ({
@@ -1041,7 +1108,10 @@ export default function TournamentPage() {
       players: pairing.players.map((player) => ({
         ...player,
         playerId:
-          player.playerId || rosterByIdentity.get(`${player.playerName}::${player.teamName}`) || `${player.playerName}::${player.teamName}`,
+          stablePlayerIdsByExistingId.get(player.playerId) ||
+          player.playerId ||
+          rosterByIdentity.get(`${player.playerName}::${player.teamName}`) ||
+          `${player.playerName}::${player.teamName}`,
       })),
     }));
   };
@@ -1291,17 +1361,25 @@ export default function TournamentPage() {
 
   const mobileScorecardUrl = "/scorecard/test";
 
-  const resolvedMobileScorecardUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return "";
+  const browserMobileScorecardPath = useMemo(() => {
+    if (!tournamentId || !activeQrPairing || !activeQrScoringPlayerId) {
+      return "/scorecard/test";
     }
 
-    if (!tournamentId || !activeQrPairing || !activeQrPlayer) {
-      return `${window.location.origin}/scorecard/test`;
+    return `/scorecard/${encodeURIComponent(activeQrScoringPlayerId)}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+  }, [activeQrPairing, activeQrScoringPlayerId, tournamentId]);
+
+  const qrMobileScorecardPath = useMemo(() => {
+    if (!sharedTournamentId || !activeQrPairing || !activeQrScoringPlayerId) {
+      return "/scorecard/test";
     }
 
-    return `${window.location.origin}/scorecard/${activeQrPlayer.id}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
-  }, [activeQrPairing, activeQrPlayer, tournamentId]);
+    return `/scorecard/${encodeURIComponent(activeQrScoringPlayerId)}?tournamentId=${encodeURIComponent(sharedTournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+  }, [activeQrPairing, activeQrScoringPlayerId, sharedTournamentId]);
+
+  const resolvedMobileScorecardUrl = useMemo(() => buildAppUrl(qrMobileScorecardPath), [qrMobileScorecardPath]);
+  const browserMobileScorecardUrl = useMemo(() => buildCurrentBrowserUrl(browserMobileScorecardPath), [browserMobileScorecardPath]);
+  const isQrMobileScorecardReady = Boolean(sharedTournamentId && activeQrPairing && activeQrScoringPlayerId);
 
   useEffect(() => {
     if (typeof document === "undefined" || !activeQrPlayer) {
@@ -1317,7 +1395,8 @@ export default function TournamentPage() {
   }, [activeQrPlayer]);
 
   useEffect(() => {
-    if (!activeQrPlayer || !resolvedMobileScorecardUrl) {
+    if (!activeQrPlayer || !isQrMobileScorecardReady || !resolvedMobileScorecardUrl) {
+      setActiveQrCodeDataUrl("");
       return;
     }
 
@@ -1345,7 +1424,7 @@ export default function TournamentPage() {
     return () => {
       isActive = false;
     };
-  }, [activeQrPlayer, resolvedMobileScorecardUrl]);
+  }, [activeQrPlayer, isQrMobileScorecardReady, resolvedMobileScorecardUrl]);
 
   const handlePrintFromQrModal = () => {
     if (!activeQrPlayer) {
@@ -2559,14 +2638,18 @@ export default function TournamentPage() {
                       className="h-full w-full rounded-[20px] object-contain p-2"
                     />
                   ) : (
-                    "QR"
+                    "..."
                   )}
                 </div>
                 <p className="mt-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  {activeQrPairing ? `Group ${activeQrPairing.groupNumber} mobile scoring access` : "QR Code unavailable"}
+                  {isQrMobileScorecardReady
+                    ? `Group ${activeQrPairing?.groupNumber ?? ""} mobile scoring access`
+                    : "Preparing mobile scoring access"}
                 </p>
                 <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  Scorecard URL: {resolvedMobileScorecardUrl || mobileScorecardUrl}
+                  {isQrMobileScorecardReady
+                    ? `Scorecard URL: ${resolvedMobileScorecardUrl || mobileScorecardUrl}`
+                    : "Scorecard URL: Preparing shared link"}
                 </div>
               </div>
 
@@ -2589,7 +2672,7 @@ export default function TournamentPage() {
                   Download QR
                 </button>
                 <Link
-                  href={resolvedMobileScorecardUrl || mobileScorecardUrl}
+                  href={browserMobileScorecardUrl || mobileScorecardUrl}
                   className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Open Mobile Scorecard

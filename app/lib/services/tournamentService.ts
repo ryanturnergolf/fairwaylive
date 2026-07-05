@@ -22,6 +22,10 @@ export type CreateTournamentResult = {
   error: unknown;
 };
 
+export type EnsureSharedTournamentInput = CreateTournamentInput & {
+  existingSharedTournamentId?: string;
+};
+
 export type SharedTournamentScorecardState = {
   tournament: StoredTournament;
   pairings: Array<{
@@ -58,6 +62,10 @@ const toTournamentRowInput = (input: CreateTournamentInput): CreateTournamentRow
   numberOfRounds: toRoundCount(input.rounds),
   status: input.status.toLowerCase(),
 });
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuid = (value: string) => uuidPattern.test(value);
 
 export const createTournament = async (
   input: CreateTournamentInput
@@ -97,6 +105,24 @@ export const createTournament = async (
       error,
     };
   }
+};
+
+export const ensureSharedTournament = async (
+  input: EnsureSharedTournamentInput
+): Promise<string> => {
+  const candidates = [input.existingSharedTournamentId, input.fallbackId].filter(
+    (value): value is string => Boolean(value && isUuid(value))
+  );
+
+  for (const candidate of candidates) {
+    const existingRow = await getTournamentRow(candidate).catch(() => null);
+    if (existingRow) {
+      return existingRow.id;
+    }
+  }
+
+  const row = await createTournamentRow(toTournamentRowInput(input));
+  return row.id;
 };
 
 const asPositiveInteger = (value: unknown): number | null => {
@@ -194,6 +220,22 @@ const toScorecardRowId = (playerId: string, fallbackIndex: number) => {
   return Number.isFinite(parsed) ? parsed : fallbackIndex + 1;
 };
 
+const hasPairingData = (row: TournamentPlayerRow) =>
+  row.group_number !== null || row.tee_number !== null || row.starting_hole !== null || row.marker_player_id !== null;
+
+const dedupeTournamentPlayerRows = (rows: TournamentPlayerRow[]) => {
+  const rowsByPlayerId = new Map<string, TournamentPlayerRow>();
+
+  rows.forEach((row) => {
+    const existing = rowsByPlayerId.get(row.player_id);
+    if (!existing || (!hasPairingData(existing) && hasPairingData(row))) {
+      rowsByPlayerId.set(row.player_id, row);
+    }
+  });
+
+  return [...rowsByPlayerId.values()];
+};
+
 export const loadSharedTournamentScorecardState = async (
   tournamentId: string,
   roundNumber = 1,
@@ -208,8 +250,9 @@ export const loadSharedTournamentScorecardState = async (
     return null;
   }
 
+  const sharedPlayerRows = dedupeTournamentPlayerRows(playerRows);
   const groupedPlayers = new Map<number, TournamentPlayerRow[]>();
-  playerRows.forEach((row, index) => {
+  sharedPlayerRows.forEach((row, index) => {
     const groupNumber = row.group_number ?? Math.floor(index / 4) + 1;
     groupedPlayers.set(groupNumber, [...(groupedPlayers.get(groupNumber) ?? []), row]);
   });
@@ -230,7 +273,7 @@ export const loadSharedTournamentScorecardState = async (
   return {
     tournament: toStoredTournament(tournamentRow),
     pairings,
-    scorecardRows: playerRows.map((row, index) => ({
+    scorecardRows: sharedPlayerRows.map((row, index) => ({
       id: toScorecardRowId(row.player_id, index),
       playerName: row.player_name,
       team: row.team_name || "Unassigned",

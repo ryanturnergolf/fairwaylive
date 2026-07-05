@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const tournamentId = "e2e-tournament";
+const sharedTournamentId = "11111111-1111-4111-8111-111111111111";
 const baseUrl = "http://127.0.0.1:3100";
 const tournamentsStorageKey = "clubhouse-hq-tournaments";
 const tournamentStorageKey = `clubhouse-hq-tournament-${tournamentId}`;
@@ -63,12 +64,12 @@ const uiState = {
       startingHole: "1",
       players: [
         {
-          playerId: "1",
+          playerId: "player-1",
           playerName: "Ava Green",
           teamName: "E2E University",
         },
         {
-          playerId: "2",
+          playerId: "player-2",
           playerName: "Ben Marker",
           teamName: "E2E University",
         },
@@ -237,4 +238,296 @@ test("mobile scorecard saves scores and reloads them from localStorage", async (
   await expect(page.getByText("Hole 1")).toBeVisible();
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("5");
+});
+
+test("mobile scorecard renders while shared score lookup is pending", async ({ page }) => {
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "null",
+    });
+  });
+
+  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+
+  await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
+  await expect(page.getByText("Mobile Scorecard")).toBeVisible();
+  await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+});
+
+test("phone QR resolver loads shared Supabase player-2 by QR player id", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Unable to load shared score entries")) {
+      consoleErrors.push(message.text());
+    }
+  });
+
+  await page.route("**/rest/v1/tournaments?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: sharedTournamentId,
+        created_by: null,
+        name: storedTournament.name,
+        course: storedTournament.course,
+        tournament_date: storedTournament.date,
+        number_of_rounds: 1,
+        status: "test",
+        created_at: null,
+        updated_at: null,
+      }),
+    });
+  });
+  await page.route("**/rest/v1/tournament_players**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          tournament_id: sharedTournamentId,
+          player_id: "player-1",
+          player_name: "Ava Green",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: 1,
+          tee_number: 1,
+          starting_hole: 1,
+          marker_player_id: "player-2",
+          is_individual: false,
+          position: 1,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          tournament_id: sharedTournamentId,
+          player_id: "player-2",
+          player_name: "Ben Marker",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: 1,
+          tee_number: 1,
+          starting_hole: 1,
+          marker_player_id: "player-1",
+          is_individual: false,
+          position: 2,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+          tournament_id: sharedTournamentId,
+          player_id: "1783206176889",
+          player_name: "Ava Green",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: null,
+          tee_number: null,
+          starting_hole: null,
+          marker_player_id: null,
+          is_individual: false,
+          position: 1,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          tournament_id: sharedTournamentId,
+          player_id: "1783206161404",
+          player_name: "Ben Marker",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: null,
+          tee_number: null,
+          starting_hole: null,
+          marker_player_id: null,
+          is_individual: false,
+          position: 2,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+      ]),
+    });
+  });
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "shared score read unavailable" }),
+    });
+  });
+
+  await page.goto(`${baseUrl}/scorecard/player-2?tournamentId=${sharedTournamentId}&pairing=1`);
+
+  await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
+  await expect(page.getByText("Mobile Scorecard")).toBeVisible();
+  await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+  await expect(page.getByText("Ben Marker", { exact: true })).toBeVisible();
+  await expect.poll(() => consoleErrors).toEqual([]);
+});
+
+test("tournament QR scorecard link does not use hardcoded localhost", async ({ page }) => {
+  const storageErrors: string[] = [];
+  const syncedPlayerRows: Array<Record<string, unknown>> = [];
+  const timestampPlayerId = 1783206161404;
+  const timestampMarkerId = 1783206161405;
+  const brandNewUiState = {
+    ...uiState,
+    players: [
+      {
+        ...uiState.players[0],
+        id: timestampPlayerId,
+      },
+      {
+        ...uiState.players[1],
+        id: timestampMarkerId,
+      },
+    ],
+    pairings: [
+      {
+        ...uiState.pairings[0],
+        players: [
+          {
+            ...uiState.pairings[0].players[0],
+            playerId: String(timestampPlayerId),
+          },
+          {
+            ...uiState.pairings[0].players[1],
+            playerId: String(timestampMarkerId),
+          },
+        ],
+      },
+    ],
+    scorecards: {
+      ...uiState.scorecards,
+      scorecardRows: [
+        {
+          ...uiState.scorecards.scorecardRows[0],
+          id: timestampPlayerId,
+        },
+        {
+          ...uiState.scorecards.scorecardRows[1],
+          id: timestampMarkerId,
+        },
+      ],
+    },
+  };
+  const brandNewTournamentEnvelope = {
+    ...tournamentEnvelope,
+    tournament: {
+      ...tournamentEnvelope.tournament,
+      players: [
+        {
+          ...tournamentEnvelope.tournament.players[0],
+          id: String(timestampPlayerId),
+        },
+        {
+          ...tournamentEnvelope.tournament.players[1],
+          id: String(timestampMarkerId),
+        },
+      ],
+      pairings: [
+        {
+          ...tournamentEnvelope.tournament.pairings[0],
+          players: brandNewUiState.pairings[0].players,
+        },
+      ],
+    },
+    uiState: brandNewUiState,
+  };
+
+  page.on("console", (message) => {
+    const text = message.text();
+    if (message.type() === "error" && text.includes("save aborted")) {
+      storageErrors.push(text);
+    }
+    if (message.type() === "error" && text.includes("Unable to load shared tournament score entries")) {
+      storageErrors.push(text);
+    }
+  });
+
+  await page.route("**/rest/v1/tournaments?**", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: sharedTournamentId,
+        created_by: null,
+        name: storedTournament.name,
+        course: storedTournament.course,
+        tournament_date: storedTournament.date,
+        number_of_rounds: 1,
+        status: "test",
+        created_at: null,
+        updated_at: null,
+      }),
+    });
+  });
+  await page.route("**/rest/v1/tournament_players**", async (route) => {
+    const postData = route.request().postDataJSON();
+    if (Array.isArray(postData)) {
+      syncedPlayerRows.push(...(postData as Array<Record<string, unknown>>));
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "[]",
+    });
+  });
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "shared score polling unavailable" }),
+    });
+  });
+
+  await page.goto(`${baseUrl}/dashboard`);
+  await page.evaluate(
+    ({ tournamentStorageKey, brandNewTournamentEnvelope }) => {
+      window.localStorage.setItem(tournamentStorageKey, JSON.stringify(brandNewTournamentEnvelope));
+    },
+    { tournamentStorageKey, brandNewTournamentEnvelope }
+  );
+
+  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
+  await expect.poll(() => storageErrors).toEqual([]);
+  await expect.poll(() => syncedPlayerRows.length).toBeGreaterThan(0);
+  expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId && row.player_id === "player-1")).toBe(true);
+  expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId && row.player_id === "player-2")).toBe(true);
+
+  const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
+  await expect(mobileScorecardLink).toBeVisible();
+  await expect(page.getByText(new RegExp(`Scorecard URL: .*/scorecard/player-1\\?tournamentId=${sharedTournamentId}&pairing=1`))).toBeVisible();
+
+  const href = await mobileScorecardLink.getAttribute("href");
+  expect(href).toBeTruthy();
+  expect(href).not.toContain("localhost");
+  expect(href).toContain(baseUrl);
+
+  const scorecardUrl = new URL(href || "");
+  expect(scorecardUrl.pathname).toBe("/scorecard/player-1");
+  expect(scorecardUrl.searchParams.get("tournamentId")).toBe(tournamentId);
+  expect(scorecardUrl.searchParams.get("pairing")).toBe("1");
 });

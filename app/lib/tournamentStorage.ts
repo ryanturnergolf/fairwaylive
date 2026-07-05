@@ -16,6 +16,7 @@ import {
 
 export const TOURNAMENTS_STORAGE_KEY = "clubhouse-hq-tournaments";
 const TOURNAMENT_STATE_KEY_PREFIX = "clubhouse-hq-tournament-";
+const SHARED_TOURNAMENT_ID_KEY_PREFIX = "clubhouse-hq-shared-tournament-";
 
 export type StoredTournament = {
   id: string;
@@ -31,6 +32,24 @@ export type StoredTournament = {
 };
 
 export const getTournamentStateStorageKey = (tournamentId: string) => `${TOURNAMENT_STATE_KEY_PREFIX}${tournamentId}`;
+
+export const getSharedTournamentIdStorageKey = (tournamentId: string) => `${SHARED_TOURNAMENT_ID_KEY_PREFIX}${tournamentId}`;
+
+export const loadSharedTournamentIdFromStorage = (tournamentId: string): string => {
+  if (typeof window === "undefined" || !tournamentId) {
+    return "";
+  }
+
+  return window.localStorage.getItem(getSharedTournamentIdStorageKey(tournamentId)) || "";
+};
+
+export const saveSharedTournamentIdToStorage = (tournamentId: string, sharedTournamentId: string) => {
+  if (typeof window === "undefined" || !tournamentId || !sharedTournamentId) {
+    return;
+  }
+
+  window.localStorage.setItem(getSharedTournamentIdStorageKey(tournamentId), sharedTournamentId);
+};
 
 export const loadTournamentsFromStorage = (): StoredTournament[] => {
   if (typeof window === "undefined") {
