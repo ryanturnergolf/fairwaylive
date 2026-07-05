@@ -129,6 +129,22 @@ const defaultClippdExportState: ClippdExportState = {
   exportFormat: "Final Results CSV",
 };
 
+const defaultTeamColor = "#0B3D2E";
+
+const buildTeamShortName = (schoolName: string) => {
+  const words = schoolName
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0);
+
+  if (words.length === 0) {
+    return "TEAM";
+  }
+
+  const initials = words.map((word) => word[0]).join("").toUpperCase();
+  return initials.slice(0, 4) || "TEAM";
+};
+
 type PersistedTournamentState = {
   teams: Team[];
   players: Player[];
@@ -599,9 +615,7 @@ export default function TournamentPage() {
 
       return rows.map((row) => {
         const playerEntries = entriesByPlayerId.get(String(row.id)) ?? [];
-        const markerEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id));
-        const selfEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) === String(entry.player_id));
-        const selectedEntry = markerEntry ?? selfEntry;
+        const selectedEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id));
 
         if (!selectedEntry?.hole_scores?.length) {
           return row;
@@ -823,15 +837,6 @@ export default function TournamentPage() {
     if (!teamFormState.schoolName.trim()) {
       nextErrors.schoolName = "School name is required.";
     }
-    if (!teamFormState.shortName.trim()) {
-      nextErrors.shortName = "Short name is required.";
-    }
-    if (!teamFormState.teamColor.trim()) {
-      nextErrors.teamColor = "Team color is required.";
-    }
-    if (!teamFormState.coachName.trim()) {
-      nextErrors.coachName = "Coach name is required.";
-    }
 
     setTeamErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -845,15 +850,16 @@ export default function TournamentPage() {
     }
 
     if (editingTeamId) {
+      const existingTeam = teams.find((team) => team.id === editingTeamId);
       setTeams((current) =>
         current.map((team) =>
           team.id === editingTeamId
             ? {
                 ...team,
                 schoolName: teamFormState.schoolName.trim(),
-                shortName: teamFormState.shortName.trim().toUpperCase(),
-                teamColor: teamFormState.teamColor.trim(),
-                coachName: teamFormState.coachName.trim(),
+                shortName: teamFormState.shortName.trim().toUpperCase() || existingTeam?.shortName || buildTeamShortName(teamFormState.schoolName),
+                teamColor: teamFormState.teamColor.trim() || existingTeam?.teamColor || defaultTeamColor,
+                coachName: teamFormState.coachName.trim() || existingTeam?.coachName || "",
               }
             : team
         )
@@ -863,8 +869,8 @@ export default function TournamentPage() {
         {
           id: Date.now(),
           schoolName: teamFormState.schoolName.trim(),
-          shortName: teamFormState.shortName.trim().toUpperCase(),
-          teamColor: teamFormState.teamColor.trim(),
+          shortName: teamFormState.shortName.trim().toUpperCase() || buildTeamShortName(teamFormState.schoolName),
+          teamColor: teamFormState.teamColor.trim() || defaultTeamColor,
           coachName: teamFormState.coachName.trim(),
         },
         ...current,
@@ -929,10 +935,6 @@ export default function TournamentPage() {
     if (!playerFormState.teamId.trim()) {
       nextErrors.teamId = "Team is required.";
     }
-    if (!playerFormState.handicap.trim()) {
-      nextErrors.handicap = "Handicap is required.";
-    }
-
     setPlayerErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -956,8 +958,8 @@ export default function TournamentPage() {
                 lastName: playerFormState.lastName.trim(),
                 teamId: playerFormState.teamId,
                 teamName: selectedTeam?.schoolName || "Unassigned",
-                handicap: playerFormState.handicap.trim(),
-                email: playerFormState.email.trim(),
+                handicap: playerFormState.handicap.trim() || player.handicap || "0",
+                email: playerFormState.email.trim() || player.email || "",
               }
             : player
         )
@@ -970,7 +972,7 @@ export default function TournamentPage() {
           lastName: playerFormState.lastName.trim(),
           teamId: playerFormState.teamId,
           teamName: selectedTeam?.schoolName || "Unassigned",
-          handicap: playerFormState.handicap.trim(),
+          handicap: playerFormState.handicap.trim() || "0",
           email: playerFormState.email.trim(),
         },
         ...current,
@@ -2926,11 +2928,11 @@ export default function TournamentPage() {
 
       {isTeamModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm sm:items-center"
           onClick={closeTeamModal}
         >
           <div
-            className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            className="flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -2953,8 +2955,9 @@ export default function TournamentPage() {
               </div>
             </div>
 
-            <form className="px-7 py-7" onSubmit={handleTeamSubmit}>
-              <div className="grid gap-5 sm:grid-cols-2">
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleTeamSubmit}>
+              <div className="min-h-0 flex-1 overflow-y-auto px-7 py-7">
+                <div className="grid gap-5 sm:grid-cols-2">
                 <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] sm:col-span-2">
                   <span>School Name</span>
                   <input
@@ -2966,42 +2969,10 @@ export default function TournamentPage() {
                   />
                   {teamErrors.schoolName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.schoolName}</p> : null}
                 </label>
-                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  <span>Short Name</span>
-                  <input
-                    name="shortName"
-                    value={teamFormState.shortName}
-                    onChange={handleTeamInputChange}
-                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                    placeholder="e.g. BU"
-                  />
-                  {teamErrors.shortName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.shortName}</p> : null}
-                </label>
-                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  <span>Team Color</span>
-                  <input
-                    name="teamColor"
-                    value={teamFormState.teamColor}
-                    onChange={handleTeamInputChange}
-                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                    placeholder="e.g. #0B3D2E"
-                  />
-                  {teamErrors.teamColor ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.teamColor}</p> : null}
-                </label>
-                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] sm:col-span-2">
-                  <span>Coach Name</span>
-                  <input
-                    name="coachName"
-                    value={teamFormState.coachName}
-                    onChange={handleTeamInputChange}
-                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                    placeholder="e.g. Coach Smith"
-                  />
-                  {teamErrors.coachName ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{teamErrors.coachName}</p> : null}
-                </label>
+                </div>
               </div>
 
-              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-7 py-5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={closeTeamModal}
@@ -3023,11 +2994,11 @@ export default function TournamentPage() {
 
       {isPlayerModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm sm:items-center"
           onClick={closePlayerModal}
         >
           <div
-            className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            className="flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -3050,8 +3021,9 @@ export default function TournamentPage() {
               </div>
             </div>
 
-            <form className="px-7 py-7" onSubmit={handlePlayerSubmit}>
-              <div className="grid gap-5 sm:grid-cols-2">
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={handlePlayerSubmit}>
+              <div className="min-h-0 flex-1 overflow-y-auto px-7 py-7">
+                <div className="grid gap-5 sm:grid-cols-2">
                 <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
                   <span>First Name</span>
                   <input
@@ -3091,31 +3063,10 @@ export default function TournamentPage() {
                   </select>
                   {playerErrors.teamId ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{playerErrors.teamId}</p> : null}
                 </label>
-                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  <span>Handicap</span>
-                  <input
-                    name="handicap"
-                    value={playerFormState.handicap}
-                    onChange={handlePlayerInputChange}
-                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                    placeholder="e.g. +2"
-                  />
-                  {playerErrors.handicap ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{playerErrors.handicap}</p> : null}
-                </label>
-                <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C] sm:col-span-2">
-                  <span>Email (optional)</span>
-                  <input
-                    name="email"
-                    type="email"
-                    value={playerFormState.email}
-                    onChange={handlePlayerInputChange}
-                    className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                    placeholder="e.g. alex@example.com"
-                  />
-                </label>
+                </div>
               </div>
 
-              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-7 py-5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={closePlayerModal}

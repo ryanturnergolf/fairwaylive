@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useMemo, useState, useEffect, useRef } from "react";
 import {
+  loadSharedTournamentIdFromStorage,
   loadTournamentStateFromStorage,
   loadTournamentsFromStorage,
   loadTournamentStorageEnvelope,
@@ -365,6 +366,13 @@ export default function PlayerScorecardPage() {
   const scorecard = (qrResolvedScorecard && "error" in qrResolvedScorecard
     ? fallbackScorecard
     : qrResolvedScorecard ?? sampleScorecards[routePlayerId || ""] ?? fallbackScorecard);
+  const sharedScoreTournamentId = useMemo(() => {
+    if (!requestedTournamentId) {
+      return "";
+    }
+
+    return loadSharedTournamentIdFromStorage(requestedTournamentId) || requestedTournamentId;
+  }, [requestedTournamentId]);
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
@@ -527,7 +535,7 @@ export default function PlayerScorecardPage() {
       const loadRemoteScore = async (playerIds: string[], enteredByPlayerId: string) => {
         for (const playerId of playerIds) {
           const remoteScore = await loadPlayerScores({
-            tournamentId: requestedTournamentId,
+            tournamentId: sharedScoreTournamentId,
             roundNumber,
             playerId,
             enteredByPlayerId,
@@ -588,7 +596,7 @@ export default function PlayerScorecardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds]);
+    }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds, sharedScoreTournamentId]);
 
   // Determine first incomplete hole (for resume behavior)
   const firstIncompleteHoleIndex = useMemo(() => {
@@ -775,7 +783,7 @@ export default function PlayerScorecardPage() {
     const serviceSave = scope === "round" ? saveRound : saveHole;
 
     void serviceSave({
-      tournamentId: requestedTournamentId,
+      tournamentId: sharedScoreTournamentId,
       roundNumber,
       playerId,
       enteredByPlayerId,

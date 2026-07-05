@@ -596,11 +596,11 @@ export default function DashboardPage() {
 
       {isModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm sm:items-center"
           onClick={closeModal}
         >
           <div
-            className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            className="flex max-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -623,7 +623,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <form className="px-7 py-7" onSubmit={handleCreateTournament}>
+            <form className="min-h-0 overflow-y-auto px-7 py-7" onSubmit={handleCreateTournament}>
               <div className="mb-5 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Create From Template</p>
                 <div className="mt-3 flex flex-col gap-3 sm:flex-row">
@@ -1006,7 +1006,7 @@ export default function DashboardPage() {
                 </div>
               ) : null}
 
-              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="sticky bottom-0 -mx-7 -mb-7 mt-8 flex flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-7 py-5 sm:flex-row sm:justify-end">
                 {currentStep > 1 ? (
                   <button
                     type="button"

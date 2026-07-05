@@ -1,10 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const tournamentId = "e2e-tournament";
 const sharedTournamentId = "11111111-1111-4111-8111-111111111111";
 const baseUrl = "http://127.0.0.1:3100";
 const tournamentsStorageKey = "clubhouse-hq-tournaments";
 const tournamentStorageKey = `clubhouse-hq-tournament-${tournamentId}`;
+const sharedTournamentStorageKey = `clubhouse-hq-shared-tournament-${tournamentId}`;
 const emptyHoleScores = Array.from({ length: 18 }, () => 0);
 
 const storedTournament = {
@@ -187,6 +188,90 @@ const tournamentEnvelope = {
     ],
   },
   uiState,
+};
+
+const buildScoreEntry = (
+  playerId: string,
+  enteredByPlayerId: string,
+  holeScores: number[],
+  tournament_id = sharedTournamentId
+) => ({
+  id: `${tournament_id}-${playerId}-${enteredByPlayerId}`,
+  tournament_id,
+  round_number: 1,
+  player_id: playerId,
+  entered_by_player_id: enteredByPlayerId,
+  hole_scores: holeScores,
+  total: holeScores.reduce((sum, score) => sum + score, 0),
+  entry_status: holeScores.every((score) => score > 0) ? "complete" : holeScores.some((score) => score > 0) ? "live" : "pending",
+  submitted_at: null,
+  created_at: null,
+  updated_at: null,
+});
+
+const routeSharedTournamentRoster = async (page: Page) => {
+  await page.route("**/rest/v1/tournaments?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: sharedTournamentId,
+        created_by: null,
+        name: storedTournament.name,
+        course: storedTournament.course,
+        tournament_date: storedTournament.date,
+        number_of_rounds: 1,
+        status: "test",
+        created_at: null,
+        updated_at: null,
+      }),
+    });
+  });
+
+  await page.route("**/rest/v1/tournament_players**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          tournament_id: sharedTournamentId,
+          player_id: "player-1",
+          player_name: "Ava Green",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: 1,
+          tee_number: 1,
+          starting_hole: 1,
+          marker_player_id: "player-2",
+          is_individual: false,
+          position: 1,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          tournament_id: sharedTournamentId,
+          player_id: "player-2",
+          player_name: "Ben Marker",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: 1,
+          tee_number: 1,
+          starting_hole: 1,
+          marker_player_id: "player-1",
+          is_individual: false,
+          position: 2,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+      ]),
+    });
+  });
 };
 
 test.use({
@@ -530,4 +615,161 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   expect(scorecardUrl.pathname).toBe("/scorecard/player-1");
   expect(scorecardUrl.searchParams.get("tournamentId")).toBe(tournamentId);
   expect(scorecardUrl.searchParams.get("pairing")).toBe("1");
+});
+
+test("add team modal hides optional internal fields", async ({ page }) => {
+  await page.route("**/rest/v1/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: route.request().method() === "GET" ? "[]" : "{}",
+    });
+  });
+
+  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Teams" }).click();
+  await page.getByRole("button", { name: "Add Team" }).click();
+
+  await expect(page.getByRole("heading", { name: "Add Team" })).toBeVisible();
+  await expect(page.getByLabel("School Name")).toBeVisible();
+  await expect(page.getByLabel("Short Name")).toHaveCount(0);
+  await expect(page.getByLabel("Team Color")).toHaveCount(0);
+  await expect(page.getByLabel("Coach Name")).toHaveCount(0);
+
+  await page.getByLabel("School Name").fill("Modal Cleanup College");
+  await page.getByRole("button", { name: "Add Team" }).last().click();
+  await expect(page.getByText("Modal Cleanup College")).toBeVisible();
+});
+
+test("live scoreboard uses marker scores instead of self-entered scores", async ({ page }) => {
+  const sharedScores = [
+    buildScoreEntry("1", "1", [4, ...emptyHoleScores.slice(1)]),
+    buildScoreEntry("2", "1", [5, ...emptyHoleScores.slice(1)]),
+  ];
+
+  await page.route("**/rest/v1/tournaments?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: sharedTournamentId,
+        created_by: null,
+        name: storedTournament.name,
+        course: storedTournament.course,
+        tournament_date: storedTournament.date,
+        number_of_rounds: 1,
+        status: "test",
+        created_at: null,
+        updated_at: null,
+      }),
+    });
+  });
+  await page.route("**/rest/v1/tournament_players**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    });
+  });
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(sharedScores),
+    });
+  });
+
+  await page.goto(baseUrl);
+  await page.evaluate(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: sharedTournamentStorageKey, value: sharedTournamentId }
+  );
+  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+
+  const avaRow = page.getByRole("row").filter({ hasText: "Ava Green" });
+  const benRow = page.getByRole("row").filter({ hasText: "Ben Marker" });
+  await expect(avaRow.getByRole("spinbutton").first()).toHaveValue("0");
+  await expect(benRow.getByRole("spinbutton").first()).toHaveValue("5");
+});
+
+test("desktop-entered scorecard scores hydrate on shared phone QR", async ({ page }) => {
+  await routeSharedTournamentRoster(page);
+  const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
+  let scoreReadCount = 0;
+
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (request.method() !== "GET") {
+      const body = request.postDataJSON() as Partial<ReturnType<typeof buildScoreEntry>>;
+      const entry = buildScoreEntry(
+        String(body.player_id),
+        String(body.entered_by_player_id),
+        (body.hole_scores as number[]) ?? emptyHoleScores,
+        String(body.tournament_id)
+      );
+      savedScoreRows.push(entry);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(entry),
+      });
+      return;
+    }
+
+    scoreReadCount += 1;
+    const getEqValue = (name: string) => (url.searchParams.get(name) || "").replace(/^eq\./, "");
+    const playerId = getEqValue("player_id");
+    const enteredByPlayerId = getEqValue("entered_by_player_id");
+    const matchingEntry = savedScoreRows
+      .slice()
+      .reverse()
+      .find(
+      (row) =>
+        row.tournament_id === getEqValue("tournament_id") &&
+        String(row.round_number) === getEqValue("round_number") &&
+        row.player_id === playerId &&
+        row.entered_by_player_id === enteredByPlayerId
+      );
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(matchingEntry ?? null),
+    });
+  });
+
+  await page.goto(baseUrl);
+  await page.evaluate(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: sharedTournamentStorageKey, value: sharedTournamentId }
+  );
+  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await expect.poll(() => scoreReadCount).toBeGreaterThanOrEqual(3);
+
+  for (const [index, [selfScore, markerScore]] of [
+    [4, 5],
+    [3, 4],
+    [5, 6],
+    [4, 4],
+  ].entries()) {
+    await expect(page.getByText(`Hole ${index + 1}`)).toBeVisible();
+    await page.getByLabel("Ava Green's Score").fill(String(selfScore));
+    await page.getByLabel("Ben Marker's Score").fill(String(markerScore));
+    await page.getByRole("button", { name: "Save Hole" }).click();
+  }
+
+  await expect.poll(() => savedScoreRows.filter((row) => row.tournament_id === sharedTournamentId).length).toBeGreaterThanOrEqual(2);
+
+  await page.evaluate(() => window.localStorage.clear());
+  await page.goto(`${baseUrl}/scorecard/player-1?tournamentId=${sharedTournamentId}&pairing=1`);
+
+  await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
+  await expect(page.getByText("Hole 5")).toBeVisible();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect(page.getByText("Hole 4")).toBeVisible();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
 });
