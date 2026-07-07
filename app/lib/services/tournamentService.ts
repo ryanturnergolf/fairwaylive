@@ -353,7 +353,7 @@ const toStoredTournamentFromSnapshot = (snapshot: TournamentStateSnapshotResult)
 const getAggregateRoundNumber = (snapshot: TournamentStateSnapshotResult | null) =>
   asPositiveInteger(snapshot?.envelope.uiState.scorecards.roundSetup.roundNumber) ?? 1;
 
-export const getTournamentAggregate = async (
+const loadTournamentAggregate = async (
   sharedTournamentUuidOrId: string
 ): Promise<TournamentAggregate | null> => {
   if (!sharedTournamentUuidOrId) {
@@ -404,6 +404,10 @@ export const getTournamentAggregate = async (
   };
 };
 
+export const getTournamentAggregate = async (
+  sharedTournamentUuidOrId: string
+): Promise<TournamentAggregate | null> => loadTournamentAggregate(sharedTournamentUuidOrId);
+
 export const loadSharedTournaments = async (): Promise<StoredTournament[]> => {
   const rows = await listTournamentRows();
   return rows.map(toStoredTournament);
@@ -414,7 +418,7 @@ export const loadSharedTournamentAggregates = async (): Promise<TournamentAggreg
 
   return Promise.all(
     rows.map(async (row) => {
-      const aggregate = await getTournamentAggregate(row.id).catch((error) => {
+      const aggregate = await loadTournamentAggregate(row.id).catch((error) => {
         console.warn("[TournamentService] Unable to load tournament aggregate; using shared row fallback.", error);
         return null;
       });
@@ -422,6 +426,24 @@ export const loadSharedTournamentAggregates = async (): Promise<TournamentAggreg
       return aggregate ?? tournamentAggregateFromRow(row);
     })
   );
+};
+
+export const loadTournamentList = async <T extends StoredTournament>(
+  localTournaments: T[],
+  mapSharedTournament: (tournament: StoredTournament) => T
+): Promise<T[]> => {
+  const sharedAggregates = await loadSharedTournamentAggregates();
+  const tournamentsById = new Map<string, T>();
+
+  sharedAggregates.forEach((aggregate) => {
+    const tournament = mapSharedTournament(aggregate.tournament);
+    tournamentsById.set(tournament.id, tournament);
+  });
+  localTournaments.forEach((tournament) => {
+    tournamentsById.set(tournament.id, tournament);
+  });
+
+  return Array.from(tournamentsById.values());
 };
 
 const toScorecardRowId = (playerId: string, fallbackIndex: number) => {

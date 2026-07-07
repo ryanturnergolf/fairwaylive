@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
-import { createTournament, loadSharedTournamentAggregates, type TournamentAggregate } from "../lib/services/tournamentService";
+import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -83,23 +83,6 @@ type TournamentTemplate = {
 
 const TEMPLATE_STORAGE_KEY = "clubhouse-hq-tournament-templates";
 
-const mergeTournamentsById = (localTournaments: Tournament[], sharedAggregates: TournamentAggregate[]): Tournament[] => {
-  const tournamentsById = new Map<string, Tournament>();
-
-  sharedAggregates.forEach((aggregate) => {
-    const tournament = aggregate.tournament;
-    tournamentsById.set(tournament.id, {
-      ...tournament,
-      settings: defaultFormState,
-    });
-  });
-  localTournaments.forEach((tournament) => {
-    tournamentsById.set(tournament.id, tournament);
-  });
-
-  return Array.from(tournamentsById.values());
-};
-
 const loadTemplatesFromStorage = (): TournamentTemplate[] => {
   if (typeof window === "undefined") {
     return [];
@@ -167,10 +150,13 @@ export default function DashboardPage() {
     setTournaments(localTournaments);
     setIsClientMounted(true);
 
-    void loadSharedTournamentAggregates()
-      .then((sharedAggregates) => {
+    void loadTournamentList(localTournaments, (tournament) => ({
+      ...tournament,
+      settings: defaultFormState,
+    }))
+      .then((loadedTournaments) => {
         if (!isCancelled) {
-          setTournaments(mergeTournamentsById(localTournaments, sharedAggregates));
+          setTournaments(loadedTournaments);
         }
       })
       .catch((error) => {

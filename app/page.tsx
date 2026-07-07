@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadSharedTournamentAggregates, type TournamentAggregate } from "./lib/services/tournamentService";
+import { loadTournamentList } from "./lib/services/tournamentService";
 import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 
 const teams = [
@@ -93,20 +93,6 @@ const features = [
   },
 ];
 
-const mergeTournamentsById = (localTournaments: StoredTournament[], sharedAggregates: TournamentAggregate[]) => {
-  const tournamentsById = new Map<string, StoredTournament>();
-
-  sharedAggregates.forEach((aggregate) => {
-    const tournament = aggregate.tournament;
-    tournamentsById.set(tournament.id, tournament);
-  });
-  localTournaments.forEach((tournament) => {
-    tournamentsById.set(tournament.id, tournament);
-  });
-
-  return Array.from(tournamentsById.values());
-};
-
 export default function Home() {
   const [savedTournaments, setSavedTournaments] = useState<StoredTournament[]>([]);
 
@@ -115,10 +101,10 @@ export default function Home() {
     const localTournaments = loadTournamentsFromStorage();
     setSavedTournaments(localTournaments);
 
-    void loadSharedTournamentAggregates()
-      .then((sharedAggregates) => {
+    void loadTournamentList(localTournaments, (tournament) => tournament)
+      .then((loadedTournaments) => {
         if (!isCancelled) {
-          setSavedTournaments(mergeTournamentsById(localTournaments, sharedAggregates));
+          setSavedTournaments(loadedTournaments);
         }
       })
       .catch((error) => {
