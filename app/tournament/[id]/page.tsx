@@ -19,11 +19,11 @@ import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
 import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
   ensureSharedTournament,
-  getTournamentAggregate,
+  loadTournamentPageState,
   syncTournamentPlayers,
   syncTournamentStateSnapshot,
+  type TournamentPageLoadResult,
 } from "../../lib/services/tournamentService";
-import type { TournamentStorageEnvelope } from "../../lib/tournamentModel";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -197,49 +197,6 @@ type TournamentMeta = {
 
 type SharedScoreEntry = Awaited<ReturnType<typeof loadComparisonScores>>[number];
 
-const tournamentMetaFromEnvelope = (tournamentId: string, tournament: StoredTournament | null): TournamentMeta =>
-  tournament
-    ? {
-        id: tournament.id,
-        name: tournament.name,
-        date: tournament.date,
-        course: tournament.course,
-        city: tournament.city,
-        state: tournament.state,
-        rounds: tournament.rounds,
-        scoringFormat: tournament.scoringFormat,
-        status: tournament.status,
-        settings: tournament.settings,
-      }
-    : createFallbackTournamentMeta(tournamentId);
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-
-const tournamentMetaFromSnapshotEnvelope = (
-  tournamentId: string,
-  envelope: TournamentStorageEnvelope
-): TournamentMeta => {
-  const settings = asRecord(envelope.tournament.settings);
-  const roundsFromSettings = Number(settings.rounds);
-  const roundCount = Number.isFinite(roundsFromSettings)
-    ? Math.max(1, roundsFromSettings)
-    : Math.max(1, envelope.tournament.rounds.length || 1);
-
-  return {
-    id: tournamentId,
-    name: envelope.tournament.name || "Tournament",
-    date: typeof settings.date === "string" ? settings.date : "",
-    course: envelope.tournament.course || "",
-    city: typeof settings.city === "string" ? settings.city : "",
-    state: typeof settings.state === "string" ? settings.state : "",
-    rounds: String(roundCount),
-    scoringFormat: typeof settings.scoringFormat === "string" ? settings.scoringFormat : "Stroke Play",
-    status: typeof settings.status === "string" ? settings.status : "Upcoming",
-    settings: envelope.tournament.settings,
-  };
-};
-
 const createFallbackTournamentMeta = (tournamentId: string): TournamentMeta => ({
   id: tournamentId,
   name: "Tournament",
@@ -407,71 +364,46 @@ export default function TournamentPage() {
     hasLoadedFromStorageRef.current = false;
     hydrationPendingRef.current = false;
 
-    const hydrateFromEnvelope = (envelope: TournamentStorageEnvelope, updateTournamentMeta = false) => {
-      const hydratedTournamentState = envelope.uiState;
-      const loadedRoundSetup = hydratedTournamentState.scorecards.roundSetup;
-      const loadedRoundId = `round-${String(Number(loadedRoundSetup.roundNumber) || 1)}`;
-      const submittedScoreMap = new Map<string, number[]>();
-      for (const score of envelope.tournament.scores) {
-        if (score.roundId === loadedRoundId && score.enteredBy === "marker") {
-          submittedScoreMap.set(score.playerId, score.holeScores);
-        }
-      }
-      const mergedScorecardRows = hydratedTournamentState.scorecards.scorecardRows.map((row) => {
-        const submitted = submittedScoreMap.get(String(row.id));
-        if (!submitted) return row;
-        return { ...row, scores: submitted };
-      });
-
-      if (updateTournamentMeta) {
-        setTournamentMeta(tournamentMetaFromSnapshotEnvelope(tournamentId, envelope));
-      }
-      setTeams(hydratedTournamentState.teams);
-      setPlayers(hydratedTournamentState.players);
-      setPairings(hydratePairingsWithPlayerIds(hydratedTournamentState.pairings, hydratedTournamentState.players));
-      setScorecardsGenerated(hydratedTournamentState.scorecards.scorecardsGenerated);
-      setScorecardRows(mergedScorecardRows);
-      setRoundSetup(loadedRoundSetup);
-      setClippdExportState(hydratedTournamentState.clippdExportState);
-      setScoreboardImportState(hydratedTournamentState.scoreboardImportState);
-      setAutoRepairState(hydratedTournamentState.autoRepairState);
-    };
-
     const loadStoredOrRemoteSnapshot = async () => {
       try {
-        const storedEnvelope = loadTournamentStorageEnvelope(tournamentId);
-
-        if (storedEnvelope) {
-          hydrateFromEnvelope(storedEnvelope);
-          if (!isCancelled) {
-            hasLoadedFromStorageRef.current = true;
-            hydrationPendingRef.current = true;
-          }
+        const loadResultOrPromise = loadTournamentPageState(tournamentId);
+        const loadResult: TournamentPageLoadResult =
+          typeof (loadResultOrPromise as Promise<unknown>).then === "function"
+            ? await (loadResultOrPromise as Promise<TournamentPageLoadResult>)
+            : (loadResultOrPromise as TournamentPageLoadResult);
+        if (isCancelled) {
           return;
         }
 
-        const aggregate = await getTournamentAggregate(tournamentId);
-        if (!aggregate || isCancelled) {
+        if (loadResult.status === "empty") {
           hasLoadedFromStorageRef.current = true;
           return;
         }
 
-        if (!aggregate.envelope) {
-          setTournamentMeta(tournamentMetaFromEnvelope(tournamentId, aggregate.tournament));
-          setSharedTournamentId(aggregate.sharedTournamentId);
+        if (loadResult.status === "metadata") {
+          setTournamentMeta(loadResult.tournament);
+          setSharedTournamentId(loadResult.sharedTournamentId);
           hasLoadedFromStorageRef.current = true;
           return;
         }
 
-        saveTournamentStorageEnvelope(tournamentId, aggregate.envelope);
-        if (aggregate.localTournamentId) {
-          saveSharedTournamentIdToStorage(aggregate.localTournamentId, aggregate.sharedTournamentId);
+        if (loadResult.tournament) {
+          setTournamentMeta(loadResult.tournament);
         }
-        saveSharedTournamentIdToStorage(tournamentId, aggregate.sharedTournamentId);
-        setSharedTournamentId(aggregate.sharedTournamentId);
-        hydrateFromEnvelope(aggregate.envelope, true);
+        if (loadResult.sharedTournamentId) {
+          setSharedTournamentId(loadResult.sharedTournamentId);
+        }
+        setTeams(loadResult.hydration.teams);
+        setPlayers(loadResult.hydration.players);
+        setPairings(hydratePairingsWithPlayerIds(loadResult.hydration.pairings, loadResult.hydration.players));
+        setScorecardsGenerated(loadResult.hydration.scorecardsGenerated);
+        setScorecardRows(loadResult.hydration.scorecardRows);
+        setRoundSetup(loadResult.hydration.roundSetup);
+        setClippdExportState(loadResult.hydration.clippdExportState);
+        setScoreboardImportState(loadResult.hydration.scoreboardImportState);
+        setAutoRepairState(loadResult.hydration.autoRepairState);
         hasLoadedFromStorageRef.current = true;
-        hydrationPendingRef.current = true;
+        hydrationPendingRef.current = loadResult.hydrationPending;
       } catch (error) {
         if (!isCancelled) {
           hasLoadedFromStorageRef.current = true;

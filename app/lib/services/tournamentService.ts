@@ -11,8 +11,13 @@ import {
   type TournamentRow,
   type TournamentPlayerUpsertRow,
 } from "../repositories/tournamentRepository";
-import type { StoredTournament } from "../tournamentStorage";
-import type { Pairing, Player, Team, TournamentStorageEnvelope } from "../tournamentModel";
+import {
+  loadTournamentStorageEnvelope,
+  saveSharedTournamentIdToStorage,
+  saveTournamentStorageEnvelope,
+  type StoredTournament,
+} from "../tournamentStorage";
+import type { LegacyTournamentUiState, Pairing, Player, Team, TournamentStorageEnvelope } from "../tournamentModel";
 
 export type CreateTournamentInput = Omit<StoredTournament, "id"> & {
   fallbackId: string;
@@ -60,6 +65,38 @@ export type TournamentAggregate = {
   roundSetup: TournamentStorageEnvelope["uiState"]["scorecards"]["roundSetup"] | null;
   tournamentPlayers: TournamentPlayerRow[];
 };
+
+export type TournamentPageHydration = {
+  teams: LegacyTournamentUiState["teams"];
+  players: LegacyTournamentUiState["players"];
+  pairings: LegacyTournamentUiState["pairings"];
+  scorecardsGenerated: boolean;
+  scorecardRows: LegacyTournamentUiState["scorecards"]["scorecardRows"];
+  roundSetup: LegacyTournamentUiState["scorecards"]["roundSetup"];
+  clippdExportState: LegacyTournamentUiState["clippdExportState"];
+  scoreboardImportState: LegacyTournamentUiState["scoreboardImportState"];
+  autoRepairState: LegacyTournamentUiState["autoRepairState"];
+};
+
+export type TournamentPageLoadResult =
+  | {
+      status: "empty";
+      hydrationPending: false;
+    }
+  | {
+      status: "metadata";
+      tournament: StoredTournament;
+      sharedTournamentId: string;
+      hydrationPending: false;
+    }
+  | {
+      status: "hydrated";
+      envelope: TournamentStorageEnvelope;
+      hydration: TournamentPageHydration;
+      tournament: StoredTournament | null;
+      sharedTournamentId: string;
+      hydrationPending: true;
+    };
 
 const tournamentAggregateFromRow = (row: TournamentRow): TournamentAggregate => {
   const tournament = toStoredTournament(row);
@@ -444,6 +481,109 @@ export const loadTournamentList = async <T extends StoredTournament>(
   });
 
   return Array.from(tournamentsById.values());
+};
+
+const tournamentPageMetaFromSnapshotEnvelope = (
+  tournamentId: string,
+  envelope: TournamentStorageEnvelope
+): StoredTournament => {
+  const settings = asRecord(envelope.tournament.settings);
+  const roundsFromSettings = Number(settings?.rounds);
+  const roundCount = Number.isFinite(roundsFromSettings)
+    ? Math.max(1, roundsFromSettings)
+    : Math.max(1, envelope.tournament.rounds.length || 1);
+
+  return {
+    id: tournamentId,
+    name: envelope.tournament.name || "Tournament",
+    date: typeof settings?.date === "string" ? settings.date : "",
+    course: envelope.tournament.course || "",
+    city: typeof settings?.city === "string" ? settings.city : "",
+    state: typeof settings?.state === "string" ? settings.state : "",
+    rounds: String(roundCount),
+    scoringFormat: typeof settings?.scoringFormat === "string" ? settings.scoringFormat : "Stroke Play",
+    status: typeof settings?.status === "string" ? settings.status : "Upcoming",
+    settings: envelope.tournament.settings,
+  };
+};
+
+const hydrateTournamentPageEnvelope = (envelope: TournamentStorageEnvelope): TournamentPageHydration => {
+  const hydratedTournamentState = envelope.uiState;
+  const loadedRoundSetup = hydratedTournamentState.scorecards.roundSetup;
+  const loadedRoundId = `round-${String(Number(loadedRoundSetup.roundNumber) || 1)}`;
+  const submittedScoreMap = new Map<string, number[]>();
+
+  for (const score of envelope.tournament.scores) {
+    if (score.roundId === loadedRoundId && score.enteredBy === "marker") {
+      submittedScoreMap.set(score.playerId, score.holeScores);
+    }
+  }
+
+  const mergedScorecardRows = hydratedTournamentState.scorecards.scorecardRows.map((row) => {
+    const submitted = submittedScoreMap.get(String(row.id));
+    if (!submitted) return row;
+    return { ...row, scores: submitted };
+  });
+
+  return {
+    teams: hydratedTournamentState.teams,
+    players: hydratedTournamentState.players,
+    pairings: hydratedTournamentState.pairings,
+    scorecardsGenerated: hydratedTournamentState.scorecards.scorecardsGenerated,
+    scorecardRows: mergedScorecardRows,
+    roundSetup: loadedRoundSetup,
+    clippdExportState: hydratedTournamentState.clippdExportState,
+    scoreboardImportState: hydratedTournamentState.scoreboardImportState,
+    autoRepairState: hydratedTournamentState.autoRepairState,
+  };
+};
+
+export const loadTournamentPageState = (tournamentId: string): TournamentPageLoadResult | Promise<TournamentPageLoadResult> => {
+  if (typeof window === "undefined" || !tournamentId) {
+    return { status: "empty", hydrationPending: false };
+  }
+
+  const storedEnvelope = loadTournamentStorageEnvelope(tournamentId);
+  if (storedEnvelope) {
+    return {
+      status: "hydrated",
+      envelope: storedEnvelope,
+      hydration: hydrateTournamentPageEnvelope(storedEnvelope),
+      tournament: null,
+      sharedTournamentId: "",
+      hydrationPending: true,
+    };
+  }
+
+  return loadTournamentAggregate(tournamentId).then((aggregate): TournamentPageLoadResult => {
+    if (!aggregate) {
+      return { status: "empty", hydrationPending: false };
+    }
+
+    if (!aggregate.envelope) {
+      return {
+        status: "metadata",
+        tournament: aggregate.tournament,
+        sharedTournamentId: aggregate.sharedTournamentId,
+        hydrationPending: false,
+      };
+    }
+
+    saveTournamentStorageEnvelope(tournamentId, aggregate.envelope);
+    if (aggregate.localTournamentId) {
+      saveSharedTournamentIdToStorage(aggregate.localTournamentId, aggregate.sharedTournamentId);
+    }
+    saveSharedTournamentIdToStorage(tournamentId, aggregate.sharedTournamentId);
+
+    return {
+      status: "hydrated",
+      envelope: aggregate.envelope,
+      hydration: hydrateTournamentPageEnvelope(aggregate.envelope),
+      tournament: tournamentPageMetaFromSnapshotEnvelope(tournamentId, aggregate.envelope),
+      sharedTournamentId: aggregate.sharedTournamentId,
+      hydrationPending: true,
+    };
+  });
 };
 
 const toScorecardRowId = (playerId: string, fallbackIndex: number) => {
