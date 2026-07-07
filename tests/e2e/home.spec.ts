@@ -27,8 +27,9 @@ test("remote shared tournament appears on dashboard without localStorage", async
     });
   });
 
-  await page.goto("/");
-  await page.evaluate(() => window.localStorage.clear());
+  await page.addInitScript(() => {
+    window.localStorage.clear();
+  });
   await page.goto("/dashboard");
 
   await expect(page.getByRole("heading", { name: "Remote Phone Invitational" })).toBeVisible();
@@ -44,8 +45,7 @@ test("localStorage tournaments still appear on dashboard", async ({ page }) => {
     });
   });
 
-  await page.goto("/");
-  await page.evaluate(() => {
+  await page.addInitScript(() => {
     window.localStorage.setItem(
       "clubhouse-hq-tournaments",
       JSON.stringify([

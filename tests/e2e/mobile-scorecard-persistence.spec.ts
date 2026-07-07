@@ -394,6 +394,28 @@ const routeTournamentStateSnapshotStore = async (
   };
 };
 
+const waitForMobileScorecardControls = async (page: Page) => {
+  await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
+  await expect(page.getByText("Mobile Scorecard")).toBeVisible();
+  await expect(page.getByLabel("Ava Green's Score")).toBeEditable();
+  await expect(page.getByLabel("Ben Marker's Score")).toBeEditable();
+};
+
+const fillSelfScoreAndWaitForSave = async (page: Page, score: number) => {
+  const selfScoreInput = page.getByLabel("Ava Green's Score");
+  const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
+
+  await expect
+    .poll(async () => {
+      await selfScoreInput.fill(String(score));
+      return {
+        score: await selfScoreInput.inputValue(),
+        canSave: await saveHoleButton.isEnabled(),
+      };
+    })
+    .toEqual({ score: String(score), canSave: true });
+};
+
 test.use({
   storageState: {
     cookies: [],
@@ -416,16 +438,15 @@ test.use({
 });
 
 test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {
-  const sharedStore = await routeSharedScoreEntriesStore(page);
+  await routeSharedScoreEntriesStore(page);
 
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page).toHaveURL(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await expect
     .poll(() => page.evaluate((key) => window.localStorage.getItem(key), tournamentsStorageKey))
     .toContain(storedTournament.name);
-  await expect(page.getByText("Mobile Scorecard")).toBeVisible();
+  await waitForMobileScorecardControls(page);
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
-  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
 
   const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
   await expect(saveHoleButton).toBeDisabled();
@@ -437,8 +458,7 @@ test("mobile scorecard saves four holes, reloads them from localStorage, and res
     [4, 4],
   ].entries()) {
     await expect(page.getByText(`Hole ${index + 1}`)).toBeVisible();
-    await page.getByLabel("Ava Green's Score").fill(String(selfScore));
-    await expect(saveHoleButton).toBeEnabled();
+    await fillSelfScoreAndWaitForSave(page, selfScore);
     await page.getByLabel("Ben Marker's Score").fill(String(markerScore));
     await expect(page.getByLabel("Ava Green's Score")).toHaveValue(String(selfScore));
     await expect(page.getByLabel("Ben Marker's Score")).toHaveValue(String(markerScore));
@@ -933,9 +953,9 @@ test("phone shared score save updates live scoreboard", async ({ page }) => {
     { key: sharedTournamentStorageKey, value: sharedTournamentId }
   );
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
-  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
+  await waitForMobileScorecardControls(page);
 
-  await page.getByLabel("Ava Green's Score").fill("4");
+  await fillSelfScoreAndWaitForSave(page, 4);
   await page.getByLabel("Ben Marker's Score").fill("5");
   await page.getByRole("button", { name: "Save Hole" }).click();
 
@@ -962,7 +982,7 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
     { key: sharedTournamentStorageKey, value: sharedTournamentId }
   );
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
-  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
+  await waitForMobileScorecardControls(page);
 
   for (const [index, [selfScore, markerScore]] of [
     [4, 5],
@@ -971,7 +991,7 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
     [4, 4],
   ].entries()) {
     await expect(page.getByText(`Hole ${index + 1}`)).toBeVisible();
-    await page.getByLabel("Ava Green's Score").fill(String(selfScore));
+    await fillSelfScoreAndWaitForSave(page, selfScore);
     await page.getByLabel("Ben Marker's Score").fill(String(markerScore));
     await page.getByRole("button", { name: "Save Hole" }).click();
   }

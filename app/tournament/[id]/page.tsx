@@ -19,7 +19,7 @@ import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
 import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
   ensureSharedTournament,
-  loadTournamentStateSnapshot,
+  getTournamentAggregate,
   syncTournamentPlayers,
   syncTournamentStateSnapshot,
 } from "../../lib/services/tournamentService";
@@ -450,19 +450,26 @@ export default function TournamentPage() {
           return;
         }
 
-        const snapshot = await loadTournamentStateSnapshot(tournamentId);
-        if (!snapshot || isCancelled) {
+        const aggregate = await getTournamentAggregate(tournamentId);
+        if (!aggregate || isCancelled) {
           hasLoadedFromStorageRef.current = true;
           return;
         }
 
-        saveTournamentStorageEnvelope(tournamentId, snapshot.envelope);
-        if (snapshot.localTournamentId) {
-          saveSharedTournamentIdToStorage(snapshot.localTournamentId, snapshot.tournamentId);
+        if (!aggregate.envelope) {
+          setTournamentMeta(tournamentMetaFromEnvelope(tournamentId, aggregate.tournament));
+          setSharedTournamentId(aggregate.sharedTournamentId);
+          hasLoadedFromStorageRef.current = true;
+          return;
         }
-        saveSharedTournamentIdToStorage(tournamentId, snapshot.tournamentId);
-        setSharedTournamentId(snapshot.tournamentId);
-        hydrateFromEnvelope(snapshot.envelope, true);
+
+        saveTournamentStorageEnvelope(tournamentId, aggregate.envelope);
+        if (aggregate.localTournamentId) {
+          saveSharedTournamentIdToStorage(aggregate.localTournamentId, aggregate.sharedTournamentId);
+        }
+        saveSharedTournamentIdToStorage(tournamentId, aggregate.sharedTournamentId);
+        setSharedTournamentId(aggregate.sharedTournamentId);
+        hydrateFromEnvelope(aggregate.envelope, true);
         hasLoadedFromStorageRef.current = true;
         hydrationPendingRef.current = true;
       } catch (error) {
