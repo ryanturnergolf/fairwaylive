@@ -12,12 +12,22 @@ import {
   type TournamentPlayerUpsertRow,
 } from "../repositories/tournamentRepository";
 import {
+  buildTournamentStorageEnvelope,
+  loadSharedTournamentIdFromStorage,
   loadTournamentStorageEnvelope,
   saveSharedTournamentIdToStorage,
   saveTournamentStorageEnvelope,
   type StoredTournament,
 } from "../tournamentStorage";
-import type { LegacyTournamentUiState, Pairing, Player, Team, TournamentStorageEnvelope } from "../tournamentModel";
+import type {
+  LegacyPairingGroup,
+  LegacyPlayer,
+  LegacyTournamentUiState,
+  Pairing,
+  Player as TournamentModelPlayer,
+  Team,
+  TournamentStorageEnvelope,
+} from "../tournamentModel";
 
 export type CreateTournamentInput = Omit<StoredTournament, "id"> & {
   fallbackId: string;
@@ -97,6 +107,19 @@ export type TournamentPageLoadResult =
       sharedTournamentId: string;
       hydrationPending: true;
     };
+
+export type TournamentPagePersistenceInput = {
+  tournamentId: string;
+  sharedTournamentId: string;
+  tournament: StoredTournament;
+  state: LegacyTournamentUiState;
+  snapshotSyncTimeout: ReturnType<typeof setTimeout> | null;
+  lastSnapshotSignature: string;
+  snapshotDelayMs?: number;
+  onSharedTournamentIdChange: (sharedTournamentId: string) => void;
+  onSnapshotTimeoutChange: (timeout: ReturnType<typeof setTimeout> | null) => void;
+  onSnapshotSignatureChange: (signature: string) => void;
+};
 
 const tournamentAggregateFromRow = (row: TournamentRow): TournamentAggregate => {
   const tournament = toStoredTournament(row);
@@ -226,9 +249,9 @@ const asPositiveInteger = (value: unknown): number | null => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-const getPlayerName = (player: Player) => `${player.firstName} ${player.lastName}`.trim() || player.id;
+const getPlayerName = (player: TournamentModelPlayer) => `${player.firstName} ${player.lastName}`.trim() || player.id;
 
-const getTeamName = (player: Player, teamsById: Map<string, Team>) => {
+const getTeamName = (player: TournamentModelPlayer, teamsById: Map<string, Team>) => {
   const team = teamsById.get(player.teamId);
   return team?.name || (typeof player.statistics.teamName === "string" ? player.statistics.teamName : null);
 };
@@ -583,6 +606,180 @@ export const loadTournamentPageState = (tournamentId: string): TournamentPageLoa
       sharedTournamentId: aggregate.sharedTournamentId,
       hydrationPending: true,
     };
+  });
+};
+
+export const buildStableRosterPlayerIdMap = (roster: LegacyPlayer[]) =>
+  new Map(roster.map((player, index) => [player.id, `player-${index + 1}`]));
+
+export const normalizePairings = (nextPairings: LegacyPairingGroup[]) =>
+  nextPairings
+    .filter((pairing) => pairing.players.length > 0)
+    .map((pairing, index) => ({
+      ...pairing,
+      groupNumber: index + 1,
+    }));
+
+export const hydratePairingsWithPlayerIds = (groupings: LegacyPairingGroup[], roster: LegacyPlayer[]) => {
+  const stablePlayerIdsByRosterId = buildStableRosterPlayerIdMap(roster);
+  const rosterByIdentity = new Map(
+    roster.map((player) => [
+      `${`${player.firstName} ${player.lastName}`.trim()}::${player.teamName || "Unassigned"}`,
+      stablePlayerIdsByRosterId.get(player.id) || String(player.id),
+    ])
+  );
+  const stablePlayerIdsByExistingId = new Map(
+    roster.map((player) => [String(player.id), stablePlayerIdsByRosterId.get(player.id) || String(player.id)])
+  );
+
+  return groupings.map((pairing) => ({
+    ...pairing,
+    players: pairing.players.map((player) => ({
+      ...player,
+      playerId:
+        stablePlayerIdsByExistingId.get(player.playerId) ||
+        player.playerId ||
+        rosterByIdentity.get(`${player.playerName}::${player.teamName}`) ||
+        `${player.playerName}::${player.teamName}`,
+    })),
+  }));
+};
+
+export const snapshotPairings = (groupings: LegacyPairingGroup[]) =>
+  groupings.map((pairing) => ({
+    ...pairing,
+    players: pairing.players.map((player) => ({ ...player })),
+  }));
+
+export const createPairingPlayerKeyList = (groupings: LegacyPairingGroup[]) =>
+  groupings
+    .flatMap((pairing) => pairing.players.map((player) => player.playerId))
+    .sort();
+
+export const findPairingPlayerLocation = (groupings: LegacyPairingGroup[], playerId: string) => {
+  for (let pairingIndex = 0; pairingIndex < groupings.length; pairingIndex += 1) {
+    const playerIndex = groupings[pairingIndex].players.findIndex((player) => player.playerId === playerId);
+
+    if (playerIndex !== -1) {
+      return { pairingIndex, playerIndex };
+    }
+  }
+
+  return null;
+};
+
+export const findPairingIndexByGroupId = (groupings: LegacyPairingGroup[], groupId: number) =>
+  groupings.findIndex((pairing) => pairing.groupNumber === groupId);
+
+export const isValidPairingMutation = (
+  candidatePairings: LegacyPairingGroup[],
+  baselinePairings: LegacyPairingGroup[]
+) => {
+  const candidateKeys = createPairingPlayerKeyList(candidatePairings);
+  const baselineKeys = createPairingPlayerKeyList(baselinePairings);
+
+  return JSON.stringify(candidateKeys) === JSON.stringify(baselineKeys);
+};
+
+export const persistTournamentPageState = ({
+  tournamentId,
+  sharedTournamentId,
+  tournament,
+  state,
+  snapshotSyncTimeout,
+  lastSnapshotSignature,
+  snapshotDelayMs = 750,
+  onSharedTournamentIdChange,
+  onSnapshotTimeoutChange,
+  onSnapshotSignatureChange,
+}: TournamentPagePersistenceInput) => {
+  const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
+  const hasPopulatedStoredTournament =
+    Boolean(currentEnvelope) &&
+    ((currentEnvelope?.tournament.teams.length ?? 0) > 0 || (currentEnvelope?.tournament.players.length ?? 0) > 0);
+  if (hasPopulatedStoredTournament && (state.teams.length === 0 || state.players.length === 0)) {
+    return;
+  }
+
+  const envelope = buildTournamentStorageEnvelope(
+    tournamentId,
+    tournament.name,
+    tournament.course,
+    state,
+    typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {},
+    Number(tournament.rounds) || 1
+  );
+
+  saveTournamentStorageEnvelope(tournamentId, envelope);
+  if (state.teams.length === 0 || state.players.length === 0) {
+    return;
+  }
+
+  void (async () => {
+    const nextSharedTournamentId = await ensureSharedTournament({
+      fallbackId: tournamentId,
+      existingSharedTournamentId: sharedTournamentId || loadSharedTournamentIdFromStorage(tournamentId),
+      name: tournament.name,
+      course: tournament.course,
+      date: tournament.date,
+      city: tournament.city,
+      state: tournament.state,
+      rounds: tournament.rounds,
+      scoringFormat: tournament.scoringFormat,
+      status: tournament.status,
+      settings: tournament.settings,
+    });
+
+    if (nextSharedTournamentId !== sharedTournamentId) {
+      saveSharedTournamentIdToStorage(tournamentId, nextSharedTournamentId);
+      onSharedTournamentIdChange(nextSharedTournamentId);
+    }
+
+    const sharedEnvelope = {
+      ...envelope,
+      tournament: {
+        ...envelope.tournament,
+        id: nextSharedTournamentId,
+      },
+    };
+
+    await syncTournamentPlayers(sharedEnvelope);
+
+    if (snapshotSyncTimeout) {
+      clearTimeout(snapshotSyncTimeout);
+    }
+
+    const nextSnapshotTimeout = setTimeout(() => {
+      const latestEnvelope = loadTournamentStorageEnvelope(tournamentId) ?? envelope;
+      if (!latestEnvelope || latestEnvelope.version !== 2) {
+        return;
+      }
+
+      const snapshotSignature = JSON.stringify({
+        tournamentId: nextSharedTournamentId,
+        localTournamentId: tournamentId,
+        envelope: latestEnvelope,
+      });
+
+      if (snapshotSignature === lastSnapshotSignature) {
+        return;
+      }
+
+      onSnapshotSignatureChange(snapshotSignature);
+      void syncTournamentStateSnapshot({
+        tournamentId: nextSharedTournamentId,
+        localTournamentId: tournamentId,
+        envelope: latestEnvelope,
+      }).then((synced) => {
+        if (!synced) {
+          onSnapshotSignatureChange("");
+        }
+      });
+    }, snapshotDelayMs);
+
+    onSnapshotTimeoutChange(nextSnapshotTimeout);
+  })().catch((error) => {
+    console.error("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
   });
 };
 

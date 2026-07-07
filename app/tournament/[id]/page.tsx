@@ -6,22 +6,24 @@ import { useParams } from "next/navigation";
 import { toDataURL } from "qrcode";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
-  buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
   loadSharedTournamentIdFromStorage,
   loadTournamentsFromStorage,
   loadTournamentStorageEnvelope,
-  saveSharedTournamentIdToStorage,
-  saveTournamentStorageEnvelope,
   type StoredTournament,
 } from "../../lib/tournamentStorage";
 import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
 import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
-  ensureSharedTournament,
+  buildStableRosterPlayerIdMap,
+  findPairingIndexByGroupId,
+  findPairingPlayerLocation,
+  hydratePairingsWithPlayerIds,
+  isValidPairingMutation,
   loadTournamentPageState,
-  syncTournamentPlayers,
-  syncTournamentStateSnapshot,
+  normalizePairings,
+  persistTournamentPageState,
+  snapshotPairings,
   type TournamentPageLoadResult,
 } from "../../lib/services/tournamentService";
 
@@ -433,105 +435,32 @@ export default function TournamentPage() {
       return;
     }
 
-    const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
-    const hasPopulatedStoredTournament =
-      Boolean(currentEnvelope) &&
-      ((currentEnvelope?.tournament.teams.length ?? 0) > 0 || (currentEnvelope?.tournament.players.length ?? 0) > 0);
-    if (hasPopulatedStoredTournament && (teams.length === 0 || players.length === 0)) {
-      return;
-    }
-
-    const persistedState: PersistedTournamentState = {
-      teams,
-      players,
-      pairings,
-      scorecards: {
-        scorecardsGenerated,
-        scorecardRows,
-        roundSetup,
-      },
-      clippdExportState,
-      scoreboardImportState,
-      autoRepairState,
-    };
-
-    const envelope = buildTournamentStorageEnvelope(
+    persistTournamentPageState({
       tournamentId,
-      tournament.name,
-      tournament.course,
-      persistedState,
-      typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {},
-      Number(tournament.rounds) || 1
-    );
-
-    saveTournamentStorageEnvelope(tournamentId, envelope);
-    if (teams.length === 0 || players.length === 0) {
-      return;
-    }
-
-    void (async () => {
-      const nextSharedTournamentId = await ensureSharedTournament({
-        fallbackId: tournamentId,
-        existingSharedTournamentId: sharedTournamentId || loadSharedTournamentIdFromStorage(tournamentId),
-        name: tournament.name,
-        course: tournament.course,
-        date: tournament.date,
-        city: tournament.city,
-        state: tournament.state,
-        rounds: tournament.rounds,
-        scoringFormat: tournament.scoringFormat,
-        status: tournament.status,
-        settings: tournament.settings,
-      });
-
-      if (nextSharedTournamentId !== sharedTournamentId) {
-        saveSharedTournamentIdToStorage(tournamentId, nextSharedTournamentId);
-        setSharedTournamentId(nextSharedTournamentId);
-      }
-
-      const sharedEnvelope = {
-        ...envelope,
-        tournament: {
-          ...envelope.tournament,
-          id: nextSharedTournamentId,
+      sharedTournamentId,
+      tournament,
+      state: {
+        teams,
+        players,
+        pairings,
+        scorecards: {
+          scorecardsGenerated,
+          scorecardRows,
+          roundSetup,
         },
-      };
-
-      await syncTournamentPlayers(sharedEnvelope);
-
-      if (snapshotSyncTimeoutRef.current) {
-        clearTimeout(snapshotSyncTimeoutRef.current);
-      }
-
-      snapshotSyncTimeoutRef.current = setTimeout(() => {
-        const latestEnvelope = loadTournamentStorageEnvelope(tournamentId) ?? envelope;
-        if (!latestEnvelope || latestEnvelope.version !== 2) {
-          return;
-        }
-
-        const snapshotSignature = JSON.stringify({
-          tournamentId: nextSharedTournamentId,
-          localTournamentId: tournamentId,
-          envelope: latestEnvelope,
-        });
-
-        if (snapshotSignature === lastSnapshotSignatureRef.current) {
-          return;
-        }
-
-        lastSnapshotSignatureRef.current = snapshotSignature;
-        void syncTournamentStateSnapshot({
-          tournamentId: nextSharedTournamentId,
-          localTournamentId: tournamentId,
-          envelope: latestEnvelope,
-        }).then((synced) => {
-          if (!synced) {
-            lastSnapshotSignatureRef.current = "";
-          }
-        });
-      }, 750);
-    })().catch((error) => {
-      console.error("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
+        clippdExportState,
+        scoreboardImportState,
+        autoRepairState,
+      },
+      snapshotSyncTimeout: snapshotSyncTimeoutRef.current,
+      lastSnapshotSignature: lastSnapshotSignatureRef.current,
+      onSharedTournamentIdChange: setSharedTournamentId,
+      onSnapshotTimeoutChange: (timeout) => {
+        snapshotSyncTimeoutRef.current = timeout;
+      },
+      onSnapshotSignatureChange: (signature) => {
+        lastSnapshotSignatureRef.current = signature;
+      },
     });
   }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState, storageKey, tournamentId, sharedTournamentId]);
 
@@ -1067,9 +996,6 @@ export default function TournamentPage() {
     return `${hours12}:${String(minutes).padStart(2, "0")} ${meridiem}`;
   };
 
-  const buildStableRosterPlayerIdMap = (roster: Player[]) =>
-    new Map(roster.map((player, index) => [player.id, `player-${index + 1}`]));
-
   const handleGeneratePairings = () => {
     if (players.length === 0) {
       setPairings([]);
@@ -1104,72 +1030,6 @@ export default function TournamentPage() {
 
     setPairings(generatedPairings);
     setPairingsMessage("");
-  };
-
-  const normalizePairings = (nextPairings: PairingGroup[]) =>
-    nextPairings
-      .filter((pairing) => pairing.players.length > 0)
-      .map((pairing, index) => ({
-        ...pairing,
-        groupNumber: index + 1,
-      }));
-
-  const hydratePairingsWithPlayerIds = (groupings: PairingGroup[], roster: Player[]) => {
-    const stablePlayerIdsByRosterId = buildStableRosterPlayerIdMap(roster);
-    const rosterByIdentity = new Map(
-      roster.map((player) => [
-        `${`${player.firstName} ${player.lastName}`.trim()}::${player.teamName || "Unassigned"}`,
-        stablePlayerIdsByRosterId.get(player.id) || String(player.id),
-      ])
-    );
-    const stablePlayerIdsByExistingId = new Map(
-      roster.map((player) => [String(player.id), stablePlayerIdsByRosterId.get(player.id) || String(player.id)])
-    );
-
-    return groupings.map((pairing) => ({
-      ...pairing,
-      players: pairing.players.map((player) => ({
-        ...player,
-        playerId:
-          stablePlayerIdsByExistingId.get(player.playerId) ||
-          player.playerId ||
-          rosterByIdentity.get(`${player.playerName}::${player.teamName}`) ||
-          `${player.playerName}::${player.teamName}`,
-      })),
-    }));
-  };
-
-  const snapshotPairings = (groupings: PairingGroup[]) =>
-    groupings.map((pairing) => ({
-      ...pairing,
-      players: pairing.players.map((player) => ({ ...player })),
-    }));
-
-  const createPairingPlayerKeyList = (groupings: PairingGroup[]) =>
-    groupings
-      .flatMap((pairing) => pairing.players.map((player) => player.playerId))
-      .sort();
-
-  const findPairingPlayerLocation = (groupings: PairingGroup[], playerId: string) => {
-    for (let pairingIndex = 0; pairingIndex < groupings.length; pairingIndex += 1) {
-      const playerIndex = groupings[pairingIndex].players.findIndex((player) => player.playerId === playerId);
-
-      if (playerIndex !== -1) {
-        return { pairingIndex, playerIndex };
-      }
-    }
-
-    return null;
-  };
-
-  const findPairingIndexByGroupId = (groupings: PairingGroup[], groupId: number) =>
-    groupings.findIndex((pairing) => pairing.groupNumber === groupId);
-
-  const isValidPairingMutation = (candidatePairings: PairingGroup[], baselinePairings: PairingGroup[]) => {
-    const candidateKeys = createPairingPlayerKeyList(candidatePairings);
-    const baselineKeys = createPairingPlayerKeyList(baselinePairings);
-
-    return JSON.stringify(candidateKeys) === JSON.stringify(baselineKeys);
   };
 
   const commitPairingMutation = (mutator: (current: PairingGroup[]) => PairingGroup[]) => {
