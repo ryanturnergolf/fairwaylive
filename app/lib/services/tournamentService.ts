@@ -61,6 +61,30 @@ export type TournamentAggregate = {
   tournamentPlayers: TournamentPlayerRow[];
 };
 
+const tournamentAggregateFromRow = (row: TournamentRow): TournamentAggregate => {
+  const tournament = toStoredTournament(row);
+
+  return {
+    tournamentId: row.id,
+    sharedTournamentId: row.id,
+    localTournamentId: "",
+    tournament,
+    tournamentRow: row,
+    envelope: null,
+    source: "shared",
+    teams: [],
+    players: [],
+    pairings: [],
+    rounds: [],
+    scores: [],
+    uiState: null,
+    scorecards: null,
+    scorecardRows: [],
+    roundSetup: null,
+    tournamentPlayers: [],
+  };
+};
+
 export type SharedTournamentScorecardState = {
   tournament: StoredTournament;
   pairings: Array<{
@@ -383,6 +407,21 @@ export const getTournamentAggregate = async (
 export const loadSharedTournaments = async (): Promise<StoredTournament[]> => {
   const rows = await listTournamentRows();
   return rows.map(toStoredTournament);
+};
+
+export const loadSharedTournamentAggregates = async (): Promise<TournamentAggregate[]> => {
+  const rows = await listTournamentRows();
+
+  return Promise.all(
+    rows.map(async (row) => {
+      const aggregate = await getTournamentAggregate(row.id).catch((error) => {
+        console.warn("[TournamentService] Unable to load tournament aggregate; using shared row fallback.", error);
+        return null;
+      });
+
+      return aggregate ?? tournamentAggregateFromRow(row);
+    })
+  );
 };
 
 const toScorecardRowId = (playerId: string, fallbackIndex: number) => {

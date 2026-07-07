@@ -416,6 +416,12 @@ const fillSelfScoreAndWaitForSave = async (page: Page, score: number) => {
     .toEqual({ score: String(score), canSave: true });
 };
 
+const waitForSharedScoreHydration = async (
+  sharedStore: Awaited<ReturnType<typeof routeSharedScoreEntriesStore>>
+) => {
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(7);
+};
+
 test.use({
   storageState: {
     cookies: [],
@@ -954,9 +960,12 @@ test("phone shared score save updates live scoreboard", async ({ page }) => {
   );
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
+  await waitForSharedScoreHydration(sharedStore);
 
   await fillSelfScoreAndWaitForSave(page, 4);
   await page.getByLabel("Ben Marker's Score").fill("5");
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("5");
   await page.getByRole("button", { name: "Save Hole" }).click();
 
   await expect
@@ -983,6 +992,7 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
   );
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
+  await waitForSharedScoreHydration(sharedStore);
 
   for (const [index, [selfScore, markerScore]] of [
     [4, 5],
