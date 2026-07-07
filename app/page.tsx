@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadSharedTournaments } from "./lib/services/tournamentService";
+import { loadSharedTournamentAggregates, type TournamentAggregate } from "./lib/services/tournamentService";
 import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 
 const teams = [
@@ -93,10 +93,11 @@ const features = [
   },
 ];
 
-const mergeTournamentsById = (localTournaments: StoredTournament[], sharedTournaments: StoredTournament[]) => {
+const mergeTournamentsById = (localTournaments: StoredTournament[], sharedAggregates: TournamentAggregate[]) => {
   const tournamentsById = new Map<string, StoredTournament>();
 
-  sharedTournaments.forEach((tournament) => {
+  sharedAggregates.forEach((aggregate) => {
+    const tournament = aggregate.tournament;
     tournamentsById.set(tournament.id, tournament);
   });
   localTournaments.forEach((tournament) => {
@@ -114,14 +115,14 @@ export default function Home() {
     const localTournaments = loadTournamentsFromStorage();
     setSavedTournaments(localTournaments);
 
-    void loadSharedTournaments()
-      .then((sharedTournaments) => {
+    void loadSharedTournamentAggregates()
+      .then((sharedAggregates) => {
         if (!isCancelled) {
-          setSavedTournaments(mergeTournamentsById(localTournaments, sharedTournaments));
+          setSavedTournaments(mergeTournamentsById(localTournaments, sharedAggregates));
         }
       })
       .catch((error) => {
-        console.warn("[TournamentService] Unable to load shared tournaments.", error);
+        console.warn("[TournamentService] Unable to load shared tournament aggregates.", error);
       });
 
     return () => {
