@@ -2,6 +2,7 @@ import {
   createTournamentRow,
   getTournamentPlayers,
   getTournamentRow,
+  getTournamentStateSnapshot,
   listTournamentRows,
   upsertTournamentStateSnapshot,
   upsertTournamentPlayers,
@@ -32,6 +33,12 @@ export type SyncTournamentStateSnapshotInput = {
   tournamentId: string;
   localTournamentId: string;
   envelope: TournamentStorageEnvelope;
+};
+
+export type TournamentStateSnapshotResult = {
+  envelope: TournamentStorageEnvelope;
+  localTournamentId: string;
+  tournamentId: string;
 };
 
 export type SharedTournamentScorecardState = {
@@ -231,6 +238,35 @@ export const syncTournamentStateSnapshot = async ({
     console.error("[TournamentService] Supabase tournament state snapshot sync failed; local storage remains saved.", error);
     return false;
   }
+};
+
+const isTournamentStorageEnvelope = (value: unknown): value is TournamentStorageEnvelope =>
+  Boolean(
+    value &&
+      typeof value === "object" &&
+      "version" in value &&
+      (value as TournamentStorageEnvelope).version === 2 &&
+      "tournament" in value &&
+      "uiState" in value
+  );
+
+export const loadTournamentStateSnapshot = async (
+  tournamentId: string
+): Promise<TournamentStateSnapshotResult | null> => {
+  if (!tournamentId) {
+    return null;
+  }
+
+  const row = await getTournamentStateSnapshot(tournamentId);
+  if (!row || !isTournamentStorageEnvelope(row.state_snapshot)) {
+    return null;
+  }
+
+  return {
+    envelope: row.state_snapshot,
+    localTournamentId: row.local_tournament_id || "",
+    tournamentId: row.tournament_id,
+  };
 };
 
 const toStoredTournament = (row: TournamentRow): StoredTournament => ({

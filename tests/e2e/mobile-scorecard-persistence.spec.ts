@@ -340,16 +340,27 @@ const routeSharedScoreEntriesStore = async (page: Page) => {
   };
 };
 
-const routeTournamentStateSnapshotStore = async (page: Page, status = 201) => {
-  const savedSnapshots: Array<Record<string, unknown>> = [];
+const routeTournamentStateSnapshotStore = async (
+  page: Page,
+  status = 201,
+  initialSnapshots: Array<Record<string, unknown>> = []
+) => {
+  const savedSnapshots: Array<Record<string, unknown>> = [...initialSnapshots];
 
   await page.route("**/rest/v1/tournament_state_snapshots**", async (route) => {
     const request = route.request();
+    const url = new URL(request.url());
     if (request.method() === "GET") {
+      const tournamentFilter = (url.searchParams.get("tournament_id") || "").replace(/^eq\./, "");
+      const matchingSnapshots = savedSnapshots.filter(
+        (row) => !tournamentFilter || row.tournament_id === tournamentFilter
+      );
+      const expectsSingle = (request.headers().accept || "").includes("vnd.pgrst.object");
+
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(savedSnapshots),
+        body: JSON.stringify(expectsSingle ? matchingSnapshots[0] ?? null : matchingSnapshots),
       });
       return;
     }
@@ -803,6 +814,35 @@ test("snapshot upsert failure keeps localStorage fallback and roster sync workin
     .poll(() => page.evaluate((key) => window.localStorage.getItem(key), tournamentStorageKey))
     .toContain(storedTournament.name);
   expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId)).toBe(true);
+});
+
+test("shared tournament page hydrates generated scorecards from snapshot without localStorage", async ({ page }) => {
+  await routeSharedScoreEntriesStore(page);
+  await routeTournamentStateSnapshotStore(page, 201, [
+    {
+      tournament_id: sharedTournamentId,
+      local_tournament_id: tournamentId,
+      schema_version: 2,
+      state_snapshot: tournamentEnvelope,
+      created_at: null,
+      updated_at: "2026-07-07T00:00:00.000Z",
+    },
+  ]);
+
+  await page.goto(baseUrl);
+  await page.evaluate(() => window.localStorage.clear());
+  await page.goto(`${baseUrl}/tournament/${sharedTournamentId}`);
+
+  await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+
+  await expect(page.getByRole("button", { name: "Regenerate Scorecards" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Generate Scorecards", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /T1 Ava Green E2E University/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /T2 Ben Marker E2E University/ })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate((key) => window.localStorage.getItem(key), `clubhouse-hq-tournament-${sharedTournamentId}`))
+    .toContain(storedTournament.name);
 });
 
 test("add team modal hides optional internal fields", async ({ page }) => {
