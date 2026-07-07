@@ -41,6 +41,26 @@ export type TournamentStateSnapshotResult = {
   tournamentId: string;
 };
 
+export type TournamentAggregate = {
+  tournamentId: string;
+  sharedTournamentId: string;
+  localTournamentId: string;
+  tournament: StoredTournament;
+  tournamentRow: TournamentRow | null;
+  envelope: TournamentStorageEnvelope | null;
+  source: "snapshot" | "shared";
+  teams: TournamentStorageEnvelope["tournament"]["teams"];
+  players: TournamentStorageEnvelope["tournament"]["players"];
+  pairings: TournamentStorageEnvelope["tournament"]["pairings"];
+  rounds: TournamentStorageEnvelope["tournament"]["rounds"];
+  scores: TournamentStorageEnvelope["tournament"]["scores"];
+  uiState: TournamentStorageEnvelope["uiState"] | null;
+  scorecards: TournamentStorageEnvelope["uiState"]["scorecards"] | null;
+  scorecardRows: TournamentStorageEnvelope["uiState"]["scorecards"]["scorecardRows"];
+  roundSetup: TournamentStorageEnvelope["uiState"]["scorecards"]["roundSetup"] | null;
+  tournamentPlayers: TournamentPlayerRow[];
+};
+
 export type SharedTournamentScorecardState = {
   tournament: StoredTournament;
   pairings: Array<{
@@ -281,6 +301,84 @@ const toStoredTournament = (row: TournamentRow): StoredTournament => ({
   status: row.status,
   settings: {},
 });
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+
+const asString = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
+
+const toStoredTournamentFromSnapshot = (snapshot: TournamentStateSnapshotResult): StoredTournament => {
+  const { tournament } = snapshot.envelope;
+  const settings = asRecord(tournament.settings);
+  const roundCount = asPositiveInteger(settings?.rounds) ?? (tournament.rounds.length || 1);
+
+  return {
+    id: snapshot.tournamentId || tournament.id,
+    name: tournament.name,
+    course: tournament.course,
+    date: asString(settings?.date),
+    city: asString(settings?.city),
+    state: asString(settings?.state),
+    rounds: String(roundCount),
+    scoringFormat: asString(settings?.scoringFormat),
+    status: asString(settings?.status, tournament.rounds[0]?.status ?? "upcoming"),
+    settings: tournament.settings,
+  };
+};
+
+const getAggregateRoundNumber = (snapshot: TournamentStateSnapshotResult | null) =>
+  asPositiveInteger(snapshot?.envelope.uiState.scorecards.roundSetup.roundNumber) ?? 1;
+
+export const getTournamentAggregate = async (
+  sharedTournamentUuidOrId: string
+): Promise<TournamentAggregate | null> => {
+  if (!sharedTournamentUuidOrId) {
+    return null;
+  }
+
+  const [tournamentRow, snapshot] = await Promise.all([
+    getTournamentRow(sharedTournamentUuidOrId).catch(() => null),
+    loadTournamentStateSnapshot(sharedTournamentUuidOrId).catch(() => null),
+  ]);
+
+  if (!tournamentRow && !snapshot) {
+    return null;
+  }
+
+  const roundNumber = getAggregateRoundNumber(snapshot);
+  const tournamentPlayers = await getTournamentPlayers(sharedTournamentUuidOrId, roundNumber).catch(() => []);
+  const envelope = snapshot?.envelope ?? null;
+  const scorecards = envelope?.uiState.scorecards ?? null;
+  const tournament = tournamentRow
+    ? toStoredTournament(tournamentRow)
+    : snapshot
+      ? toStoredTournamentFromSnapshot(snapshot)
+      : null;
+
+  if (!tournament) {
+    return null;
+  }
+
+  return {
+    tournamentId: sharedTournamentUuidOrId,
+    sharedTournamentId: tournamentRow?.id ?? snapshot?.tournamentId ?? sharedTournamentUuidOrId,
+    localTournamentId: snapshot?.localTournamentId || envelope?.tournament.id || "",
+    tournament,
+    tournamentRow,
+    envelope,
+    source: snapshot ? "snapshot" : "shared",
+    teams: envelope?.tournament.teams ?? [],
+    players: envelope?.tournament.players ?? [],
+    pairings: envelope?.tournament.pairings ?? [],
+    rounds: envelope?.tournament.rounds ?? [],
+    scores: envelope?.tournament.scores ?? [],
+    uiState: envelope?.uiState ?? null,
+    scorecards,
+    scorecardRows: scorecards?.scorecardRows ?? [],
+    roundSetup: scorecards?.roundSetup ?? null,
+    tournamentPlayers,
+  };
+};
 
 export const loadSharedTournaments = async (): Promise<StoredTournament[]> => {
   const rows = await listTournamentRows();
