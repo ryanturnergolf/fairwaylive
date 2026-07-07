@@ -17,7 +17,7 @@ import {
 } from "../../lib/tournamentStorage";
 import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
 import { loadComparisonScores } from "../../lib/services/scoreService";
-import { ensureSharedTournament, syncTournamentPlayers } from "../../lib/services/tournamentService";
+import { ensureSharedTournament, syncTournamentPlayers, syncTournamentStateSnapshot } from "../../lib/services/tournamentService";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -279,6 +279,8 @@ export default function TournamentPage() {
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
+  const snapshotSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSnapshotSignatureRef = useRef("");
   const [autoRepairState, setAutoRepairState] = useState({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -329,6 +331,14 @@ export default function TournamentPage() {
 
   useEffect(() => {
     setIsClientMounted(true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (snapshotSyncTimeoutRef.current) {
+        clearTimeout(snapshotSyncTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -497,13 +507,47 @@ export default function TournamentPage() {
         setSharedTournamentId(nextSharedTournamentId);
       }
 
-      await syncTournamentPlayers({
+      const sharedEnvelope = {
         ...envelope,
         tournament: {
           ...envelope.tournament,
           id: nextSharedTournamentId,
         },
-      });
+      };
+
+      await syncTournamentPlayers(sharedEnvelope);
+
+      if (snapshotSyncTimeoutRef.current) {
+        clearTimeout(snapshotSyncTimeoutRef.current);
+      }
+
+      snapshotSyncTimeoutRef.current = setTimeout(() => {
+        const latestEnvelope = loadTournamentStorageEnvelope(tournamentId) ?? envelope;
+        if (!latestEnvelope || latestEnvelope.version !== 2) {
+          return;
+        }
+
+        const snapshotSignature = JSON.stringify({
+          tournamentId: nextSharedTournamentId,
+          localTournamentId: tournamentId,
+          envelope: latestEnvelope,
+        });
+
+        if (snapshotSignature === lastSnapshotSignatureRef.current) {
+          return;
+        }
+
+        lastSnapshotSignatureRef.current = snapshotSignature;
+        void syncTournamentStateSnapshot({
+          tournamentId: nextSharedTournamentId,
+          localTournamentId: tournamentId,
+          envelope: latestEnvelope,
+        }).then((synced) => {
+          if (!synced) {
+            lastSnapshotSignatureRef.current = "";
+          }
+        });
+      }, 750);
     })().catch((error) => {
       console.error("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
     });
@@ -1758,13 +1802,6 @@ export default function TournamentPage() {
                           <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
                             {player.firstName} {player.lastName}
                           </h4>
-                        </div>
-
-                        <div className="mt-6 space-y-3 text-sm text-[#51635C]">
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="font-semibold uppercase tracking-[0.25em]">Handicap</span>
-                            <span className="text-right font-black text-[#0B3D2E]">{player.handicap}</span>
-                          </div>
                         </div>
 
                         <div className="mt-8 flex flex-col gap-3 sm:flex-row">

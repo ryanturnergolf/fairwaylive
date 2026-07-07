@@ -42,6 +42,13 @@ export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
   updated_at: string | null;
 };
 
+export type TournamentStateSnapshotUpsertInput = {
+  tournamentId: string;
+  localTournamentId: string;
+  schemaVersion: number;
+  stateSnapshot: unknown;
+};
+
 const tournamentColumns =
   "id,created_by,name,course,tournament_date,number_of_rounds,status,created_at,updated_at";
 
@@ -125,6 +132,23 @@ export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[])
   }
 };
 
+export const upsertTournamentStateSnapshot = async (input: TournamentStateSnapshotUpsertInput) => {
+  const supabase = getClient();
+  const { error } = await supabase.from("tournament_state_snapshots").upsert(
+    {
+      tournament_id: input.tournamentId,
+      local_tournament_id: input.localTournamentId || null,
+      schema_version: input.schemaVersion,
+      state_snapshot: input.stateSnapshot,
+    },
+    { onConflict: "tournament_id" }
+  );
+
+  if (error) {
+    throw error;
+  }
+};
+
 export const getTournamentRow = async (tournamentId: string): Promise<TournamentRow | null> => {
   const supabase = getClient();
   const { data, error } = await supabase
@@ -138,6 +162,21 @@ export const getTournamentRow = async (tournamentId: string): Promise<Tournament
   }
 
   return data as TournamentRow | null;
+};
+
+export const listTournamentRows = async (): Promise<TournamentRow[]> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select(tournamentColumns)
+    .order("tournament_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as TournamentRow[];
 };
 
 export const getTournamentPlayers = async (

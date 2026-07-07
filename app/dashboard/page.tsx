@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
-import { createTournament } from "../lib/services/tournamentService";
+import { createTournament, loadSharedTournaments } from "../lib/services/tournamentService";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -83,6 +83,22 @@ type TournamentTemplate = {
 
 const TEMPLATE_STORAGE_KEY = "clubhouse-hq-tournament-templates";
 
+const mergeTournamentsById = (localTournaments: Tournament[], sharedTournaments: StoredTournament[]): Tournament[] => {
+  const tournamentsById = new Map<string, Tournament>();
+
+  sharedTournaments.forEach((tournament) => {
+    tournamentsById.set(tournament.id, {
+      ...tournament,
+      settings: defaultFormState,
+    });
+  });
+  localTournaments.forEach((tournament) => {
+    tournamentsById.set(tournament.id, tournament);
+  });
+
+  return Array.from(tournamentsById.values());
+};
+
 const loadTemplatesFromStorage = (): TournamentTemplate[] => {
   if (typeof window === "undefined") {
     return [];
@@ -145,8 +161,24 @@ export default function DashboardPage() {
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
 
   useEffect(() => {
-    setTournaments(loadTournamentsFromStorage() as Tournament[]);
+    let isCancelled = false;
+    const localTournaments = loadTournamentsFromStorage() as Tournament[];
+    setTournaments(localTournaments);
     setIsClientMounted(true);
+
+    void loadSharedTournaments()
+      .then((sharedTournaments) => {
+        if (!isCancelled) {
+          setTournaments(mergeTournamentsById(localTournaments, sharedTournaments));
+        }
+      })
+      .catch((error) => {
+        console.warn("[TournamentService] Unable to load shared tournaments.", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const saveTemplates = (nextValue: SetStateAction<TournamentTemplate[]>) => {

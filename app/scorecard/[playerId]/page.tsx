@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   loadSharedTournamentIdFromStorage,
   loadTournamentStateFromStorage,
@@ -10,7 +10,7 @@ import {
   loadTournamentStorageEnvelope,
   mergeTournamentScoreSubmission,
 } from "../../lib/tournamentStorage";
-import { loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
+import { loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 
 type Hole = {
@@ -52,6 +52,60 @@ type PersistedTournamentState = {
       numberOfHoles: string;
     };
   };
+};
+
+type ScoreDiagnostics = {
+  localTournamentId: string;
+  sharedTournamentId: string;
+  localStorageSaveAttempted: string;
+  localStorageSaveResult: string;
+  supabaseSaveAttempted: string;
+  supabaseSaveResult: string;
+  supabaseSaveTournamentId: string;
+  savePlayerId: string;
+  saveMarkerPlayerId: string;
+  scoreEntriesLoadedFromLocalStorage: number;
+  scoreEntriesLoadedFromSupabase: number;
+  scoreHydrationComplete: string;
+  lastSaveError: string;
+  lastHydrationError: string;
+};
+
+const initialScoreDiagnostics: ScoreDiagnostics = {
+  localTournamentId: "",
+  sharedTournamentId: "",
+  localStorageSaveAttempted: "no",
+  localStorageSaveResult: "not attempted",
+  supabaseSaveAttempted: "no",
+  supabaseSaveResult: "not attempted",
+  supabaseSaveTournamentId: "",
+  savePlayerId: "",
+  saveMarkerPlayerId: "",
+  scoreEntriesLoadedFromLocalStorage: 0,
+  scoreEntriesLoadedFromSupabase: 0,
+  scoreHydrationComplete: "no",
+  lastSaveError: "",
+  lastHydrationError: "",
+};
+
+const isDevelopment =
+  process.env.NODE_ENV !== "production" ||
+  (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname));
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown error";
+  }
 };
 
 const defaultHoles: Hole[] = [
@@ -133,6 +187,30 @@ const getEntryStatus = (holeScores: number[]) => {
   const isComplete = holeScores.length > 0 && holeScores.every((score) => score > 0);
 
   return isComplete ? "complete" : hasAnyScore ? "live" : "pending";
+};
+
+const normalizeHoleScores = (holeScores: number[] | undefined, holeCount: number) =>
+  Array.from({ length: holeCount }, (_, index) => {
+    const score = Number(holeScores?.[index] ?? 0);
+    return Number.isFinite(score) ? score : 0;
+  });
+
+const hasAnyHoleScore = (holeScores: number[] | null | undefined) =>
+  Array.isArray(holeScores) && holeScores.some((score) => Number(score) > 0);
+
+const getScoredHoleNumbers = (holes: Hole[], ...scoreSets: number[][]) =>
+  holes
+    .filter((_, index) => scoreSets.some((holeScores) => (holeScores[index] ?? 0) > 0))
+    .map((hole) => hole.holeNumber);
+
+const getFirstUnscoredHoleIndex = (holeCount: number, ...scoreSets: number[][]) => {
+  for (let i = 0; i < holeCount; i++) {
+    if (scoreSets.some((holeScores) => (holeScores[i] ?? 0) === 0)) {
+      return i;
+    }
+  }
+
+  return -1;
 };
 
 export default function PlayerScorecardPage() {
@@ -304,11 +382,12 @@ export default function PlayerScorecardPage() {
         const selectedPlayerIds = selectedPlayer ? getIdCandidates(selectedPlayer) : [];
         const markerPlayerIds = markerPlayer ? getIdCandidates(markerPlayer) : [];
         const selectedPlayerId =
-          selectedPlayerIds.find((id) => scorecardRows.some((row) => String(row.id) === id)) ||
+          selectedPlayer?.playerId ||
+          (routePlayerId && !routePlayerId.startsWith("group-") ? routePlayerId : "") ||
           selectedPlayerIds[0] ||
-          routePlayerId;
+          "";
         const markerPlayerId =
-          markerPlayerIds.find((id) => scorecardRows.some((row) => String(row.id) === id)) ||
+          markerPlayer?.playerId ||
           markerPlayerIds[0];
 
         if (!selectedPlayer) {
@@ -383,95 +462,23 @@ export default function PlayerScorecardPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
-  const hasAppliedInitialHoleRef = useRef(false);
+  const [, setScoreDiagnostics] = useState<ScoreDiagnostics>(initialScoreDiagnostics);
 
-  // Hydrate scores from storage on mount
   useEffect(() => {
-    if (!requestedTournamentId || !scorecard.playerId || scorecard.playerId === "demo") {
+    if (!isDevelopment || !requestedTournamentId) {
       return;
     }
 
-    const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
-    if (!envelope) {
-      return;
-    }
+    const hasLocalTournament =
+      loadTournamentsFromStorage().some((item) => item.id === requestedTournamentId) ||
+      Boolean(loadTournamentStorageEnvelope(requestedTournamentId));
 
-    const roundId = `round-${Number(scorecard.round) || 1}`;
-
-    // Find self score
-    const playerScoreIds = scorecard.playerScoreIds?.length ? scorecard.playerScoreIds : [scorecard.playerId];
-    const markerScoreIds = scorecard.markerScoreIds?.length
-      ? scorecard.markerScoreIds
-      : scorecard.markerPlayerId
-        ? [scorecard.markerPlayerId]
-        : [];
-    const scorecardRows = envelope.uiState?.scorecards?.scorecardRows || [];
-    const selfScorecardRow = scorecardRows.find(
-      (row) => playerScoreIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
-    );
-    const markerScorecardRow = scorecardRows.find(
-      (row) => markerScoreIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
-    );
-
-    const selfScore = envelope.tournament.scores.find(
-      (s) =>
-        playerScoreIds.includes(String(s.playerId)) &&
-        s.enteredBy === "self" &&
-        s.roundId === roundId
-    );
-
-    // Find marker score
-    const markerScore = envelope.tournament.scores.find(
-      (s) =>
-        markerScoreIds.includes(String(s.playerId)) &&
-        s.enteredBy === "marker" &&
-        s.roundId === roundId
-    );
-
-    const loadedSelfScores = selfScore?.holeScores.length ? selfScore.holeScores : selfScorecardRow?.scores;
-    const loadedMarkerScores = markerScore?.holeScores.length ? markerScore.holeScores : markerScorecardRow?.scores;
-
-    // Load scores if found
-    if (loadedSelfScores && loadedSelfScores.length > 0) {
-      setScores(loadedSelfScores);
-    }
-
-    if (loadedMarkerScores && loadedMarkerScores.length > 0) {
-      setMarkerScores(loadedMarkerScores);
-    }
-
-    // Set savedHoles to hole numbers where either score is greater than 0
-    const savedHoleNumbers: number[] = [];
-    const loadedScores = loadedSelfScores && loadedSelfScores.length > 0 ? loadedSelfScores : scores;
-    const resolvedLoadedMarkerScores = loadedMarkerScores && loadedMarkerScores.length > 0 ? loadedMarkerScores : markerScores;
-
-    for (let i = 0; i < scorecard.holes.length; i++) {
-      if (loadedScores[i] > 0 || resolvedLoadedMarkerScores[i] > 0) {
-        savedHoleNumbers.push(scorecard.holes[i].holeNumber);
-      }
-    }
-
-    if (savedHoleNumbers.length > 0) {
-      setSavedHoles(savedHoleNumbers);
-    }
-
-    // Determine first incomplete hole (where either score is missing)
-    let firstIncompleteIndex = -1;
-    for (let i = 0; i < scorecard.holes.length; i++) {
-      if (loadedScores[i] === 0 || resolvedLoadedMarkerScores[i] === 0) {
-        firstIncompleteIndex = i;
-        break;
-      }
-    }
-
-    // Set hole index or go to review if all complete
-    if (firstIncompleteIndex >= 0) {
-      setCurrentHoleIndex(firstIncompleteIndex);
-    } else {
-      // All holes complete - go to review
-      setView("review");
-    }
-  }, [requestedTournamentId, scorecard.playerId, scorecard.markerPlayerId, scorecard.playerScoreIds, scorecard.markerScoreIds, scorecard.round, scorecard.holes]);
+    setScoreDiagnostics((current) => ({
+      ...current,
+      localTournamentId: hasLocalTournament ? requestedTournamentId : "",
+      sharedTournamentId: sharedScoreTournamentId,
+    }));
+  }, [requestedTournamentId, sharedScoreTournamentId]);
 
   // Load existing scores from storage on component mount using resolved player IDs
   useEffect(() => {
@@ -483,52 +490,62 @@ export default function PlayerScorecardPage() {
       }
 
       const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
-      let loadedAnyScore = false;
+      const holeCount = scorecard.holes.length;
+      let loadedSelfScores: number[] | null = null;
+      let loadedMarkerScores: number[] | null = null;
+      let loadedMarkedPlayerSelfScores: number[] | null = null;
+      let localStorageLoadedCount = 0;
+      let supabaseLoadedCount = 0;
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
       if (envelope) {
         const scorecardRows = envelope.uiState?.scorecards?.scorecardRows || [];
         const selfScorecardRow = scorecardRows.find(
-          (row) => resolvedPlayerIds.selectedPlayerIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
+          (row) => resolvedPlayerIds.selectedPlayerIds.includes(String(row.id)) && hasAnyHoleScore(row.scores)
         );
         const markerScorecardRow = scorecardRows.find(
-          (row) => resolvedPlayerIds.markerPlayerIds.includes(String(row.id)) && row.scores.some((score) => score > 0)
+          (row) => resolvedPlayerIds.markerPlayerIds.includes(String(row.id)) && hasAnyHoleScore(row.scores)
         );
 
-        // Load current player's self scores using String() comparison for robust ID matching
         const selfScore = envelope.tournament.scores.find(
           (s) => resolvedPlayerIds.selectedPlayerIds.includes(String(s.playerId)) &&
                  s.roundId === resolvedPlayerIds.roundId &&
                  s.enteredBy === "self"
         );
-        const loadedSelfScores = selfScore?.holeScores.length ? selfScore.holeScores : selfScorecardRow?.scores;
-        if (loadedSelfScores && loadedSelfScores.length > 0) {
-          setScores([...loadedSelfScores]);
-          loadedAnyScore = true;
+        if (hasAnyHoleScore(selfScore?.holeScores) || hasAnyHoleScore(selfScorecardRow?.scores)) {
+          localStorageLoadedCount += 1;
         }
+        loadedSelfScores = hasAnyHoleScore(selfScore?.holeScores)
+          ? normalizeHoleScores(selfScore?.holeScores, holeCount)
+          : hasAnyHoleScore(selfScorecardRow?.scores)
+            ? normalizeHoleScores(selfScorecardRow?.scores, holeCount)
+            : null;
 
-        // Load marked player's marker scores using String() comparison
         const markerScore = envelope.tournament.scores.find(
           (s) => resolvedPlayerIds.markerPlayerIds.includes(String(s.playerId)) &&
                  s.roundId === resolvedPlayerIds.roundId &&
                  s.enteredBy === "marker"
         );
-        const loadedMarkerScores = markerScore?.holeScores.length ? markerScore.holeScores : markerScorecardRow?.scores;
-        if (loadedMarkerScores && loadedMarkerScores.length > 0) {
-          setMarkerScores([...loadedMarkerScores]);
-          loadedAnyScore = true;
+        if (hasAnyHoleScore(markerScore?.holeScores) || hasAnyHoleScore(markerScorecardRow?.scores)) {
+          localStorageLoadedCount += 1;
         }
+        loadedMarkerScores = hasAnyHoleScore(markerScore?.holeScores)
+          ? normalizeHoleScores(markerScore?.holeScores, holeCount)
+          : hasAnyHoleScore(markerScorecardRow?.scores)
+            ? normalizeHoleScores(markerScorecardRow?.scores, holeCount)
+            : null;
 
-        // Load marked player's self scores (for review) using String() comparison
         if (resolvedPlayerIds.markerPlayerId) {
           const markedPlayerSelf = envelope.tournament.scores.find(
             (s) => resolvedPlayerIds.markerPlayerIds.includes(String(s.playerId)) &&
                    s.roundId === resolvedPlayerIds.roundId &&
                    s.enteredBy === "self"
           );
-          if (markedPlayerSelf && markedPlayerSelf.holeScores.length > 0) {
-            setMarkedPlayerSelfScores([...markedPlayerSelf.holeScores]);
-            loadedAnyScore = true;
+          if (hasAnyHoleScore(markedPlayerSelf?.holeScores)) {
+            localStorageLoadedCount += 1;
           }
+          loadedMarkedPlayerSelfScores = hasAnyHoleScore(markedPlayerSelf?.holeScores)
+            ? normalizeHoleScores(markedPlayerSelf?.holeScores, holeCount)
+            : null;
         }
       }
 
@@ -542,7 +559,7 @@ export default function PlayerScorecardPage() {
           });
 
           if (remoteScore?.hole_scores?.length) {
-            return remoteScore.hole_scores;
+            return normalizeHoleScores(remoteScore.hole_scores, holeCount);
           }
         }
 
@@ -554,9 +571,9 @@ export default function PlayerScorecardPage() {
           resolvedPlayerIds.selectedPlayerIds,
           resolvedPlayerIds.selectedPlayerId
         );
-        if (!isCancelled && remoteSelfScores?.length) {
-          setScores([...remoteSelfScores]);
-          loadedAnyScore = true;
+        if (hasAnyHoleScore(remoteSelfScores)) {
+          supabaseLoadedCount += 1;
+          loadedSelfScores = remoteSelfScores;
         }
 
         if (resolvedPlayerIds.markerPlayerId) {
@@ -564,30 +581,101 @@ export default function PlayerScorecardPage() {
             resolvedPlayerIds.markerPlayerIds,
             resolvedPlayerIds.selectedPlayerId
           );
-          if (!isCancelled && remoteMarkerScores?.length) {
-            setMarkerScores([...remoteMarkerScores]);
-            loadedAnyScore = true;
+          if (hasAnyHoleScore(remoteMarkerScores)) {
+            supabaseLoadedCount += 1;
+            loadedMarkerScores = remoteMarkerScores;
           }
 
           const remoteMarkedPlayerSelfScores = await loadRemoteScore(
             resolvedPlayerIds.markerPlayerIds,
             resolvedPlayerIds.markerPlayerId
           );
-          if (!isCancelled && remoteMarkedPlayerSelfScores?.length) {
-            setMarkedPlayerSelfScores([...remoteMarkedPlayerSelfScores]);
-            loadedAnyScore = true;
+          if (hasAnyHoleScore(remoteMarkedPlayerSelfScores)) {
+            supabaseLoadedCount += 1;
+            loadedMarkedPlayerSelfScores = remoteMarkedPlayerSelfScores;
+          }
+        }
+
+        const sharedScores = await loadComparisonScores({ tournamentId: sharedScoreTournamentId, roundNumber });
+        supabaseLoadedCount = Math.max(
+          supabaseLoadedCount,
+          sharedScores.filter((entry) => hasAnyHoleScore(entry.hole_scores)).length
+        );
+        const getSharedScore = (playerIds: string[], enteredByPlayerIds?: string[], preferMarkerEntry = false) => {
+          const matchingScores = sharedScores
+            .filter((entry) => playerIds.includes(String(entry.player_id)) && hasAnyHoleScore(entry.hole_scores))
+            .filter((entry) => !enteredByPlayerIds || enteredByPlayerIds.includes(String(entry.entered_by_player_id)));
+          const selectedEntry = preferMarkerEntry
+            ? matchingScores.find((entry) => !playerIds.includes(String(entry.entered_by_player_id))) ?? matchingScores[0]
+            : matchingScores[0];
+
+          return selectedEntry ? normalizeHoleScores(selectedEntry.hole_scores, holeCount) : null;
+        };
+
+        if (!hasAnyHoleScore(loadedSelfScores)) {
+          const sharedScoreboardSelfScores = getSharedScore(resolvedPlayerIds.selectedPlayerIds, undefined, true);
+          if (hasAnyHoleScore(sharedScoreboardSelfScores)) {
+            loadedSelfScores = sharedScoreboardSelfScores;
+          }
+        }
+
+        if (!hasAnyHoleScore(loadedMarkerScores)) {
+          const sharedMarkerScores = getSharedScore(
+            resolvedPlayerIds.markerPlayerIds,
+            [resolvedPlayerIds.selectedPlayerId]
+          );
+          if (hasAnyHoleScore(sharedMarkerScores)) {
+            loadedMarkerScores = sharedMarkerScores;
+          }
+        }
+
+        if (!hasAnyHoleScore(loadedMarkedPlayerSelfScores)) {
+          const sharedMarkedPlayerSelfScores = getSharedScore(
+            resolvedPlayerIds.markerPlayerIds,
+            resolvedPlayerIds.markerPlayerId ? [resolvedPlayerIds.markerPlayerId] : []
+          );
+          if (hasAnyHoleScore(sharedMarkedPlayerSelfScores)) {
+            loadedMarkedPlayerSelfScores = sharedMarkedPlayerSelfScores;
           }
         }
       } catch (error) {
         console.warn("[ScoreService] Unable to load shared score entries.", error);
+        if (isDevelopment) {
+          setScoreDiagnostics((current) => ({
+            ...current,
+            lastHydrationError: getErrorMessage(error),
+          }));
+        }
       } finally {
         if (!isCancelled) {
-          setScoresLoaded(true);
-        }
-      }
+          const nextScores = loadedSelfScores ?? normalizeHoleScores(undefined, holeCount);
+          const nextMarkerScores = loadedMarkerScores ?? normalizeHoleScores(undefined, holeCount);
 
-      if (!loadedAnyScore && !isCancelled) {
-        setScoresLoaded(true);
+          setScores(nextScores);
+          setMarkerScores(nextMarkerScores);
+          if (loadedMarkedPlayerSelfScores) {
+            setMarkedPlayerSelfScores(loadedMarkedPlayerSelfScores);
+          }
+          setSavedHoles(getScoredHoleNumbers(scorecard.holes, nextScores, nextMarkerScores));
+
+          const firstIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, nextScores);
+          if (firstIncompleteIndex >= 0) {
+            setCurrentHoleIndex(firstIncompleteIndex);
+          } else {
+            setView("review");
+          }
+
+          setScoresLoaded(true);
+          if (isDevelopment) {
+            setScoreDiagnostics((current) => ({
+              ...current,
+              scoreEntriesLoadedFromLocalStorage: localStorageLoadedCount,
+              scoreEntriesLoadedFromSupabase: supabaseLoadedCount,
+              scoreHydrationComplete: "yes",
+              lastHydrationError: current.lastHydrationError,
+            }));
+          }
+        }
       }
     };
 
@@ -596,33 +684,7 @@ export default function PlayerScorecardPage() {
     return () => {
       isCancelled = true;
     };
-    }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds, sharedScoreTournamentId]);
-
-  // Determine first incomplete hole (for resume behavior)
-  const firstIncompleteHoleIndex = useMemo(() => {
-    for (let i = 0; i < markerScores.length; i++) {
-      if (markerScores[i] === 0) {
-        return i;
-      }
-    }
-    return -1; // All holes complete
-  }, [markerScores]);
-
-  // Set initial hole to first incomplete if scores are loaded
-  useEffect(() => {
-    if (!scoresLoaded || hasAppliedInitialHoleRef.current) {
-      return;
-    }
-
-    hasAppliedInitialHoleRef.current = true;
-
-    if (scoresLoaded && firstIncompleteHoleIndex >= 0 && currentHoleIndex === 0 && markerScores[0] > 0) {
-      setCurrentHoleIndex(firstIncompleteHoleIndex);
-    }
-    if (scoresLoaded && firstIncompleteHoleIndex === -1 && view === "scoring") {
-      setView("review");
-    }
-  }, [scoresLoaded, firstIncompleteHoleIndex, currentHoleIndex, markerScores, view]);
+    }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds, sharedScoreTournamentId, scorecard.holes]);
 
   // Discrepancy detection: compare marked player's self scores vs marker scores
   const discrepancies = useMemo(() => {
@@ -773,6 +835,23 @@ export default function PlayerScorecardPage() {
     return typeof id === "string" && id.length > 0 && id !== "demo" && !id.startsWith("group-");
   };
 
+  const getLocalStoragePlayerId = (playerIds: string[], fallbackPlayerId: string) => {
+    if (!requestedTournamentId) {
+      return fallbackPlayerId;
+    }
+
+    const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
+    if (!envelope) {
+      return fallbackPlayerId;
+    }
+
+    return (
+      playerIds.find((id) => envelope.tournament.players.some((player) => String(player.id) === String(id))) ||
+      playerIds.find((id) => envelope.uiState.scorecards.scorecardRows.some((row) => String(row.id) === String(id))) ||
+      fallbackPlayerId
+    );
+  };
+
   const saveScoreThroughService = (
     playerId: string,
     enteredByPlayerId: string,
@@ -782,7 +861,17 @@ export default function PlayerScorecardPage() {
   ) => {
     const serviceSave = scope === "round" ? saveRound : saveHole;
 
-    void serviceSave({
+    if (isDevelopment) {
+      setScoreDiagnostics((current) => ({
+        ...current,
+        supabaseSaveAttempted: "yes",
+        supabaseSaveResult: "pending",
+        supabaseSaveTournamentId: sharedScoreTournamentId,
+        lastSaveError: "",
+      }));
+    }
+
+    return serviceSave({
       tournamentId: sharedScoreTournamentId,
       roundNumber,
       playerId,
@@ -791,8 +880,26 @@ export default function PlayerScorecardPage() {
       total: holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0),
       entryStatus: getEntryStatus(holeScores),
       submittedAt: null,
-    }).catch((error) => {
+    })
+      .then((result) => {
+        if (isDevelopment) {
+          setScoreDiagnostics((current) => ({
+            ...current,
+            supabaseSaveResult: `ok ${result.id}`,
+          }));
+        }
+
+        return result;
+      })
+      .catch((error) => {
       console.error("[ScoreService] Unable to save score entry.", error);
+      if (isDevelopment) {
+        setScoreDiagnostics((current) => ({
+          ...current,
+          supabaseSaveResult: "failed",
+          lastSaveError: getErrorMessage(error),
+        }));
+      }
     });
   };
 
@@ -815,19 +922,43 @@ export default function PlayerScorecardPage() {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
       const parsedRoundNumber = Number(roundNumber);
-      
-      // Save self score with validated playerId
-      const selfScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.playerId), roundId, scores, "self");
-      if (selfScoreSaved) {
-        saveScoreThroughService(String(scorecard.playerId), String(scorecard.playerId), parsedRoundNumber, scores, "hole");
+      const nextScores = normalizeHoleScores(scores, scorecard.holes.length);
+      const nextMarkerScores = normalizeHoleScores(markerScores, scorecard.holes.length);
+      const stableSelfPlayerId = String(scorecard.playerId);
+      const stableMarkerPlayerId = isValidPlayerId(scorecard.markerPlayerId) ? String(scorecard.markerPlayerId) : "";
+      const localSelfPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.selectedPlayerIds ?? [stableSelfPlayerId], stableSelfPlayerId);
+      const localMarkerPlayerId = stableMarkerPlayerId
+        ? getLocalStoragePlayerId(resolvedPlayerIds?.markerPlayerIds ?? [stableMarkerPlayerId], stableMarkerPlayerId)
+        : "";
+      if (isDevelopment) {
+        setScoreDiagnostics((current) => ({
+          ...current,
+          localStorageSaveAttempted: "yes",
+          localStorageSaveResult: "pending",
+          supabaseSaveTournamentId: sharedScoreTournamentId,
+          savePlayerId: stableSelfPlayerId,
+          saveMarkerPlayerId: stableMarkerPlayerId,
+          lastSaveError: "",
+        }));
       }
-      
+       
+      // Save self score with validated playerId
+      const selfScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, localSelfPlayerId, roundId, nextScores, "self");
+      let markerScoreSaved = false;
+      void saveScoreThroughService(stableSelfPlayerId, stableSelfPlayerId, parsedRoundNumber, nextScores, "hole");
+       
       // Save marker score only if markerPlayerId is valid
-      if (isValidPlayerId(scorecard.markerPlayerId)) {
-        const markerScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.markerPlayerId), roundId, markerScores, "marker");
-        if (markerScoreSaved) {
-          saveScoreThroughService(String(scorecard.markerPlayerId), String(scorecard.playerId), parsedRoundNumber, markerScores, "hole");
-        }
+      if (stableMarkerPlayerId && hasAnyHoleScore(nextMarkerScores)) {
+        markerScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, nextMarkerScores, "marker");
+        void saveScoreThroughService(stableMarkerPlayerId, stableSelfPlayerId, parsedRoundNumber, nextMarkerScores, "hole");
+      }
+      if (isDevelopment) {
+        setScoreDiagnostics((current) => ({
+          ...current,
+          localStorageSaveResult: `self ${selfScoreSaved ? "ok" : "failed"} / marker ${
+            hasAnyHoleScore(nextMarkerScores) ? (markerScoreSaved ? "ok" : "failed or skipped") : "not entered"
+          }`,
+        }));
       }
     }
 
@@ -864,13 +995,25 @@ export default function PlayerScorecardPage() {
 
     const roundNumber = String(Number(scorecard.round) || 1);
     const roundId = `round-${roundNumber}`;
+    const stableMarkerPlayerId = String(scorecard.markerPlayerId);
+    const localMarkerPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.markerPlayerIds ?? [stableMarkerPlayerId], stableMarkerPlayerId);
     // Submit marked player's self scores as complete
-    const ok = mergeTournamentScoreSubmission(requestedTournamentId, String(scorecard.markerPlayerId), roundId, markedPlayerSelfScores, "self");
-    if (!ok) {
+    const ok = mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, markedPlayerSelfScores, "self");
+    if (isDevelopment) {
+      setScoreDiagnostics((current) => ({
+        ...current,
+        localStorageSaveAttempted: "yes",
+        localStorageSaveResult: ok ? "submit ok" : "submit failed",
+        supabaseSaveTournamentId: sharedScoreTournamentId,
+        savePlayerId: stableMarkerPlayerId,
+        saveMarkerPlayerId: stableMarkerPlayerId,
+      }));
+    }
+    if (!ok && !sharedScoreTournamentId) {
       setSaveError("Unable to submit. Please try again.");
       return;
     }
-    saveScoreThroughService(String(scorecard.markerPlayerId), String(scorecard.markerPlayerId), Number(roundNumber), markedPlayerSelfScores, "round");
+    void saveScoreThroughService(stableMarkerPlayerId, stableMarkerPlayerId, Number(roundNumber), markedPlayerSelfScores, "round");
     setView("submitted");
   };
 

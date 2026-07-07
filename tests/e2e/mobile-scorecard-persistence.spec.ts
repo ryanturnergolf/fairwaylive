@@ -274,6 +274,115 @@ const routeSharedTournamentRoster = async (page: Page) => {
   });
 };
 
+const routeSharedScoreEntriesStore = async (page: Page) => {
+  const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
+  let scoreReadCount = 0;
+
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (request.method() !== "GET") {
+      const body = request.postDataJSON() as Partial<ReturnType<typeof buildScoreEntry>>;
+      const entry = buildScoreEntry(
+        String(body.player_id),
+        String(body.entered_by_player_id),
+        (body.hole_scores as number[]) ?? emptyHoleScores,
+        String(body.tournament_id)
+      );
+      const existingIndex = savedScoreRows.findIndex(
+        (row) =>
+          row.tournament_id === entry.tournament_id &&
+          row.round_number === entry.round_number &&
+          row.player_id === entry.player_id &&
+          row.entered_by_player_id === entry.entered_by_player_id
+      );
+
+      if (existingIndex >= 0) {
+        savedScoreRows.splice(existingIndex, 1, entry);
+      } else {
+        savedScoreRows.push(entry);
+      }
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(entry),
+      });
+      return;
+    }
+
+    scoreReadCount += 1;
+    const getEqValue = (name: string) => (url.searchParams.get(name) || "").replace(/^eq\./, "");
+    const tournamentFilter = getEqValue("tournament_id");
+    const roundFilter = getEqValue("round_number");
+    const playerId = getEqValue("player_id");
+    const enteredByPlayerId = getEqValue("entered_by_player_id");
+    const matchingEntries = savedScoreRows.filter(
+      (row) =>
+        (!tournamentFilter || row.tournament_id === tournamentFilter) &&
+        (!roundFilter || String(row.round_number) === roundFilter) &&
+        (!playerId || row.player_id === playerId) &&
+        (!enteredByPlayerId || row.entered_by_player_id === enteredByPlayerId)
+    );
+    const expectsSingle = Boolean(playerId || enteredByPlayerId);
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(expectsSingle ? matchingEntries.at(-1) ?? null : matchingEntries),
+    });
+  });
+
+  return {
+    savedScoreRows,
+    getScoreReadCount: () => scoreReadCount,
+  };
+};
+
+const routeTournamentStateSnapshotStore = async (page: Page, status = 201) => {
+  const savedSnapshots: Array<Record<string, unknown>> = [];
+
+  await page.route("**/rest/v1/tournament_state_snapshots**", async (route) => {
+    const request = route.request();
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(savedSnapshots),
+      });
+      return;
+    }
+
+    if (status >= 400) {
+      await route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "snapshot unavailable" }),
+      });
+      return;
+    }
+
+    const body = request.postDataJSON() as Record<string, unknown>;
+    const existingIndex = savedSnapshots.findIndex((row) => row.tournament_id === body.tournament_id);
+    if (existingIndex >= 0) {
+      savedSnapshots.splice(existingIndex, 1, body);
+    } else {
+      savedSnapshots.push(body);
+    }
+
+    await route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+  });
+
+  return {
+    savedSnapshots,
+  };
+};
+
 test.use({
   storageState: {
     cookies: [],
@@ -295,7 +404,9 @@ test.use({
   },
 });
 
-test("mobile scorecard saves scores and reloads them from localStorage", async ({ page }) => {
+test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page).toHaveURL(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await expect
@@ -303,26 +414,35 @@ test("mobile scorecard saves scores and reloads them from localStorage", async (
     .toContain(storedTournament.name);
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
 
   const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
   await expect(saveHoleButton).toBeDisabled();
 
-  await page.getByLabel("Ava Green's Score").fill("4");
-  await expect(saveHoleButton).toBeEnabled();
-  await page.getByLabel("Ben Marker's Score").fill("5");
-  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
-  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("5");
-  await saveHoleButton.click();
+  for (const [index, [selfScore, markerScore]] of [
+    [4, 5],
+    [3, 4],
+    [5, 6],
+    [4, 4],
+  ].entries()) {
+    await expect(page.getByText(`Hole ${index + 1}`)).toBeVisible();
+    await page.getByLabel("Ava Green's Score").fill(String(selfScore));
+    await expect(saveHoleButton).toBeEnabled();
+    await page.getByLabel("Ben Marker's Score").fill(String(markerScore));
+    await expect(page.getByLabel("Ava Green's Score")).toHaveValue(String(selfScore));
+    await expect(page.getByLabel("Ben Marker's Score")).toHaveValue(String(markerScore));
+    await saveHoleButton.click();
+  }
 
-  await expect(page.getByText("Hole 2")).toBeVisible();
+  await expect(page.getByText("Hole 5")).toBeVisible();
 
   await page.reload();
 
-  await expect(page.getByText("Hole 2")).toBeVisible();
+  await expect(page.getByText("Hole 5")).toBeVisible();
   await page.getByRole("button", { name: "Previous Hole" }).click();
-  await expect(page.getByText("Hole 1")).toBeVisible();
+  await expect(page.getByText("Hole 4")).toBeVisible();
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
-  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("5");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
 });
 
 test("mobile scorecard renders while shared score lookup is pending", async ({ page }) => {
@@ -467,6 +587,7 @@ test("phone QR resolver loads shared Supabase player-2 by QR player id", async (
 test("tournament QR scorecard link does not use hardcoded localhost", async ({ page }) => {
   const storageErrors: string[] = [];
   const syncedPlayerRows: Array<Record<string, unknown>> = [];
+  const snapshotStore = await routeTournamentStateSnapshotStore(page);
   const timestampPlayerId = 1783206161404;
   const timestampMarkerId = 1783206161405;
   const brandNewUiState = {
@@ -601,6 +722,17 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   await expect.poll(() => syncedPlayerRows.length).toBeGreaterThan(0);
   expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId && row.player_id === "player-1")).toBe(true);
   expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId && row.player_id === "player-2")).toBe(true);
+  await expect.poll(() => snapshotStore.savedSnapshots.length).toBeGreaterThan(0);
+  const latestSnapshot = snapshotStore.savedSnapshots.at(-1);
+  expect(latestSnapshot?.tournament_id).toBe(sharedTournamentId);
+  expect(latestSnapshot?.local_tournament_id).toBe(tournamentId);
+  expect(latestSnapshot?.schema_version).toBe(2);
+  const stateSnapshot = latestSnapshot?.state_snapshot as typeof tournamentEnvelope;
+  expect(stateSnapshot.version).toBe(2);
+  expect(stateSnapshot.tournament.id).toBe(tournamentId);
+  expect(stateSnapshot.tournament.players).toHaveLength(2);
+  expect(stateSnapshot.tournament.pairings).toHaveLength(1);
+  expect(stateSnapshot.uiState.scorecards.scorecardRows).toHaveLength(2);
 
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
@@ -615,6 +747,62 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   expect(scorecardUrl.pathname).toBe("/scorecard/player-1");
   expect(scorecardUrl.searchParams.get("tournamentId")).toBe(tournamentId);
   expect(scorecardUrl.searchParams.get("pairing")).toBe("1");
+});
+
+test("snapshot upsert failure keeps localStorage fallback and roster sync working", async ({ page }) => {
+  const syncedPlayerRows: Array<Record<string, unknown>> = [];
+  await routeTournamentStateSnapshotStore(page, 500);
+
+  await page.route("**/rest/v1/tournaments?**", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: sharedTournamentId,
+        created_by: null,
+        name: storedTournament.name,
+        course: storedTournament.course,
+        tournament_date: storedTournament.date,
+        number_of_rounds: 1,
+        status: "test",
+        created_at: null,
+        updated_at: null,
+      }),
+    });
+  });
+  await page.route("**/rest/v1/tournament_players**", async (route) => {
+    const postData = route.request().postDataJSON();
+    if (Array.isArray(postData)) {
+      syncedPlayerRows.push(...(postData as Array<Record<string, unknown>>));
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "[]",
+    });
+  });
+  await page.route("**/rest/v1/score_entries**", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "shared score polling unavailable" }),
+    });
+  });
+
+  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+
+  await expect.poll(() => syncedPlayerRows.length).toBeGreaterThan(0);
+  await expect
+    .poll(() => page.evaluate((key) => window.localStorage.getItem(key), tournamentStorageKey))
+    .toContain(storedTournament.name);
+  expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId)).toBe(true);
 });
 
 test("add team modal hides optional internal fields", async ({ page }) => {
@@ -646,6 +834,7 @@ test("live scoreboard uses marker scores instead of self-entered scores", async 
     buildScoreEntry("1", "1", [4, ...emptyHoleScores.slice(1)]),
     buildScoreEntry("2", "1", [5, ...emptyHoleScores.slice(1)]),
   ];
+  await routeTournamentStateSnapshotStore(page);
 
   await page.route("**/rest/v1/tournaments?**", async (route) => {
     await route.fulfill({
@@ -693,53 +882,10 @@ test("live scoreboard uses marker scores instead of self-entered scores", async 
   await expect(benRow.getByRole("spinbutton").first()).toHaveValue("5");
 });
 
-test("desktop-entered scorecard scores hydrate on shared phone QR", async ({ page }) => {
+test("phone shared score save updates live scoreboard", async ({ page }) => {
   await routeSharedTournamentRoster(page);
-  const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
-  let scoreReadCount = 0;
-
-  await page.route("**/rest/v1/score_entries**", async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-
-    if (request.method() !== "GET") {
-      const body = request.postDataJSON() as Partial<ReturnType<typeof buildScoreEntry>>;
-      const entry = buildScoreEntry(
-        String(body.player_id),
-        String(body.entered_by_player_id),
-        (body.hole_scores as number[]) ?? emptyHoleScores,
-        String(body.tournament_id)
-      );
-      savedScoreRows.push(entry);
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify(entry),
-      });
-      return;
-    }
-
-    scoreReadCount += 1;
-    const getEqValue = (name: string) => (url.searchParams.get(name) || "").replace(/^eq\./, "");
-    const playerId = getEqValue("player_id");
-    const enteredByPlayerId = getEqValue("entered_by_player_id");
-    const matchingEntry = savedScoreRows
-      .slice()
-      .reverse()
-      .find(
-      (row) =>
-        row.tournament_id === getEqValue("tournament_id") &&
-        String(row.round_number) === getEqValue("round_number") &&
-        row.player_id === playerId &&
-        row.entered_by_player_id === enteredByPlayerId
-      );
-
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(matchingEntry ?? null),
-    });
-  });
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+  await routeTournamentStateSnapshotStore(page);
 
   await page.goto(baseUrl);
   await page.evaluate(
@@ -747,7 +893,36 @@ test("desktop-entered scorecard scores hydrate on shared phone QR", async ({ pag
     { key: sharedTournamentStorageKey, value: sharedTournamentId }
   );
   await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
-  await expect.poll(() => scoreReadCount).toBeGreaterThanOrEqual(3);
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
+
+  await page.getByLabel("Ava Green's Score").fill("4");
+  await page.getByLabel("Ben Marker's Score").fill("5");
+  await page.getByRole("button", { name: "Save Hole" }).click();
+
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2" && row.entered_by_player_id === "player-1")?.hole_scores[0])
+    .toBe(5);
+
+  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+
+  const avaRow = page.getByRole("row").filter({ hasText: "Ava Green" });
+  const benRow = page.getByRole("row").filter({ hasText: "Ben Marker" });
+  await expect(avaRow.getByRole("spinbutton").first()).toHaveValue("0");
+  await expect(benRow.getByRole("spinbutton").first()).toHaveValue("5");
+});
+
+test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) => {
+  await routeSharedTournamentRoster(page);
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+
+  await page.goto(baseUrl);
+  await page.evaluate(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: sharedTournamentStorageKey, value: sharedTournamentId }
+  );
+  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
 
   for (const [index, [selfScore, markerScore]] of [
     [4, 5],
@@ -761,7 +936,7 @@ test("desktop-entered scorecard scores hydrate on shared phone QR", async ({ pag
     await page.getByRole("button", { name: "Save Hole" }).click();
   }
 
-  await expect.poll(() => savedScoreRows.filter((row) => row.tournament_id === sharedTournamentId).length).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => sharedStore.savedScoreRows.filter((row) => row.tournament_id === sharedTournamentId).length).toBeGreaterThanOrEqual(2);
 
   await page.evaluate(() => window.localStorage.clear());
   await page.goto(`${baseUrl}/scorecard/player-1?tournamentId=${sharedTournamentId}&pairing=1`);
@@ -772,4 +947,33 @@ test("desktop-entered scorecard scores hydrate on shared phone QR", async ({ pag
   await expect(page.getByText("Hole 4")).toBeVisible();
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
+});
+
+test("shared QR phone without local tournament still saves stable IDs to Supabase", async ({ page }) => {
+  await routeSharedTournamentRoster(page);
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+
+  await page.goto(baseUrl);
+  await page.evaluate(() => window.localStorage.clear());
+  await page.goto(`${baseUrl}/scorecard/player-2?tournamentId=${sharedTournamentId}&pairing=1`);
+
+  await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
+  await expect(page.getByText("Mobile Scorecard")).toBeVisible();
+  await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
+
+  await page.getByLabel("Ben Marker's Score").fill("4");
+  await page.getByLabel("Ava Green's Score").fill("5");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("5");
+  const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
+  await expect(saveHoleButton).toBeEnabled();
+  await saveHoleButton.click();
+
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2" && row.entered_by_player_id === "player-2")?.hole_scores[0])
+    .toBe(4);
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-1" && row.entered_by_player_id === "player-2")?.hole_scores[0])
+    .toBe(5);
 });

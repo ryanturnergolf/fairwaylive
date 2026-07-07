@@ -2,6 +2,8 @@ import {
   createTournamentRow,
   getTournamentPlayers,
   getTournamentRow,
+  listTournamentRows,
+  upsertTournamentStateSnapshot,
   upsertTournamentPlayers,
   type CreateTournamentRowInput,
   type TournamentPlayerRow,
@@ -24,6 +26,12 @@ export type CreateTournamentResult = {
 
 export type EnsureSharedTournamentInput = CreateTournamentInput & {
   existingSharedTournamentId?: string;
+};
+
+export type SyncTournamentStateSnapshotInput = {
+  tournamentId: string;
+  localTournamentId: string;
+  envelope: TournamentStorageEnvelope;
 };
 
 export type SharedTournamentScorecardState = {
@@ -202,6 +210,29 @@ export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope)
   await upsertTournamentPlayers(buildTournamentPlayerRows(envelope));
 };
 
+export const syncTournamentStateSnapshot = async ({
+  tournamentId,
+  localTournamentId,
+  envelope,
+}: SyncTournamentStateSnapshotInput): Promise<boolean> => {
+  if (!tournamentId || !envelope || envelope.version !== 2) {
+    return false;
+  }
+
+  try {
+    await upsertTournamentStateSnapshot({
+      tournamentId,
+      localTournamentId,
+      schemaVersion: envelope.version,
+      stateSnapshot: envelope,
+    });
+    return true;
+  } catch (error) {
+    console.error("[TournamentService] Supabase tournament state snapshot sync failed; local storage remains saved.", error);
+    return false;
+  }
+};
+
 const toStoredTournament = (row: TournamentRow): StoredTournament => ({
   id: row.id,
   name: row.name,
@@ -214,6 +245,11 @@ const toStoredTournament = (row: TournamentRow): StoredTournament => ({
   status: row.status,
   settings: {},
 });
+
+export const loadSharedTournaments = async (): Promise<StoredTournament[]> => {
+  const rows = await listTournamentRows();
+  return rows.map(toStoredTournament);
+};
 
 const toScorecardRowId = (playerId: string, fallbackIndex: number) => {
   const parsed = Number(playerId);

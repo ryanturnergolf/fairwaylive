@@ -688,6 +688,30 @@ export const mergeTournamentScoreSubmission = (
     scores: nextScores,
   };
 
+  const player = envelope.tournament.players.find((item) => String(item.id) === String(playerId));
+  const team = player?.teamId
+    ? envelope.tournament.teams.find((item) => String(item.id) === String(player.teamId))
+    : undefined;
+  const playerName = player ? `${player.firstName} ${player.lastName}`.trim() : "";
+  const nextUiState =
+    enteredBy === "marker"
+      ? {
+          ...envelope.uiState,
+          scorecards: {
+            ...envelope.uiState.scorecards,
+            scorecardRows: envelope.uiState.scorecards.scorecardRows.map((row) => {
+              const isMatchingRow =
+                String(row.id) === String(playerId) ||
+                (Boolean(playerName) &&
+                  row.playerName === playerName &&
+                  (!team?.name || row.team === team.name || row.team === player?.statistics.teamName));
+
+              return isMatchingRow ? { ...row, scores: [...holeScores] } : row;
+            }),
+          },
+        }
+      : envelope.uiState;
+
   if (nextTournament.teams.length !== teamsBefore || nextTournament.players.length !== playersBefore) {
     return false;
   }
@@ -695,7 +719,7 @@ export const mergeTournamentScoreSubmission = (
   saveTournamentStorageEnvelope(tournamentId, {
     version: 2,
     tournament: nextTournament,
-    uiState: envelope.uiState,
+    uiState: nextUiState,
   });
 
   return true;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { loadSharedTournaments } from "./lib/services/tournamentService";
 import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 
 const teams = [
@@ -92,11 +93,40 @@ const features = [
   },
 ];
 
+const mergeTournamentsById = (localTournaments: StoredTournament[], sharedTournaments: StoredTournament[]) => {
+  const tournamentsById = new Map<string, StoredTournament>();
+
+  sharedTournaments.forEach((tournament) => {
+    tournamentsById.set(tournament.id, tournament);
+  });
+  localTournaments.forEach((tournament) => {
+    tournamentsById.set(tournament.id, tournament);
+  });
+
+  return Array.from(tournamentsById.values());
+};
+
 export default function Home() {
   const [savedTournaments, setSavedTournaments] = useState<StoredTournament[]>([]);
 
   useEffect(() => {
-    setSavedTournaments(loadTournamentsFromStorage());
+    let isCancelled = false;
+    const localTournaments = loadTournamentsFromStorage();
+    setSavedTournaments(localTournaments);
+
+    void loadSharedTournaments()
+      .then((sharedTournaments) => {
+        if (!isCancelled) {
+          setSavedTournaments(mergeTournamentsById(localTournaments, sharedTournaments));
+        }
+      })
+      .catch((error) => {
+        console.warn("[TournamentService] Unable to load shared tournaments.", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   return (
