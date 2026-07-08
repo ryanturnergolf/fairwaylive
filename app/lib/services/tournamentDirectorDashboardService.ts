@@ -21,6 +21,7 @@ export type DirectorTournamentSummary = {
   tournamentName: string;
   course: string;
   readiness: TournamentReadiness;
+  completion: DirectorTournamentCompletion;
   totalGroups: number;
   groupsStarted: number;
   groupsFinished: number;
@@ -70,6 +71,27 @@ export type DirectorReviewQueueItem = {
   reasons: DirectorReviewReason[];
   severity: DirectorReviewSeverity;
   reviewHref: string;
+};
+
+export type DirectorCompletionState = "On Pace" | "Nearly Complete" | "Ready to Close" | "Complete";
+
+export type DirectorVerificationStatus = "Verified" | "Needs Verification" | "Not Started";
+
+export type DirectorCompletionChecklistItem = {
+  label: string;
+  passed: boolean;
+};
+
+export type DirectorTournamentCompletion = {
+  overallCompletionPercentage: number;
+  holesRemaining: number;
+  groupsRemaining: number;
+  playersRemaining: number;
+  reviewItemsRemaining: number;
+  verificationStatus: DirectorVerificationStatus;
+  estimatedState: DirectorCompletionState;
+  isReadyToClose: boolean;
+  checklist: DirectorCompletionChecklistItem[];
 };
 
 export type DirectorDashboardReadModel = {
@@ -217,6 +239,9 @@ const getScoreCurrentHole = (score: ScoreLike, holeCount: number) => {
   const completedHoleCount = score.holeScores.slice(0, holeCount).filter((holeScore) => holeScore > 0).length;
   return hasFinishedScore(score, holeCount) ? holeCount : Math.min(holeCount, completedHoleCount + 1);
 };
+
+const getScoreCompletedHoleCount = (score: ScoreLike, holeCount: number) =>
+  Math.min(holeCount, score.holeScores.slice(0, holeCount).filter((holeScore) => holeScore > 0).length);
 
 const scoreArraysConflict = (left: number[], right: number[]) => {
   const checkedLength = Math.max(left.length, right.length);
@@ -367,6 +392,73 @@ const buildReviewQueue = (
     });
 };
 
+const buildCompletion = (
+  groups: DirectorGroupStatus[],
+  scores: ScoreLike[],
+  holeCount: number,
+  reviewQueue: DirectorReviewQueueItem[]
+): DirectorTournamentCompletion => {
+  const scoresByPlayerId = new Map<string, ScoreLike[]>();
+  scores.forEach((score) => {
+    scoresByPlayerId.set(score.playerId, [...(scoresByPlayerId.get(score.playerId) ?? []), score]);
+  });
+
+  const players = groups.flatMap((group) => group.players);
+  const totalPlayerHoles = players.length * holeCount;
+  const completedPlayerHoles = players.reduce((sum, player) => {
+    const playerScores = scoresByPlayerId.get(player.playerId) ?? [];
+    const bestCompletedHoleCount = Math.max(0, ...playerScores.map((score) => getScoreCompletedHoleCount(score, holeCount)));
+    return sum + bestCompletedHoleCount;
+  }, 0);
+  const playersRemaining = players.filter(
+    (player) => !(scoresByPlayerId.get(player.playerId) ?? []).some((score) => hasFinishedScore(score, holeCount))
+  ).length;
+  const groupsRemaining = groups.filter((group) => group.status !== "Finished").length;
+  const holesRemaining = Math.max(0, totalPlayerHoles - completedPlayerHoles);
+  const overallCompletionPercentage =
+    totalPlayerHoles === 0 ? 0 : Math.round((completedPlayerHoles / totalPlayerHoles) * 100);
+  const hasAnyScore = scores.some(hasStartedScore);
+  const verifiedPlayerCount = players.filter((player) =>
+    (scoresByPlayerId.get(player.playerId) ?? []).some(
+      (score) => hasFinishedScore(score, holeCount) && ["submitted", "verified", "official"].includes(score.status)
+    )
+  ).length;
+  const verificationStatus: DirectorVerificationStatus =
+    players.length > 0 && verifiedPlayerCount >= players.length
+      ? "Verified"
+      : hasAnyScore
+        ? "Needs Verification"
+        : "Not Started";
+  const checklist: DirectorCompletionChecklistItem[] = [
+    { label: "All players assigned to groups", passed: players.length > 0 && groups.every((group) => group.players.length > 0) },
+    { label: "All scoring holes entered", passed: totalPlayerHoles > 0 && holesRemaining === 0 },
+    { label: "All groups finished", passed: groups.length > 0 && groupsRemaining === 0 },
+    { label: "All players complete", passed: players.length > 0 && playersRemaining === 0 },
+    { label: "Review queue clear", passed: reviewQueue.length === 0 },
+    { label: "Scores verified", passed: verificationStatus === "Verified" },
+  ];
+  const isReadyToClose = checklist.every((item) => item.passed);
+  const estimatedState: DirectorCompletionState = isReadyToClose
+    ? "Ready to Close"
+    : holesRemaining === 0 && playersRemaining === 0 && groupsRemaining === 0
+      ? "Complete"
+      : overallCompletionPercentage >= 85
+        ? "Nearly Complete"
+        : "On Pace";
+
+  return {
+    overallCompletionPercentage,
+    holesRemaining,
+    groupsRemaining,
+    playersRemaining,
+    reviewItemsRemaining: reviewQueue.length,
+    verificationStatus,
+    estimatedState,
+    isReadyToClose,
+    checklist,
+  };
+};
+
 const summarizeGroups = (
   groupsByNumber: Map<number, GroupState>,
   scores: ScoreLike[],
@@ -487,6 +579,13 @@ const buildSummary = async ({
     stalledTimeoutMinutes,
     now
   );
+  const reviewQueue = buildReviewQueue(
+    groupSummary.groups,
+    scores,
+    holeCount,
+    localTournamentId || sharedTournamentId,
+    sharedTournamentId
+  );
 
   return {
     tournamentId: localTournamentId || sharedTournamentId,
@@ -494,14 +593,9 @@ const buildSummary = async ({
     tournamentName: localTournament?.name ?? aggregate?.tournament.name ?? "Tournament",
     course: localTournament?.course ?? aggregate?.tournament.course ?? "",
     readiness,
+    completion: buildCompletion(groupSummary.groups, scores, holeCount, reviewQueue),
     ...groupSummary,
-    reviewQueue: buildReviewQueue(
-      groupSummary.groups,
-      scores,
-      holeCount,
-      localTournamentId || sharedTournamentId,
-      sharedTournamentId
-    ),
+    reviewQueue,
     lastScoreReceivedAt: getLatestTimestamp(scores.map((score) => score.receivedAt)),
     lastSnapshotAt: aggregate?.snapshotUpdatedAt ?? null,
     lastPlayerSyncAt: getLatestTimestamp(

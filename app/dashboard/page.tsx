@@ -64,6 +64,13 @@ const directorReviewSeverityStyles: Record<DirectorReviewSeverity, string> = {
   Critical: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
 };
 
+const directorCompletionStateStyles: Record<string, string> = {
+  "On Pace": "border-[#2E6F76] bg-[#E6F3F1] text-[#0B3D2E]",
+  "Nearly Complete": "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
+  "Ready to Close": "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
+  Complete: "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]",
+};
+
 const configuredDirectorStalledTimeoutMinutes = Number(process.env.NEXT_PUBLIC_DIRECTOR_STALLED_TIMEOUT_MINUTES);
 const directorStalledTimeoutMinutes =
   Number.isFinite(configuredDirectorStalledTimeoutMinutes) && configuredDirectorStalledTimeoutMinutes > 0
@@ -682,6 +689,60 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         ))}
+                      </div>
+
+                      <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-[#F8FBF8] p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#2E6F76]">
+                              Tournament Completion
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                              End-of-round progress and blockers before the tournament can be closed.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${directorCompletionStateStyles[summary.completion.estimatedState]}`}>
+                              {summary.completion.estimatedState}
+                            </span>
+                            {summary.completion.isReadyToClose ? (
+                              <span className="w-fit rounded-full border border-[#0B3D2E] bg-[#0B3D2E] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6]">
+                                Tournament Ready to Close
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                          {[
+                            ["Overall completion", `${summary.completion.overallCompletionPercentage}%`],
+                            ["Holes remaining", summary.completion.holesRemaining],
+                            ["Groups remaining", summary.completion.groupsRemaining],
+                            ["Players remaining", summary.completion.playersRemaining],
+                            ["Review items", summary.completion.reviewItemsRemaining],
+                            ["Verification", summary.completion.verificationStatus],
+                          ].map(([label, value]) => (
+                            <div key={label} className="rounded-[16px] border border-[#E2E9E3] bg-white p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                                {label}
+                              </p>
+                              <p className="mt-2 text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                                {value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 grid gap-2 md:grid-cols-2">
+                          {summary.completion.checklist.map((item) => (
+                            <div key={item.label} className="flex items-center justify-between gap-3 rounded-[16px] border border-[#E2E9E3] bg-white px-4 py-3">
+                              <span className="text-sm font-black text-[#0B3D2E]">{item.label}</span>
+                              <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${item.passed ? "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]" : "border-[#8A2E2E] bg-[#FFF4F1] text-[#8A2E2E]"}`}>
+                                {item.passed ? "Pass" : "Fail"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="mt-6 rounded-[20px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
