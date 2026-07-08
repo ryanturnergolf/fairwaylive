@@ -23,7 +23,6 @@ import {
 } from "../../lib/services/tournamentDerivedState";
 import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
-  buildStableRosterPlayerIdMap,
   findPairingIndexByGroupId,
   findPairingPlayerLocation,
   hydratePairingsWithPlayerIds,
@@ -34,6 +33,21 @@ import {
   snapshotPairings,
   type TournamentPageLoadResult,
 } from "../../lib/services/tournamentService";
+import {
+  buildImportedPlayers,
+  buildMobileScorecardPath,
+  generatePairings,
+  generateScorecardRows,
+  pairingExistsForPlayer,
+  parseImportedPlayerCsv,
+  playerImportTemplateCsv,
+  relocatePairingPlayer,
+  updateScorecardRows,
+  upsertPlayerFromForm,
+  upsertTeamFromForm,
+  validatePlayerForm,
+  validateTeamForm,
+} from "../../lib/services/tournamentPageHelpers";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -146,20 +160,6 @@ const defaultClippdExportState: ClippdExportState = {
 };
 
 const defaultTeamColor = "#0B3D2E";
-
-const buildTeamShortName = (schoolName: string) => {
-  const words = schoolName
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0);
-
-  if (words.length === 0) {
-    return "TEAM";
-  }
-
-  const initials = words.map((word) => word[0]).join("").toUpperCase();
-  return initials.slice(0, 4) || "TEAM";
-};
 
 type PersistedTournamentState = {
   teams: Team[];
@@ -609,81 +609,6 @@ export default function TournamentPage() {
     setEditingTeamId(null);
   };
 
-  const parseCsvLine = (line: string) => {
-    const values: string[] = [];
-    let currentValue = "";
-    let inQuotes = false;
-
-    for (let index = 0; index < line.length; index += 1) {
-      const char = line[index];
-
-      if (char === '"') {
-        if (inQuotes && line[index + 1] === '"') {
-          currentValue += '"';
-          index += 1;
-        } else {
-          inQuotes = !inQuotes;
-        }
-        continue;
-      }
-
-      if (char === "," && !inQuotes) {
-        values.push(currentValue.trim());
-        currentValue = "";
-        continue;
-      }
-
-      currentValue += char;
-    }
-
-    values.push(currentValue.trim());
-    return values;
-  };
-
-  const parseImportedPlayerCsv = (text: string) => {
-    const rows = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    if (rows.length < 2) {
-      throw new Error("The CSV file is empty.");
-    }
-
-    const headers = rows[0]
-      .toLowerCase()
-      .split(",")
-      .map((header) => header.replace(/\s+/g, ""));
-
-    const requiredHeaders = ["firstname", "lastname", "school", "gender", "class", "email"];
-    const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
-
-    if (missingHeaders.length > 0) {
-      throw new Error("The CSV file is missing required columns.");
-    }
-
-    return rows.slice(1).map((row) => {
-      const values = parseCsvLine(row);
-      const data = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
-      const schoolName = data.school?.trim() || "Unassigned";
-      const matchingTeam = teams.find(
-        (team) => team.schoolName.toLowerCase() === schoolName.toLowerCase() || team.shortName.toLowerCase() === schoolName.toLowerCase()
-      );
-
-      return {
-        firstName: data.firstname?.trim() || "",
-        lastName: data.lastname?.trim() || "",
-        school: schoolName,
-        gender: data.gender?.trim() || "",
-        className: data.class?.trim() || "",
-        email: data.email?.trim() || "",
-        teamId: matchingTeam ? String(matchingTeam.id) : "",
-        teamName: matchingTeam ? matchingTeam.schoolName : schoolName,
-        handicap: "0",
-      } satisfies ImportedPlayerPreview;
-    }).filter((preview) => preview.firstName || preview.lastName || preview.email || preview.school);
-  };
-
   const openPlayerImportModal = () => {
     setPlayerImportError("");
     setPlayerImportRows([]);
@@ -699,7 +624,7 @@ export default function TournamentPage() {
   };
 
   const handlePlayerImportTemplateDownload = () => {
-    const template = ["First Name,Last Name,School,Gender,Class,Email", "Jane,Doe,Bluffton University,Female,Senior,jane.doe@example.com"].join("\n");
+    const template = playerImportTemplateCsv();
     const blob = new Blob([template], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -721,7 +646,7 @@ export default function TournamentPage() {
 
     try {
       const text = await file.text();
-      const rows = parseImportedPlayerCsv(text);
+      const rows = parseImportedPlayerCsv(text, teams);
       setPlayerImportRows(rows);
     } catch (error) {
       setPlayerImportRows([]);
@@ -734,15 +659,7 @@ export default function TournamentPage() {
       return;
     }
 
-    const importedPlayers: Player[] = playerImportRows.map((row, index) => ({
-      id: Date.now() + index,
-      firstName: row.firstName.trim(),
-      lastName: row.lastName.trim(),
-      teamId: row.teamId,
-      teamName: row.teamName,
-      handicap: row.handicap,
-      email: row.email.trim(),
-    }));
+    const importedPlayers = buildImportedPlayers(playerImportRows, Date.now());
 
     setPlayers((current) => [...importedPlayers, ...current]);
     closePlayerImportModal();
@@ -781,51 +698,24 @@ export default function TournamentPage() {
     }
   };
 
-  const validateTeamForm = () => {
-    const nextErrors: Partial<Record<keyof TeamFormState, string>> = {};
-
-    if (!teamFormState.schoolName.trim()) {
-      nextErrors.schoolName = "School name is required.";
-    }
-
-    setTeamErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
   const handleTeamSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!validateTeamForm()) {
+    const nextErrors = validateTeamForm(teamFormState);
+    setTeamErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
       return;
     }
 
-    if (editingTeamId) {
-      const existingTeam = teams.find((team) => team.id === editingTeamId);
-      setTeams((current) =>
-        current.map((team) =>
-          team.id === editingTeamId
-            ? {
-                ...team,
-                schoolName: teamFormState.schoolName.trim(),
-                shortName: teamFormState.shortName.trim().toUpperCase() || existingTeam?.shortName || buildTeamShortName(teamFormState.schoolName),
-                teamColor: teamFormState.teamColor.trim() || existingTeam?.teamColor || defaultTeamColor,
-                coachName: teamFormState.coachName.trim() || existingTeam?.coachName || "",
-              }
-            : team
-        )
-      );
-    } else {
-      setTeams((current) => [
-        {
-          id: Date.now(),
-          schoolName: teamFormState.schoolName.trim(),
-          shortName: teamFormState.shortName.trim().toUpperCase() || buildTeamShortName(teamFormState.schoolName),
-          teamColor: teamFormState.teamColor.trim() || defaultTeamColor,
-          coachName: teamFormState.coachName.trim(),
-        },
-        ...current,
-      ]);
-    }
+    setTeams((current) =>
+      upsertTeamFromForm({
+        teams: current,
+        teamFormState,
+        editingTeamId,
+        defaultTeamColor,
+        nextTeamId: Date.now(),
+      })
+    );
 
     closeTeamModal();
   };
@@ -873,61 +763,24 @@ export default function TournamentPage() {
     }
   };
 
-  const validatePlayerForm = () => {
-    const nextErrors: Partial<Record<keyof PlayerFormState, string>> = {};
-
-    if (!playerFormState.firstName.trim()) {
-      nextErrors.firstName = "First name is required.";
-    }
-    if (!playerFormState.lastName.trim()) {
-      nextErrors.lastName = "Last name is required.";
-    }
-    if (!playerFormState.teamId.trim()) {
-      nextErrors.teamId = "Team is required.";
-    }
-    setPlayerErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
   const handlePlayerSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!validatePlayerForm()) {
+    const nextErrors = validatePlayerForm(playerFormState);
+    setPlayerErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
       return;
     }
 
-    const selectedTeam = teams.find((team) => String(team.id) === playerFormState.teamId);
-
-    if (editingPlayerId) {
-      setPlayers((current) =>
-        current.map((player) =>
-          player.id === editingPlayerId
-            ? {
-                ...player,
-                firstName: playerFormState.firstName.trim(),
-                lastName: playerFormState.lastName.trim(),
-                teamId: playerFormState.teamId,
-                teamName: selectedTeam?.schoolName || "Unassigned",
-                handicap: playerFormState.handicap.trim() || player.handicap || "0",
-                email: playerFormState.email.trim() || player.email || "",
-              }
-            : player
-        )
-      );
-    } else {
-      setPlayers((current) => [
-        {
-          id: Date.now(),
-          firstName: playerFormState.firstName.trim(),
-          lastName: playerFormState.lastName.trim(),
-          teamId: playerFormState.teamId,
-          teamName: selectedTeam?.schoolName || "Unassigned",
-          handicap: playerFormState.handicap.trim() || "0",
-          email: playerFormState.email.trim(),
-        },
-        ...current,
-      ]);
-    }
+    setPlayers((current) =>
+      upsertPlayerFromForm({
+        players: current,
+        teams,
+        playerFormState,
+        editingPlayerId,
+        nextPlayerId: Date.now(),
+      })
+    );
 
     closePlayerModal();
   };
@@ -938,27 +791,7 @@ export default function TournamentPage() {
   };
 
   const handleScoreInputChange = (rowId: number, holeIndex: number, value: string) => {
-    const parsedValue = Number(value);
-
-    setScorecardRows((current) =>
-      current.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              scores: row.scores.map((score, index) => (index === holeIndex ? (Number.isNaN(parsedValue) ? 0 : parsedValue) : score)),
-            }
-          : row
-      )
-    );
-  };
-
-  const formatMinutesToTime = (minutesSinceMidnight: number) => {
-    const normalizedMinutes = ((minutesSinceMidnight % 1440) + 1440) % 1440;
-    const hours24 = Math.floor(normalizedMinutes / 60);
-    const minutes = normalizedMinutes % 60;
-    const meridiem = hours24 >= 12 ? "PM" : "AM";
-    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
-    return `${hours12}:${String(minutes).padStart(2, "0")} ${meridiem}`;
+    setScorecardRows((current) => updateScorecardRows(current, rowId, holeIndex, value));
   };
 
   const handleGeneratePairings = () => {
@@ -968,32 +801,7 @@ export default function TournamentPage() {
       return;
     }
 
-    const shuffledPlayers = [...players];
-    const stablePlayerIdsByRosterId = buildStableRosterPlayerIdMap(players);
-
-    for (let index = shuffledPlayers.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [shuffledPlayers[index], shuffledPlayers[swapIndex]] = [shuffledPlayers[swapIndex], shuffledPlayers[index]];
-    }
-
-    const generatedPairings: PairingGroup[] = [];
-    const startingMinutes = 8 * 60;
-
-    for (let index = 0; index < shuffledPlayers.length; index += 4) {
-      const groupPlayers = shuffledPlayers.slice(index, index + 4);
-      generatedPairings.push({
-        groupNumber: generatedPairings.length + 1,
-        teeTime: formatMinutesToTime(startingMinutes + generatedPairings.length * 10),
-        startingHole: "1",
-        players: groupPlayers.map((player) => ({
-          playerId: stablePlayerIdsByRosterId.get(player.id) || String(player.id),
-          playerName: `${player.firstName} ${player.lastName}`.trim(),
-          teamName: player.teamName || "Unassigned",
-        })),
-      });
-    }
-
-    setPairings(generatedPairings);
+    setPairings(generatePairings(players));
     setPairingsMessage("");
   };
 
@@ -1013,61 +821,25 @@ export default function TournamentPage() {
     setPairingsMessage("");
   };
 
-  const relocatePairingPlayer = (
+  const movePairingPlayer = (
     sourcePairingIndex: number,
     sourcePlayerIndex: number,
     targetPairingIndex: number,
     targetPlayerIndex: number
   ) => {
-    commitPairingMutation((current) => {
-      if (
-        sourcePairingIndex < 0 ||
-        targetPairingIndex < 0 ||
-        sourcePairingIndex >= current.length ||
-        targetPairingIndex >= current.length
-      ) {
-        return current;
-      }
-
-      const nextPairings = current.map((pairing) => ({
-        ...pairing,
-        players: [...pairing.players],
-      }));
-
-      const sourcePairing = nextPairings[sourcePairingIndex];
-      const targetPairing = nextPairings[targetPairingIndex];
-
-      if (
-        sourcePlayerIndex < 0 ||
-        sourcePlayerIndex >= sourcePairing.players.length ||
-        targetPlayerIndex < 0
-      ) {
-        return current;
-      }
-
-      const [movedPlayer] = sourcePairing.players.splice(sourcePlayerIndex, 1);
-
-      if (!movedPlayer) {
-        return current;
-      }
-
-      const adjustedTargetIndex =
-        sourcePairingIndex === targetPairingIndex && sourcePlayerIndex < targetPlayerIndex
-          ? targetPlayerIndex - 1
-          : targetPlayerIndex;
-
-      targetPairing.players.splice(
-        Math.min(adjustedTargetIndex, targetPairing.players.length),
-        0,
-        movedPlayer
-      );
-
-      return nextPairings;
-    });
+    commitPairingMutation((current) =>
+      relocatePairingPlayer({
+        pairings: current,
+        sourcePairingIndex,
+        sourcePlayerIndex,
+        targetPairingIndex,
+        targetPlayerIndex,
+      })
+    );
   };
 
   const movePlayerWithinPairing = (pairingIndex: number, playerIndex: number, direction: -1 | 1) => {
-    relocatePairingPlayer(pairingIndex, playerIndex, pairingIndex, playerIndex + direction);
+    movePairingPlayer(pairingIndex, playerIndex, pairingIndex, playerIndex + direction);
   };
 
   const movePlayerBetweenPairings = (pairingIndex: number, playerIndex: number, direction: -1 | 1) => {
@@ -1077,7 +849,7 @@ export default function TournamentPage() {
       return;
     }
 
-    relocatePairingPlayer(
+    movePairingPlayer(
       pairingIndex,
       playerIndex,
       targetPairingIndex,
@@ -1086,16 +858,8 @@ export default function TournamentPage() {
   };
 
   const generateScorecards = () => {
-    const holeCount = normalizedRoundSetup.numberOfHoles;
-    const nextRows = players.map((player) => ({
-      id: player.id,
-      playerName: `${player.firstName} ${player.lastName}`.trim(),
-      team: player.teamName || "Unassigned",
-      scores: Array.from({ length: holeCount }, () => 0),
-    }));
-
     setScorecardsGenerated(true);
-    setScorecardRows(nextRows);
+    setScorecardRows(generateScorecardRows(players, normalizedRoundSetup.numberOfHoles));
   };
 
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
@@ -1201,19 +965,11 @@ export default function TournamentPage() {
   const mobileScorecardUrl = "/scorecard/test";
 
   const browserMobileScorecardPath = useMemo(() => {
-    if (!tournamentId || !activeQrPairing || !activeQrScoringPlayerId) {
-      return "/scorecard/test";
-    }
-
-    return `/scorecard/${encodeURIComponent(activeQrScoringPlayerId)}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+    return buildMobileScorecardPath({ tournamentId, activeQrPairing, activeQrScoringPlayerId });
   }, [activeQrPairing, activeQrScoringPlayerId, tournamentId]);
 
   const qrMobileScorecardPath = useMemo(() => {
-    if (!sharedTournamentId || !activeQrPairing || !activeQrScoringPlayerId) {
-      return "/scorecard/test";
-    }
-
-    return `/scorecard/${encodeURIComponent(activeQrScoringPlayerId)}?tournamentId=${encodeURIComponent(sharedTournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+    return buildMobileScorecardPath({ tournamentId: sharedTournamentId, activeQrPairing, activeQrScoringPlayerId });
   }, [activeQrPairing, activeQrScoringPlayerId, sharedTournamentId]);
 
   const resolvedMobileScorecardUrl = useMemo(() => buildAppUrl(qrMobileScorecardPath), [qrMobileScorecardPath]);
@@ -1273,10 +1029,6 @@ export default function TournamentPage() {
     closeQrModal();
     openPrintScorecardModal(activeQrPlayer);
   };
-
-  function pairingExistsForPlayer(groupings: PairingGroup[], playerName: string) {
-    return groupings.find((pairing) => pairing.players.some((player) => player.playerName === playerName));
-  }
 
   const individualLeaderboard = useMemo(
     () => buildIndividualLeaderboard({ scorecardsGenerated, scorecardRows, displayHoleCount }),
