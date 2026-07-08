@@ -25,9 +25,28 @@ export type DirectorTournamentSummary = {
   groupsStarted: number;
   groupsFinished: number;
   groupsInProgress: number;
+  groups: DirectorGroupStatus[];
   lastScoreReceivedAt: string | null;
   lastSnapshotAt: string | null;
   lastPlayerSyncAt: string | null;
+};
+
+export type DirectorGroupStatusValue = "Waiting" | "Playing" | "Finished" | "Needs Review" | "Stalled";
+
+export type DirectorGroupPlayer = {
+  playerId: string;
+  playerName: string;
+  teamName: string;
+};
+
+export type DirectorGroupStatus = {
+  groupNumber: number;
+  groupName: string;
+  players: DirectorGroupPlayer[];
+  currentHole: number;
+  status: DirectorGroupStatusValue;
+  lastScoreUpdateAt: string | null;
+  isStalled: boolean;
 };
 
 export type DirectorDashboardReadModel = {
@@ -37,17 +56,24 @@ export type DirectorDashboardReadModel = {
 
 type GroupState = {
   groupNumber: number;
-  playerIds: Set<string>;
+  playersById: Map<string, DirectorGroupPlayer>;
   started: boolean;
   finished: boolean;
 };
 
 type ScoreLike = {
   playerId: string;
+  enteredByPlayerId: string;
   holeScores: number[];
   status: string;
   receivedAt: string | null;
 };
+
+export type LoadDirectorDashboardReadModelOptions = {
+  stalledTimeoutMinutes?: number;
+};
+
+const defaultStalledTimeoutMinutes = 20;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -57,6 +83,15 @@ const getLatestTimestamp = (values: Array<string | null | undefined>) =>
   values
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
+
+const isOlderThanMinutes = (value: string | null, now: Date, minutes: number) => {
+  if (!value) {
+    return false;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && now.getTime() - timestamp > minutes * 60 * 1000;
+};
 
 const getHoleCount = (
   aggregate: TournamentAggregate | null,
@@ -77,14 +112,18 @@ const addPairingGroups = (
     const groupNumber = Number(pairing.groupNumber) || index + 1;
     const group = groupsByNumber.get(groupNumber) ?? {
       groupNumber,
-      playerIds: new Set<string>(),
+      playersById: new Map<string, DirectorGroupPlayer>(),
       started: false,
       finished: false,
     };
 
     pairing.players.forEach((player) => {
       if (player.playerId) {
-        group.playerIds.add(String(player.playerId));
+        group.playersById.set(String(player.playerId), {
+          playerId: String(player.playerId),
+          playerName: player.playerName || String(player.playerId),
+          teamName: player.teamName || "Unassigned",
+        });
       }
     });
 
@@ -105,11 +144,15 @@ const buildGroups = (
     const groupNumber = row.group_number ?? Math.floor(index / 4) + 1;
     const group = groupsByNumber.get(groupNumber) ?? {
       groupNumber,
-      playerIds: new Set<string>(),
+      playersById: new Map<string, DirectorGroupPlayer>(),
       started: false,
       finished: false,
     };
-    group.playerIds.add(String(row.player_id));
+    group.playersById.set(String(row.player_id), {
+      playerId: String(row.player_id),
+      playerName: row.player_name || String(row.player_id),
+      teamName: row.team_name || "Unassigned",
+    });
     groupsByNumber.set(groupNumber, group);
   });
 
@@ -118,6 +161,7 @@ const buildGroups = (
 
 const scoreEntryToScoreLike = (entry: ScoreEntryRow): ScoreLike => ({
   playerId: String(entry.player_id),
+  enteredByPlayerId: String(entry.entered_by_player_id),
   holeScores: Array.isArray(entry.hole_scores) ? entry.hole_scores.map((score) => Number(score) || 0) : [],
   status: entry.entry_status,
   receivedAt: entry.submitted_at ?? entry.updated_at ?? entry.created_at,
@@ -126,6 +170,7 @@ const scoreEntryToScoreLike = (entry: ScoreEntryRow): ScoreLike => ({
 const getAggregateScores = (aggregate: TournamentAggregate | null): ScoreLike[] =>
   (aggregate?.scores ?? []).map((score) => ({
     playerId: String(score.playerId),
+    enteredByPlayerId: score.enteredBy,
     holeScores: Array.isArray(score.holeScores) ? score.holeScores.map((value) => Number(value) || 0) : [],
     status: score.status,
     receivedAt: null,
@@ -142,35 +187,111 @@ const hasFinishedScore = (score: ScoreLike, holeCount: number) =>
   score.status === "submitted" ||
   (score.holeScores.length >= holeCount && score.holeScores.slice(0, holeCount).every((holeScore) => holeScore > 0));
 
+const getScoreCurrentHole = (score: ScoreLike, holeCount: number) => {
+  const completedHoleCount = score.holeScores.slice(0, holeCount).filter((holeScore) => holeScore > 0).length;
+  return hasFinishedScore(score, holeCount) ? holeCount : Math.min(holeCount, completedHoleCount + 1);
+};
+
+const scoreArraysConflict = (left: number[], right: number[]) => {
+  const checkedLength = Math.max(left.length, right.length);
+
+  for (let index = 0; index < checkedLength; index += 1) {
+    const leftScore = Number(left[index]) || 0;
+    const rightScore = Number(right[index]) || 0;
+
+    if (leftScore > 0 && rightScore > 0 && leftScore !== rightScore) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const hasScoreConflict = (scores: ScoreLike[]) => {
+  const scoresByPlayerId = new Map<string, ScoreLike[]>();
+  scores.forEach((score) => {
+    scoresByPlayerId.set(score.playerId, [...(scoresByPlayerId.get(score.playerId) ?? []), score]);
+  });
+
+  return [...scoresByPlayerId.values()].some((playerScores) =>
+    playerScores.some((score, index) =>
+      playerScores.slice(index + 1).some((nextScore) => scoreArraysConflict(score.holeScores, nextScore.holeScores))
+    )
+  );
+};
+
 const summarizeGroups = (
   groupsByNumber: Map<number, GroupState>,
   scores: ScoreLike[],
-  holeCount: number
+  holeCount: number,
+  stalledTimeoutMinutes: number,
+  now: Date
 ) => {
   const scoresByPlayerId = new Map<string, ScoreLike[]>();
   scores.forEach((score) => {
     scoresByPlayerId.set(score.playerId, [...(scoresByPlayerId.get(score.playerId) ?? []), score]);
   });
 
-  const groups = [...groupsByNumber.values()];
-  groups.forEach((group) => {
-    const playerScores = [...group.playerIds].flatMap((playerId) => scoresByPlayerId.get(playerId) ?? []);
+  const groups = [...groupsByNumber.values()]
+    .sort((left, right) => left.groupNumber - right.groupNumber)
+    .map((group): DirectorGroupStatus => {
+      const players = [...group.playersById.values()];
+      const playerScores = players.flatMap((player) => scoresByPlayerId.get(player.playerId) ?? []);
+      const lastScoreUpdateAt = getLatestTimestamp(playerScores.map((score) => score.receivedAt));
+      const isStarted = playerScores.some(hasStartedScore);
+      const isFinished =
+        players.length > 0 &&
+        players.every((player) =>
+          (scoresByPlayerId.get(player.playerId) ?? []).some((score) => hasFinishedScore(score, holeCount))
+        );
+      const needsReview = playerScores.some((score) => score.status === "review") || hasScoreConflict(playerScores);
+      const isStalled = isStarted && !isFinished && isOlderThanMinutes(lastScoreUpdateAt, now, stalledTimeoutMinutes);
+      const status: DirectorGroupStatusValue = isStalled
+        ? "Stalled"
+        : needsReview
+          ? "Needs Review"
+          : isFinished
+            ? "Finished"
+            : isStarted
+              ? "Playing"
+              : "Waiting";
+
+      group.started = isStarted;
+      group.finished = isFinished;
+
+      return {
+        groupNumber: group.groupNumber,
+        groupName: `Group ${group.groupNumber}`,
+        players,
+        currentHole: playerScores.length > 0
+          ? Math.max(...playerScores.map((score) => getScoreCurrentHole(score, holeCount)))
+          : 1,
+        status,
+        lastScoreUpdateAt,
+        isStalled,
+      };
+    });
+
+  const groupStates = [...groupsByNumber.values()];
+  groupStates.forEach((group) => {
+    const playerScores = [...group.playersById.keys()].flatMap((playerId) => scoresByPlayerId.get(playerId) ?? []);
     group.started = playerScores.some(hasStartedScore);
     group.finished =
-      group.playerIds.size > 0 &&
-      [...group.playerIds].every((playerId) =>
+      group.playersById.size > 0 &&
+      [...group.playersById.keys()].every((playerId) =>
         (scoresByPlayerId.get(playerId) ?? []).some((score) => hasFinishedScore(score, holeCount))
       );
   });
 
-  const groupsStarted = groups.filter((group) => group.started).length;
-  const groupsFinished = groups.filter((group) => group.finished).length;
+  const groupsStarted = groupStates.filter((group) => group.started).length;
+  const groupsFinished = groupStates.filter((group) => group.finished).length;
 
   return {
     totalGroups: groups.length,
     groupsStarted,
     groupsFinished,
     groupsInProgress: Math.max(0, groupsStarted - groupsFinished),
+    groups,
   };
 };
 
@@ -188,9 +309,13 @@ const loadScoreEntries = async (sharedTournamentId: string, roundNumber: number)
 const buildSummary = async ({
   aggregate,
   localTournament,
+  stalledTimeoutMinutes,
+  now,
 }: {
   aggregate: TournamentAggregate | null;
   localTournament: StoredTournament | null;
+  stalledTimeoutMinutes: number;
+  now: Date;
 }): Promise<DirectorTournamentSummary> => {
   const localTournamentId = localTournament?.id ?? aggregate?.localTournamentId ?? aggregate?.tournamentId ?? "";
   const localEnvelope = localTournamentId ? loadTournamentStorageEnvelope(localTournamentId) : null;
@@ -207,7 +332,13 @@ const buildSummary = async ({
   const roundNumber = Number(aggregate?.roundSetup?.roundNumber ?? localEnvelope?.uiState.scorecards.roundSetup.roundNumber) || 1;
   const scoreEntries = await loadScoreEntries(sharedTournamentId, roundNumber);
   const scores = [...scoreEntries.map(scoreEntryToScoreLike), ...getAggregateScores(aggregate)];
-  const groupSummary = summarizeGroups(buildGroups(aggregate, localEnvelope), scores, getHoleCount(aggregate, localEnvelope));
+  const groupSummary = summarizeGroups(
+    buildGroups(aggregate, localEnvelope),
+    scores,
+    getHoleCount(aggregate, localEnvelope),
+    stalledTimeoutMinutes,
+    now
+  );
 
   return {
     tournamentId: localTournamentId || sharedTournamentId,
@@ -225,8 +356,11 @@ const buildSummary = async ({
 };
 
 export const loadDirectorDashboardReadModel = async (
-  localTournaments: StoredTournament[]
+  localTournaments: StoredTournament[],
+  options: LoadDirectorDashboardReadModelOptions = {}
 ): Promise<DirectorDashboardReadModel> => {
+  const now = new Date();
+  const stalledTimeoutMinutes = Math.max(1, options.stalledTimeoutMinutes ?? defaultStalledTimeoutMinutes);
   const sharedAggregates = await loadSharedTournamentAggregates().catch((error) => {
     console.warn("[DirectorDashboardService] Unable to load shared tournament aggregates.", error);
     return [];
@@ -234,7 +368,7 @@ export const loadDirectorDashboardReadModel = async (
   const summariesById = new Map<string, DirectorTournamentSummary>();
 
   for (const aggregate of sharedAggregates) {
-    const summary = await buildSummary({ aggregate, localTournament: null });
+    const summary = await buildSummary({ aggregate, localTournament: null, stalledTimeoutMinutes, now });
     summariesById.set(summary.tournamentId || summary.sharedTournamentId, summary);
   }
 
@@ -242,7 +376,7 @@ export const loadDirectorDashboardReadModel = async (
     const sharedTournamentId = loadSharedTournamentIdFromStorage(tournament.id);
     const aggregate =
       sharedAggregates.find((item) => item.sharedTournamentId === sharedTournamentId || item.tournamentId === tournament.id) ?? null;
-    const summary = await buildSummary({ aggregate, localTournament: tournament });
+    const summary = await buildSummary({ aggregate, localTournament: tournament, stalledTimeoutMinutes, now });
     summariesById.set(summary.tournamentId || summary.sharedTournamentId, summary);
   }
 

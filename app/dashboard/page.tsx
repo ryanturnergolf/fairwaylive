@@ -6,6 +6,7 @@ import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAct
 import {
   loadDirectorDashboardReadModel,
   type DirectorDashboardReadModel,
+  type DirectorGroupStatusValue,
 } from "../lib/services/tournamentDirectorDashboardService";
 import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
 import {
@@ -48,6 +49,20 @@ const directorReadinessStyles: Record<string, string> = {
   Draft: "border-[#E8DCC8] bg-white text-[#51635C]",
   Error: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
 };
+
+const directorGroupStatusStyles: Record<DirectorGroupStatusValue, string> = {
+  Waiting: "border-[#E8DCC8] bg-white text-[#51635C]",
+  Playing: "border-[#2E6F76] bg-[#E6F3F1] text-[#0B3D2E]",
+  Finished: "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
+  "Needs Review": "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
+  Stalled: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
+};
+
+const configuredDirectorStalledTimeoutMinutes = Number(process.env.NEXT_PUBLIC_DIRECTOR_STALLED_TIMEOUT_MINUTES);
+const directorStalledTimeoutMinutes =
+  Number.isFinite(configuredDirectorStalledTimeoutMinutes) && configuredDirectorStalledTimeoutMinutes > 0
+    ? configuredDirectorStalledTimeoutMinutes
+    : 20;
 
 const formatDirectorTimestamp = (value: string | null) => {
   if (!value) {
@@ -181,7 +196,9 @@ export default function DashboardPage() {
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
 
   const refreshDirectorReadModel = (sourceTournaments: Tournament[]) =>
-    loadDirectorDashboardReadModel(sourceTournaments).then(setDirectorReadModel).catch((error) => {
+    loadDirectorDashboardReadModel(sourceTournaments, {
+      stalledTimeoutMinutes: directorStalledTimeoutMinutes,
+    }).then(setDirectorReadModel).catch((error) => {
       console.warn("[DirectorDashboardService] Unable to load director dashboard read model.", error);
     });
 
@@ -659,6 +676,67 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         ))}
+                      </div>
+
+                      <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-[#F8FBF8] p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#2E6F76]">
+                              Group Status
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                              Stalled after {directorStalledTimeoutMinutes} minutes without a score update.
+                            </p>
+                          </div>
+                          <span className="w-fit rounded-full border border-[#D6E0D8] bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                            {summary.groups.length} groups
+                          </span>
+                        </div>
+
+                        {summary.groups.length === 0 ? (
+                          <div className="mt-4 rounded-[16px] border border-[#E2E9E3] bg-white p-4 text-sm font-semibold text-[#51635C]">
+                            No groups are available yet.
+                          </div>
+                        ) : (
+                          <div className="mt-4 overflow-x-auto">
+                            <table className="min-w-full border-separate border-spacing-y-2 text-left">
+                              <thead className="text-[10px] font-black uppercase tracking-[0.24em] text-[#51635C]">
+                                <tr>
+                                  <th className="px-3 py-2">Group</th>
+                                  <th className="px-3 py-2">Players</th>
+                                  <th className="px-3 py-2">Current Hole</th>
+                                  <th className="px-3 py-2">Status</th>
+                                  <th className="px-3 py-2">Last Score Update</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-sm">
+                                {summary.groups.map((group) => (
+                                  <tr key={`${summary.tournamentId}-${group.groupNumber}`} className={group.isStalled ? "bg-[#FFF4F1]" : "bg-white"}>
+                                    <td className="rounded-l-[16px] border-y border-l border-[#E2E9E3] px-3 py-3 font-black text-[#0B3D2E]">
+                                      {group.groupName}
+                                    </td>
+                                    <td className="border-y border-[#E2E9E3] px-3 py-3 text-[#51635C]">
+                                      {group.players.length > 0
+                                        ? group.players.map((player) => player.playerName).join(", ")
+                                        : "Players not assigned"}
+                                    </td>
+                                    <td className="border-y border-[#E2E9E3] px-3 py-3 font-black text-[#0B3D2E]">
+                                      {group.currentHole}
+                                    </td>
+                                    <td className="border-y border-[#E2E9E3] px-3 py-3">
+                                      <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${directorGroupStatusStyles[group.status]}`}>
+                                        {group.status}
+                                      </span>
+                                    </td>
+                                    <td className="rounded-r-[16px] border-y border-r border-[#E2E9E3] px-3 py-3 font-semibold text-[#51635C]">
+                                      {formatDirectorTimestamp(group.lastScoreUpdateAt)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </article>
                   );
