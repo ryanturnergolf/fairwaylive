@@ -9,6 +9,10 @@ import {
   type DirectorGroupStatusValue,
   type DirectorReviewSeverity,
 } from "../lib/services/tournamentDirectorDashboardService";
+import {
+  loadTournamentFinalizationStatus,
+  type TournamentFinalizationStatus,
+} from "../lib/services/tournamentFinalizationService";
 import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
 import {
   buildTournamentStorageEnvelope,
@@ -43,6 +47,8 @@ const emptyDirectorReadModel: DirectorDashboardReadModel = {
   tournaments: [],
 };
 
+type TournamentFinalizationStatusById = Record<string, TournamentFinalizationStatus>;
+
 const directorReadinessStyles: Record<string, string> = {
   Ready: "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
   Warning: "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
@@ -69,6 +75,11 @@ const directorCompletionStateStyles: Record<string, string> = {
   "Nearly Complete": "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
   "Ready to Close": "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
   Complete: "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]",
+};
+
+const finalizationStatusStyles = {
+  eligible: "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]",
+  blocked: "border-[#8A2E2E] bg-[#FFF4F1] text-[#8A2E2E]",
 };
 
 const configuredDirectorStalledTimeoutMinutes = Number(process.env.NEXT_PUBLIC_DIRECTOR_STALLED_TIMEOUT_MINUTES);
@@ -201,6 +212,7 @@ export default function DashboardPage() {
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [directorReadModel, setDirectorReadModel] = useState<DirectorDashboardReadModel>(emptyDirectorReadModel);
+  const [finalizationStatuses, setFinalizationStatuses] = useState<TournamentFinalizationStatusById>({});
   const [templates, setTemplates] = useState<TournamentTemplate[]>(() => loadTemplatesFromStorage());
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
@@ -211,7 +223,28 @@ export default function DashboardPage() {
   const refreshDirectorReadModel = (sourceTournaments: Tournament[]) =>
     loadDirectorDashboardReadModel(sourceTournaments, {
       stalledTimeoutMinutes: directorStalledTimeoutMinutes,
-    }).then(setDirectorReadModel).catch((error) => {
+    }).then((readModel) => {
+      setDirectorReadModel(readModel);
+
+      void Promise.all(
+        readModel.tournaments.map(async (summary) => {
+          const localTournament = sourceTournaments.find((tournament) => tournament.id === summary.tournamentId) ?? null;
+          const status = await loadTournamentFinalizationStatus({
+            tournamentId: summary.tournamentId,
+            sharedTournamentId: summary.sharedTournamentId,
+            localTournament,
+          });
+
+          return [summary.tournamentId || summary.sharedTournamentId, status] as const;
+        })
+      )
+        .then((entries) => {
+          setFinalizationStatuses(Object.fromEntries(entries));
+        })
+        .catch((error) => {
+          console.warn("[TournamentFinalizationService] Unable to load tournament finalization status.", error);
+        });
+    }).catch((error) => {
       console.warn("[DirectorDashboardService] Unable to load director dashboard read model.", error);
     });
 
@@ -648,6 +681,17 @@ export default function DashboardPage() {
                     ["Last snapshot time", formatDirectorTimestamp(summary.lastSnapshotAt)],
                     ["Last player sync time", formatDirectorTimestamp(summary.lastPlayerSyncAt)],
                   ];
+                  const finalizationStatus = finalizationStatuses[summary.tournamentId || summary.sharedTournamentId];
+                  const finalizationCounts = finalizationStatus
+                    ? [
+                        ["Groups", `${finalizationStatus.summaryCounts.groupsFinished}/${finalizationStatus.summaryCounts.totalGroups} finished`],
+                        ["Scorecards", `${finalizationStatus.summaryCounts.scorecardsComplete}/${finalizationStatus.summaryCounts.totalScorecards} complete`],
+                        ["Required scores", `${finalizationStatus.summaryCounts.requiredScoresSubmitted}/${finalizationStatus.summaryCounts.requiredScoresTotal} submitted`],
+                        ["Open reviews", finalizationStatus.summaryCounts.reviewQueueItems],
+                        ["Remaining holes", finalizationStatus.summaryCounts.holesRemaining],
+                        ["Snapshot current", finalizationStatus.summaryCounts.snapshotCurrent ? "Yes" : "No"],
+                      ]
+                    : [];
 
                   return (
                     <article key={`${summary.tournamentId}-${summary.sharedTournamentId}`} className="rounded-[24px] border border-[#D6E0D8] bg-white p-5">
@@ -743,6 +787,107 @@ export default function DashboardPage() {
                             </div>
                           ))}
                         </div>
+                      </div>
+
+                      <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-white p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#2E6F76]">
+                              Tournament Finalization
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                              Eligibility checks for tournament closeout.
+                            </p>
+                          </div>
+                          {finalizationStatus ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${finalizationStatus.eligible ? finalizationStatusStyles.eligible : finalizationStatusStyles.blocked}`}>
+                                {finalizationStatus.eligible ? "Eligible" : "Not Eligible"}
+                              </span>
+                              <span className="w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                                Last checked {formatDirectorTimestamp(finalizationStatus.checkedAt)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                              Checking
+                            </span>
+                          )}
+                        </div>
+
+                        {finalizationStatus ? (
+                          <>
+                            {finalizationStatus.eligible ? (
+                              <div className="mt-4 rounded-[18px] border border-[#0B3D2E] bg-[#E6F3F1] p-4">
+                                <p className="text-sm font-black uppercase tracking-[0.22em] text-[#0B3D2E]">
+                                  Ready to Finalize Tournament
+                                </p>
+                                <p className="mt-2 text-sm font-semibold text-[#51635C]">
+                                  No blocking finalization issues remain.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="mt-4 rounded-[18px] border border-[#8A2E2E] bg-[#FFF4F1] p-4">
+                                <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8A2E2E]">
+                                  Remaining Blocking Issues
+                                </p>
+                                <ul className="mt-3 space-y-2">
+                                  {finalizationStatus.blockingReasons.map((reason) => (
+                                    <li key={`${reason.code}-${reason.message}`} className="rounded-[14px] border border-[#E8C6BE] bg-white px-4 py-3 text-sm font-semibold text-[#51635C]">
+                                      <span className="font-black text-[#8A2E2E]">{reason.message}</span>
+                                      {typeof reason.count === "number" ? ` Count: ${reason.count}.` : ""}
+                                      {typeof reason.expected === "number" && typeof reason.actual === "number"
+                                        ? ` Progress: ${reason.actual}/${reason.expected}.`
+                                        : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                              {finalizationCounts.map(([label, value]) => (
+                                <div key={label} className="rounded-[16px] border border-[#E2E9E3] bg-[#F8FBF8] p-4">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                                    {label}
+                                  </p>
+                                  <p className="mt-2 text-lg font-black tracking-[-0.02em] text-[#0B3D2E]">
+                                    {value}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="mt-4 rounded-[18px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                                  Warnings
+                                </p>
+                                <span className="w-fit rounded-full border border-[#E3D4B7] bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                                  {finalizationStatus.warnings.length} warnings
+                                </span>
+                              </div>
+                              {finalizationStatus.warnings.length === 0 ? (
+                                <p className="mt-3 text-sm font-semibold text-[#51635C]">
+                                  No finalization warnings.
+                                </p>
+                              ) : (
+                                <ul className="mt-3 space-y-2">
+                                  {finalizationStatus.warnings.map((warning) => (
+                                    <li key={`${warning.code}-${warning.message}`} className="rounded-[14px] border border-[#E8DCC8] bg-white px-4 py-3 text-sm font-semibold text-[#51635C]">
+                                      {warning.message}
+                                      {typeof warning.count === "number" ? ` Count: ${warning.count}.` : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="mt-4 rounded-[16px] border border-[#E2E9E3] bg-[#F8FBF8] p-4 text-sm font-semibold text-[#51635C]">
+                            Finalization checks are loading.
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-6 rounded-[20px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
