@@ -53,6 +53,7 @@ export type SyncTournamentStateSnapshotInput = {
 export type TournamentStateSnapshotResult = {
   envelope: TournamentStorageEnvelope;
   localTournamentId: string;
+  updatedAt: string | null;
   tournamentId: string;
 };
 
@@ -63,6 +64,7 @@ export type TournamentAggregate = {
   tournament: StoredTournament;
   tournamentRow: TournamentRow | null;
   envelope: TournamentStorageEnvelope | null;
+  snapshotUpdatedAt: string | null;
   source: "snapshot" | "shared";
   teams: TournamentStorageEnvelope["tournament"]["teams"];
   players: TournamentStorageEnvelope["tournament"]["players"];
@@ -131,6 +133,7 @@ const tournamentAggregateFromRow = (row: TournamentRow): TournamentAggregate => 
     tournament,
     tournamentRow: row,
     envelope: null,
+    snapshotUpdatedAt: null,
     source: "shared",
     teams: [],
     players: [],
@@ -369,6 +372,7 @@ export const loadTournamentStateSnapshot = async (
   return {
     envelope: row.state_snapshot,
     localTournamentId: row.local_tournament_id || "",
+    updatedAt: row.updated_at,
     tournamentId: row.tournament_id,
   };
 };
@@ -450,6 +454,7 @@ const loadTournamentAggregate = async (
     tournament,
     tournamentRow,
     envelope,
+    snapshotUpdatedAt: snapshot?.updatedAt ?? null,
     source: snapshot ? "snapshot" : "shared",
     teams: envelope?.tournament.teams ?? [],
     players: envelope?.tournament.players ?? [],

@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
+import {
+  loadDirectorDashboardReadModel,
+  type DirectorDashboardReadModel,
+} from "../lib/services/tournamentDirectorDashboardService";
 import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
 import {
   buildTournamentStorageEnvelope,
@@ -31,6 +35,37 @@ const formatOptions = [
 
 const eventTypeOptions = ["Team Event", "Individual Event", "Both"];
 const steps = ["Basic Information", "Format", "Round Setup", "Integrations", "Review"];
+
+const emptyDirectorReadModel: DirectorDashboardReadModel = {
+  generatedAt: "",
+  tournaments: [],
+};
+
+const directorReadinessStyles: Record<string, string> = {
+  Ready: "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
+  Warning: "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
+  Syncing: "border-[#B8892D] bg-[#F6F1E6] text-[#0B3D2E]",
+  Draft: "border-[#E8DCC8] bg-white text-[#51635C]",
+  Error: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
+};
+
+const formatDirectorTimestamp = (value: string | null) => {
+  if (!value) {
+    return "Not available";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+};
 
 type Tournament = StoredTournament & { settings: FormState };
 
@@ -137,6 +172,7 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [directorReadModel, setDirectorReadModel] = useState<DirectorDashboardReadModel>(emptyDirectorReadModel);
   const [templates, setTemplates] = useState<TournamentTemplate[]>(() => loadTemplatesFromStorage());
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
@@ -144,11 +180,17 @@ export default function DashboardPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
 
+  const refreshDirectorReadModel = (sourceTournaments: Tournament[]) =>
+    loadDirectorDashboardReadModel(sourceTournaments).then(setDirectorReadModel).catch((error) => {
+      console.warn("[DirectorDashboardService] Unable to load director dashboard read model.", error);
+    });
+
   useEffect(() => {
     let isCancelled = false;
     const localTournaments = loadTournamentsFromStorage() as Tournament[];
     setTournaments(localTournaments);
     setIsClientMounted(true);
+    void refreshDirectorReadModel(localTournaments);
 
     void loadTournamentList(localTournaments, (tournament) => ({
       ...tournament,
@@ -157,6 +199,7 @@ export default function DashboardPage() {
       .then((loadedTournaments) => {
         if (!isCancelled) {
           setTournaments(loadedTournaments);
+          void refreshDirectorReadModel(loadedTournaments);
         }
       })
       .catch((error) => {
@@ -167,6 +210,20 @@ export default function DashboardPage() {
       isCancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isClientMounted) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshDirectorReadModel(tournaments);
+    }, 30000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isClientMounted, tournaments]);
 
   const saveTemplates = (nextValue: SetStateAction<TournamentTemplate[]>) => {
     setTemplates((current) => {
@@ -192,7 +249,9 @@ export default function DashboardPage() {
     const seededTournament = seedTestTournament();
 
     if (seededTournament) {
-      setTournaments(loadTournamentsFromStorage() as Tournament[]);
+      const nextTournaments = loadTournamentsFromStorage() as Tournament[];
+      setTournaments(nextTournaments);
+      void refreshDirectorReadModel(nextTournaments);
     }
   };
 
@@ -381,6 +440,7 @@ export default function DashboardPage() {
     }
 
     saveTournaments((current) => [newTournament, ...current]);
+    void refreshDirectorReadModel([newTournament, ...tournaments]);
     setIsCreatingTournament(false);
     closeModal();
   };
@@ -446,6 +506,9 @@ export default function DashboardPage() {
           </Link>
           <a className="transition duration-300 hover:text-[#B8892D]" href="#">
             Tournaments
+          </a>
+          <a className="transition duration-300 hover:text-[#B8892D]" href="#director">
+            Director
           </a>
           <a className="transition duration-300 hover:text-[#B8892D]" href="#">
             Features
@@ -521,6 +584,88 @@ export default function DashboardPage() {
               Import Teams
             </a>
           </div>
+
+          <section id="director" className="mt-10 rounded-[32px] border border-[#D6E0D8] bg-[#F8FBF8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#2E6F76]">
+                  Director
+                </p>
+                <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                  Tournament Director Dashboard
+                </h3>
+              </div>
+              <div className="rounded-full border border-[#D6E0D8] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-[#51635C]">
+                Updated {directorReadModel.generatedAt ? formatDirectorTimestamp(directorReadModel.generatedAt) : "after load"}
+              </div>
+            </div>
+
+            {directorReadModel.tournaments.length === 0 ? (
+              <div className="mt-6 rounded-[24px] border border-[#D6E0D8] bg-white p-6 text-sm font-semibold text-[#51635C]">
+                Director awareness will appear here after a tournament is created or loaded.
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-5">
+                {directorReadModel.tournaments.map((summary) => {
+                  const directorMetrics = [
+                    ["Total groups", summary.totalGroups],
+                    ["Groups started", summary.groupsStarted],
+                    ["Groups finished", summary.groupsFinished],
+                    ["Groups in progress", summary.groupsInProgress],
+                  ];
+                  const directorTimes = [
+                    ["Last score received", formatDirectorTimestamp(summary.lastScoreReceivedAt)],
+                    ["Last snapshot time", formatDirectorTimestamp(summary.lastSnapshotAt)],
+                    ["Last player sync time", formatDirectorTimestamp(summary.lastPlayerSyncAt)],
+                  ];
+
+                  return (
+                    <article key={`${summary.tournamentId}-${summary.sharedTournamentId}`} className="rounded-[24px] border border-[#D6E0D8] bg-white p-5">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                            Director view
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                            {summary.tournamentName}
+                          </p>
+                        </div>
+                        <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${directorReadinessStyles[summary.readiness.status]}`}>
+                          Readiness {summary.readiness.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {directorMetrics.map(([label, value]) => (
+                          <div key={label} className="rounded-[18px] border border-[#E2E9E3] bg-[#F8FBF8] p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
+                              {label}
+                            </p>
+                            <p className="mt-2 text-3xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                              {value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-5 grid gap-3 lg:grid-cols-3">
+                        {directorTimes.map(([label, value]) => (
+                          <div key={label} className="rounded-[18px] border border-[#E2E9E3] bg-[#FCFAF5] p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
+                              {label}
+                            </p>
+                            <p className="mt-2 text-sm font-black text-[#0B3D2E]">
+                              {value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
           {!isClientMounted || tournaments.length === 0 ? (
             <div className="mt-10 rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-10 text-center shadow-inner">
@@ -599,7 +744,9 @@ export default function DashboardPage() {
                         if (typeof window !== "undefined") {
                           window.localStorage.removeItem(getTournamentStateStorageKey(tournament.id));
                         }
-                        saveTournaments((current) => current.filter((item) => item.id !== tournament.id));
+                        const nextTournaments = tournaments.filter((item) => item.id !== tournament.id);
+                        saveTournaments(nextTournaments);
+                        void refreshDirectorReadModel(nextTournaments);
                       }}
                       className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                     >
