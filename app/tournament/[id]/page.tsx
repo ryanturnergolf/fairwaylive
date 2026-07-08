@@ -239,6 +239,17 @@ export default function TournamentPage() {
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    if (requestedTab && tabs.includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+  }, []);
+
   useClientMounted(setIsClientMounted);
   useTournamentMetadata({
     isClientMounted,

@@ -7,6 +7,7 @@ import {
   loadDirectorDashboardReadModel,
   type DirectorDashboardReadModel,
   type DirectorGroupStatusValue,
+  type DirectorReviewSeverity,
 } from "../lib/services/tournamentDirectorDashboardService";
 import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
 import {
@@ -56,6 +57,11 @@ const directorGroupStatusStyles: Record<DirectorGroupStatusValue, string> = {
   Finished: "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
   "Needs Review": "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
   Stalled: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
+};
+
+const directorReviewSeverityStyles: Record<DirectorReviewSeverity, string> = {
+  Warning: "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
+  Critical: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
 };
 
 const configuredDirectorStalledTimeoutMinutes = Number(process.env.NEXT_PUBLIC_DIRECTOR_STALLED_TIMEOUT_MINUTES);
@@ -676,6 +682,79 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         ))}
+                      </div>
+
+                      <div className="mt-6 rounded-[20px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                              Review Queue
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                              Groups with score conflicts, missing entries, incomplete holes, or finished rounds awaiting verification.
+                            </p>
+                          </div>
+                          <span className="w-fit rounded-full border border-[#E3D4B7] bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                            {summary.reviewQueue.length} open
+                          </span>
+                        </div>
+
+                        {summary.reviewQueue.length === 0 ? (
+                          <div className="mt-4 rounded-[16px] border border-[#E8DCC8] bg-white p-4 text-sm font-semibold text-[#51635C]">
+                            No groups need review.
+                          </div>
+                        ) : (
+                          <div className="mt-4 overflow-x-auto">
+                            <table className="min-w-full border-separate border-spacing-y-2 text-left">
+                              <thead className="text-[10px] font-black uppercase tracking-[0.24em] text-[#51635C]">
+                                <tr>
+                                  <th className="px-3 py-2">Group</th>
+                                  <th className="px-3 py-2">Players</th>
+                                  <th className="px-3 py-2">Current Hole</th>
+                                  <th className="px-3 py-2">Reasons</th>
+                                  <th className="px-3 py-2">Severity</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-sm">
+                                {summary.reviewQueue.map((item) => (
+                                  <tr
+                                    key={item.id}
+                                    tabIndex={0}
+                                    onClick={() => router.push(item.reviewHref)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        router.push(item.reviewHref);
+                                      }
+                                    }}
+                                    className="cursor-pointer bg-white outline-none transition duration-200 hover:bg-[#FFF8EA] focus:bg-[#FFF8EA]"
+                                    aria-label={`Open review location for ${item.groupName}`}
+                                  >
+                                    <td className="rounded-l-[16px] border-y border-l border-[#E8DCC8] px-3 py-3 font-black text-[#0B3D2E]">
+                                      {item.groupName}
+                                    </td>
+                                    <td className="border-y border-[#E8DCC8] px-3 py-3 text-[#51635C]">
+                                      {item.players.length > 0
+                                        ? item.players.map((player) => player.playerName).join(", ")
+                                        : "Players not assigned"}
+                                    </td>
+                                    <td className="border-y border-[#E8DCC8] px-3 py-3 font-black text-[#0B3D2E]">
+                                      {item.currentHole}
+                                    </td>
+                                    <td className="border-y border-[#E8DCC8] px-3 py-3 text-[#51635C]">
+                                      {item.reasons.join(", ")}
+                                    </td>
+                                    <td className="rounded-r-[16px] border-y border-r border-[#E8DCC8] px-3 py-3">
+                                      <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${directorReviewSeverityStyles[item.severity]}`}>
+                                        {item.severity}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-[#F8FBF8] p-4">

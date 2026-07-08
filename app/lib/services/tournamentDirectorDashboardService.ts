@@ -26,6 +26,7 @@ export type DirectorTournamentSummary = {
   groupsFinished: number;
   groupsInProgress: number;
   groups: DirectorGroupStatus[];
+  reviewQueue: DirectorReviewQueueItem[];
   lastScoreReceivedAt: string | null;
   lastSnapshotAt: string | null;
   lastPlayerSyncAt: string | null;
@@ -49,6 +50,28 @@ export type DirectorGroupStatus = {
   isStalled: boolean;
 };
 
+export type DirectorReviewSeverity = "Warning" | "Critical";
+
+export type DirectorReviewReason =
+  | "Self score \u2260 Marker score"
+  | "Missing player score"
+  | "Missing marker score"
+  | "Incomplete hole"
+  | "Round finished but not verified";
+
+export type DirectorReviewQueueItem = {
+  id: string;
+  tournamentId: string;
+  sharedTournamentId: string;
+  groupNumber: number;
+  groupName: string;
+  players: DirectorGroupPlayer[];
+  currentHole: number;
+  reasons: DirectorReviewReason[];
+  severity: DirectorReviewSeverity;
+  reviewHref: string;
+};
+
 export type DirectorDashboardReadModel = {
   generatedAt: string;
   tournaments: DirectorTournamentSummary[];
@@ -64,6 +87,7 @@ type GroupState = {
 type ScoreLike = {
   playerId: string;
   enteredByPlayerId: string;
+  entryKind: "self" | "marker" | null;
   holeScores: number[];
   status: string;
   receivedAt: string | null;
@@ -162,6 +186,7 @@ const buildGroups = (
 const scoreEntryToScoreLike = (entry: ScoreEntryRow): ScoreLike => ({
   playerId: String(entry.player_id),
   enteredByPlayerId: String(entry.entered_by_player_id),
+  entryKind: String(entry.entered_by_player_id) === String(entry.player_id) ? "self" : "marker",
   holeScores: Array.isArray(entry.hole_scores) ? entry.hole_scores.map((score) => Number(score) || 0) : [],
   status: entry.entry_status,
   receivedAt: entry.submitted_at ?? entry.updated_at ?? entry.created_at,
@@ -171,6 +196,7 @@ const getAggregateScores = (aggregate: TournamentAggregate | null): ScoreLike[] 
   (aggregate?.scores ?? []).map((score) => ({
     playerId: String(score.playerId),
     enteredByPlayerId: score.enteredBy,
+    entryKind: score.enteredBy,
     holeScores: Array.isArray(score.holeScores) ? score.holeScores.map((value) => Number(value) || 0) : [],
     status: score.status,
     receivedAt: null,
@@ -218,6 +244,127 @@ const hasScoreConflict = (scores: ScoreLike[]) => {
       playerScores.slice(index + 1).some((nextScore) => scoreArraysConflict(score.holeScores, nextScore.holeScores))
     )
   );
+};
+
+const addReviewReason = (reasons: Set<DirectorReviewReason>, reason: DirectorReviewReason) => {
+  reasons.add(reason);
+};
+
+const getScoresByKind = (scores: ScoreLike[], kind: "self" | "marker") =>
+  scores.filter((score) => score.entryKind === kind || (!score.entryKind && score.enteredByPlayerId === kind));
+
+const hasAnyHoleScore = (score: ScoreLike | undefined) =>
+  Boolean(score?.holeScores.some((holeScore) => holeScore > 0));
+
+const getBestScore = (scores: ScoreLike[]) =>
+  [...scores].sort((left, right) => Date.parse(right.receivedAt ?? "") - Date.parse(left.receivedAt ?? ""))[0];
+
+const getReviewSeverity = (reasons: Set<DirectorReviewReason>): DirectorReviewSeverity =>
+  reasons.has("Self score \u2260 Marker score") ||
+  reasons.has("Missing player score") ||
+  reasons.has("Missing marker score") ||
+  reasons.has("Incomplete hole")
+    ? "Critical"
+    : "Warning";
+
+const getTournamentReviewHref = (tournamentId: string, groupNumber: number) => {
+  const params = new URLSearchParams({
+    tab: "Live Scoring",
+    review: "1",
+    group: String(groupNumber),
+  });
+
+  return `/tournament/${encodeURIComponent(tournamentId)}?${params.toString()}`;
+};
+
+const buildReviewQueue = (
+  groups: DirectorGroupStatus[],
+  scores: ScoreLike[],
+  holeCount: number,
+  tournamentId: string,
+  sharedTournamentId: string
+): DirectorReviewQueueItem[] => {
+  const scoresByPlayerId = new Map<string, ScoreLike[]>();
+  scores.forEach((score) => {
+    scoresByPlayerId.set(score.playerId, [...(scoresByPlayerId.get(score.playerId) ?? []), score]);
+  });
+
+  return groups
+    .map((group): DirectorReviewQueueItem | null => {
+      const reasons = new Set<DirectorReviewReason>();
+      const playerScores = group.players.flatMap((player) => scoresByPlayerId.get(player.playerId) ?? []);
+      const groupHasStarted = playerScores.some(hasStartedScore);
+      const groupFinished =
+        group.players.length > 0 &&
+        group.players.every((player) =>
+          (scoresByPlayerId.get(player.playerId) ?? []).some((score) => hasFinishedScore(score, holeCount))
+        );
+
+      if (!groupHasStarted) {
+        return null;
+      }
+
+      group.players.forEach((player) => {
+        const playerScoresForReview = scoresByPlayerId.get(player.playerId) ?? [];
+        const selfScore = getBestScore(getScoresByKind(playerScoresForReview, "self"));
+        const markerScore = getBestScore(getScoresByKind(playerScoresForReview, "marker"));
+        const selfHasAny = hasAnyHoleScore(selfScore);
+        const markerHasAny = hasAnyHoleScore(markerScore);
+
+        if (!selfHasAny && markerHasAny) {
+          addReviewReason(reasons, "Missing player score");
+        }
+
+        if (selfHasAny && !markerHasAny) {
+          addReviewReason(reasons, "Missing marker score");
+        }
+
+        if (selfScore && markerScore && scoreArraysConflict(selfScore.holeScores, markerScore.holeScores)) {
+          addReviewReason(reasons, "Self score \u2260 Marker score");
+        }
+
+        for (let index = 0; index < holeCount; index += 1) {
+          const selfHoleScore = Number(selfScore?.holeScores[index]) || 0;
+          const markerHoleScore = Number(markerScore?.holeScores[index]) || 0;
+          if ((selfHoleScore > 0 || markerHoleScore > 0) && (selfHoleScore === 0 || markerHoleScore === 0)) {
+            addReviewReason(reasons, "Incomplete hole");
+            break;
+          }
+        }
+      });
+
+      const hasSubmittedOrVerifiedScore = playerScores.some((score) =>
+        ["submitted", "verified", "official"].includes(score.status)
+      );
+      if (groupFinished && !hasSubmittedOrVerifiedScore) {
+        addReviewReason(reasons, "Round finished but not verified");
+      }
+
+      if (reasons.size === 0) {
+        return null;
+      }
+
+      return {
+        id: `${tournamentId || sharedTournamentId}-group-${group.groupNumber}`,
+        tournamentId,
+        sharedTournamentId,
+        groupNumber: group.groupNumber,
+        groupName: group.groupName,
+        players: group.players,
+        currentHole: group.currentHole,
+        reasons: [...reasons],
+        severity: getReviewSeverity(reasons),
+        reviewHref: getTournamentReviewHref(tournamentId || sharedTournamentId, group.groupNumber),
+      };
+    })
+    .filter((item): item is DirectorReviewQueueItem => Boolean(item))
+    .sort((left, right) => {
+      if (left.severity !== right.severity) {
+        return left.severity === "Critical" ? -1 : 1;
+      }
+
+      return left.groupNumber - right.groupNumber;
+    });
 };
 
 const summarizeGroups = (
@@ -332,10 +479,11 @@ const buildSummary = async ({
   const roundNumber = Number(aggregate?.roundSetup?.roundNumber ?? localEnvelope?.uiState.scorecards.roundSetup.roundNumber) || 1;
   const scoreEntries = await loadScoreEntries(sharedTournamentId, roundNumber);
   const scores = [...scoreEntries.map(scoreEntryToScoreLike), ...getAggregateScores(aggregate)];
+  const holeCount = getHoleCount(aggregate, localEnvelope);
   const groupSummary = summarizeGroups(
     buildGroups(aggregate, localEnvelope),
     scores,
-    getHoleCount(aggregate, localEnvelope),
+    holeCount,
     stalledTimeoutMinutes,
     now
   );
@@ -347,6 +495,13 @@ const buildSummary = async ({
     course: localTournament?.course ?? aggregate?.tournament.course ?? "",
     readiness,
     ...groupSummary,
+    reviewQueue: buildReviewQueue(
+      groupSummary.groups,
+      scores,
+      holeCount,
+      localTournamentId || sharedTournamentId,
+      sharedTournamentId
+    ),
     lastScoreReceivedAt: getLatestTimestamp(scores.map((score) => score.receivedAt)),
     lastSnapshotAt: aggregate?.snapshotUpdatedAt ?? null,
     lastPlayerSyncAt: getLatestTimestamp(
