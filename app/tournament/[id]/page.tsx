@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { getTournamentStateStorageKey } from "../../lib/tournamentStorage";
 import {
   normalizeTournamentRoundSetup,
 } from "../../lib/services/tournamentDerivedState";
+import {
+  loadTournamentReadiness,
+  type TournamentReadiness,
+  type TournamentReadinessChecks,
+  type TournamentReadinessStatus,
+} from "../../lib/services/tournamentReadinessService";
 import {
   isValidPairingMutation,
   normalizePairings,
@@ -84,6 +90,38 @@ const defaultClippdExportState: ClippdExportState = {
 };
 
 const defaultTeamColor = "#0B3D2E";
+
+const readinessCheckLabels: Record<keyof TournamentReadinessChecks, string> = {
+  tournamentExists: "Tournament metadata available",
+  sharedTournamentUuidPresent: "Shared tournament UUID available",
+  playersSynced: "Players synced for shared scoring",
+  pairingsGenerated: "Pairings generated",
+  scorecardsGenerated: "Scorecards generated",
+  latestSnapshotAvailable: "Shared state snapshot available",
+};
+
+const readinessStatusStyles: Record<TournamentReadinessStatus, string> = {
+  Draft: "border-[#D8C8AA] bg-[#F6F1E6] text-[#725D37]",
+  Syncing: "border-[#7DA7BE] bg-[#EDF6FA] text-[#255D78]",
+  Ready: "border-[#77B98E] bg-[#ECF8EF] text-[#146233]",
+  Warning: "border-[#E0B14F] bg-[#FFF7E3] text-[#7A5610]",
+  Error: "border-[#D9857F] bg-[#FFF0EE] text-[#8D2D24]",
+};
+
+const readinessCheckEntries = Object.entries(readinessCheckLabels) as [keyof TournamentReadinessChecks, string][];
+
+const formatReadinessCheckedAt = (checkedAt: string) => {
+  const checkedDate = new Date(checkedAt);
+
+  if (Number.isNaN(checkedDate.getTime())) {
+    return "Not checked yet";
+  }
+
+  return checkedDate.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
 
 type TournamentMeta = {
   id: string;
@@ -164,6 +202,7 @@ export default function TournamentPage() {
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
+  const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
   const [autoRepairState, setAutoRepairState] = useState<AutoRepairState>({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -256,6 +295,39 @@ export default function TournamentPage() {
     roundNumber: roundSetup.roundNumber,
     setScorecardRows,
   });
+
+  useEffect(() => {
+    if (!isClientMounted || !tournamentId) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const refreshReadiness = async () => {
+      const readiness = await loadTournamentReadiness(tournamentId, sharedTournamentId);
+
+      if (!isCancelled) {
+        setTournamentReadiness(readiness);
+      }
+    };
+
+    void refreshReadiness();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    isClientMounted,
+    pairings.length,
+    players.length,
+    scorecardRows.length,
+    scorecardsGenerated,
+    sharedTournamentId,
+    tournamentId,
+  ]);
+
+  const readinessOpenItems = tournamentReadiness?.reasons.filter((reason) => reason.severity !== "pass") ?? [];
+  const readinessBlockingReasons = tournamentReadiness?.reasons.filter((reason) => reason.severity === "error" || reason.severity === "warning") ?? [];
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);
@@ -613,6 +685,83 @@ export default function TournamentPage() {
                 </button>
               ))}
             </div>
+
+            <section className="mt-4 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                      Tournament Readiness
+                    </p>
+                    <span className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] ${tournamentReadiness ? readinessStatusStyles[tournamentReadiness.status] : readinessStatusStyles.Syncing}`}>
+                      {tournamentReadiness?.status ?? "Syncing"}
+                    </span>
+                    {tournamentReadiness?.isSafeToShare ? (
+                      <span className="rounded-full border border-[#77B98E] bg-[#ECF8EF] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#146233]">
+                        Ready for Mobile Scoring
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-[#51635C]">
+                    Last checked: {tournamentReadiness ? formatReadinessCheckedAt(tournamentReadiness.checkedAt) : "Checking..."}
+                  </p>
+                  <p className="mt-3 text-sm leading-6 text-[#51635C]">
+                    {tournamentReadiness?.isSafeToShare
+                      ? "Shared tournament data is ready for coaches and players to use on mobile scorecards."
+                      : readinessOpenItems.length > 0
+                        ? `Remaining: ${readinessOpenItems.map((reason) => reason.message).join(" ")}`
+                        : "Checking tournament data before mobile scoring is shared."}
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:w-[560px]">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
+                      Checklist
+                    </p>
+                    <div className="mt-2 grid gap-2">
+                      {readinessCheckEntries.map(([checkKey, label]) => {
+                        const hasPassed = Boolean(tournamentReadiness?.checks[checkKey]);
+
+                        return (
+                          <div key={checkKey} className="flex items-center justify-between gap-3 rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                            <span className="text-xs font-bold text-[#0B3D2E]">{label}</span>
+                            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${hasPassed ? "bg-[#ECF8EF] text-[#146233]" : "bg-[#F6F1E6] text-[#725D37]"}`}>
+                              {hasPassed ? "Pass" : "Open"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
+                      Blocking Reasons
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {readinessBlockingReasons.length > 0 ? (
+                        readinessBlockingReasons.map((reason) => (
+                          <div key={reason.code} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                            <p className="text-xs font-bold leading-5 text-[#51635C]">
+                              {reason.message}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                          <p className="text-xs font-bold leading-5 text-[#51635C]">
+                            {tournamentReadiness?.isSafeToShare
+                              ? "No blockers found."
+                              : "No hard blockers found. Complete the open checklist items before sharing."}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
 
           <div className="px-6 py-8 lg:px-10 lg:py-10">
