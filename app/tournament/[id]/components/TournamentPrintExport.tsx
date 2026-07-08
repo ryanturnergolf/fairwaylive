@@ -18,6 +18,11 @@ import {
   useQrCodeDataUrl,
 } from "../../../lib/hooks/tournamentPageHooks";
 import type { LegacyPairingGroup, LegacyScorecardRow } from "../../../lib/tournamentModel";
+import type {
+  TournamentReadiness,
+  TournamentReadinessChecks,
+  TournamentReadinessReason,
+} from "../../../lib/services/tournamentReadinessService";
 import type { ScorecardRow } from "./LiveScoringLeaderboard";
 
 export type ClippdExportState = {
@@ -73,6 +78,11 @@ type TournamentPrintExportProps = {
   setClippdExportState: SetState<ClippdExportState>;
   scoreboardImportState: ScoreboardImportState;
   setScoreboardImportState: SetState<ScoreboardImportState>;
+  tournamentReadiness: TournamentReadiness | null;
+  readinessCheckEntries: [keyof TournamentReadinessChecks, string][];
+  readinessBlockingReasons: TournamentReadinessReason[];
+  onRefreshReadiness: () => Promise<TournamentReadiness | null>;
+  isReadinessRefreshing: boolean;
   children: (controls: PrintExportControls) => ReactNode;
 };
 
@@ -100,10 +110,16 @@ export default function TournamentPrintExport({
   setClippdExportState,
   scoreboardImportState,
   setScoreboardImportState,
+  tournamentReadiness,
+  readinessCheckEntries,
+  readinessBlockingReasons,
+  onRefreshReadiness,
+  isReadinessRefreshing,
   children,
 }: TournamentPrintExportProps) {
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
   const [activeQrPlayer, setActiveQrPlayer] = useState<ScorecardRow | null>(null);
+  const [blockedQrPlayer, setBlockedQrPlayer] = useState<ScorecardRow | null>(null);
   const [activePrintPlayer, setActivePrintPlayer] = useState<ScorecardRow | null>(null);
   const [activeQrCodeDataUrl, setActiveQrCodeDataUrl] = useState("");
 
@@ -143,8 +159,11 @@ export default function TournamentPrintExport({
     [normalizedRoundSetup, pairings, scorecardRows]
   );
   const safeScorecardRows = Array.isArray(scorecardRows) ? scorecardRows : [];
+  const displayedReadinessBlockers = readinessBlockingReasons.length > 0
+    ? readinessBlockingReasons
+    : tournamentReadiness?.reasons.filter((reason) => reason.severity !== "pass") ?? [];
 
-  useBodyOverflowLock(Boolean(activeQrPlayer));
+  useBodyOverflowLock(Boolean(activeQrPlayer || blockedQrPlayer));
   useQrCodeDataUrl({
     shouldGenerate: Boolean(activeQrPlayer && isQrMobileScorecardReady),
     resolvedMobileScorecardUrl,
@@ -190,14 +209,39 @@ export default function TournamentPrintExport({
     closeScoreboardImportModal();
   };
 
-  const openQrModal = (player: ScorecardRow) => {
+  const openQrModal = async (player: ScorecardRow) => {
+    const readiness = tournamentReadiness?.isSafeToShare ? tournamentReadiness : await onRefreshReadiness();
+
+    if (!readiness?.isSafeToShare) {
+      setActiveQrCodeDataUrl("");
+      setActiveQrPlayer(null);
+      setBlockedQrPlayer(player);
+      return;
+    }
+
     setActiveQrCodeDataUrl("");
+    setBlockedQrPlayer(null);
     setActiveQrPlayer(player);
   };
 
   const closeQrModal = () => {
     setActiveQrCodeDataUrl("");
     setActiveQrPlayer(null);
+  };
+
+  const closeReadinessBlockedModal = () => {
+    setBlockedQrPlayer(null);
+  };
+
+  const handleRefreshBlockedReadiness = async () => {
+    const readiness = await onRefreshReadiness();
+
+    if (readiness?.isSafeToShare && blockedQrPlayer) {
+      const player = blockedQrPlayer;
+      setBlockedQrPlayer(null);
+      setActiveQrCodeDataUrl("");
+      setActiveQrPlayer(player);
+    }
   };
 
   const openPrintScorecardModal = (player: ScorecardRow) => {
@@ -414,6 +458,123 @@ export default function TournamentPrintExport({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {blockedQrPlayer ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-8 backdrop-blur-sm"
+          onClick={closeReadinessBlockedModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="readiness-blocked-title"
+            className="flex max-h-[calc(100vh-4rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
+                    Tournament Readiness
+                  </p>
+                  <h3 id="readiness-blocked-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    Sharing is blocked
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeReadinessBlockedModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                  aria-label="Close readiness modal"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-7 py-7">
+              <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-[#0B3D2E]">
+                      {blockedQrPlayer.playerName}
+                    </p>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-[#51635C]">
+                      This tournament is not Ready yet, so QR and mobile scorecard sharing are paused until the checklist passes.
+                    </p>
+                  </div>
+                  <span className="w-fit rounded-full border border-[#E0B14F] bg-[#FFF7E3] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#7A5610]">
+                    {tournamentReadiness?.status ?? "Checking"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
+                    Checklist
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {readinessCheckEntries.map(([checkKey, label]) => {
+                      const hasPassed = Boolean(tournamentReadiness?.checks[checkKey]);
+
+                      return (
+                        <div key={checkKey} className="flex items-center justify-between gap-3 rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                          <span className="text-xs font-bold text-[#0B3D2E]">{label}</span>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${hasPassed ? "bg-[#ECF8EF] text-[#146233]" : "bg-[#F6F1E6] text-[#725D37]"}`}>
+                            {hasPassed ? "Pass" : "Open"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
+                    Blocking Reasons
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {displayedReadinessBlockers.length > 0 ? (
+                      displayedReadinessBlockers.map((reason) => (
+                        <div key={reason.code} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                          <p className="text-xs font-bold leading-5 text-[#51635C]">
+                            {reason.message}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                        <p className="text-xs font-bold leading-5 text-[#51635C]">
+                          Readiness is being checked. Refresh to evaluate the latest shared tournament state.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeReadinessBlockedModal}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRefreshBlockedReadiness}
+                  disabled={isReadinessRefreshing}
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isReadinessRefreshing ? "Refreshing..." : "Refresh Readiness"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

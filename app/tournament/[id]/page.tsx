@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { getTournamentStateStorageKey } from "../../lib/tournamentStorage";
 import {
   normalizeTournamentRoundSetup,
@@ -203,6 +203,7 @@ export default function TournamentPage() {
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
   const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
+  const [isReadinessRefreshing, setIsReadinessRefreshing] = useState(false);
   const [autoRepairState, setAutoRepairState] = useState<AutoRepairState>({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -296,27 +297,25 @@ export default function TournamentPage() {
     setScorecardRows,
   });
 
-  useEffect(() => {
+  const refreshTournamentReadiness = useCallback(async () => {
     if (!isClientMounted || !tournamentId) {
-      return;
+      return null;
     }
 
-    let isCancelled = false;
-
-    const refreshReadiness = async () => {
+    setIsReadinessRefreshing(true);
+    try {
       const readiness = await loadTournamentReadiness(tournamentId, sharedTournamentId);
+      setTournamentReadiness(readiness);
+      return readiness;
+    } finally {
+      setIsReadinessRefreshing(false);
+    }
+  }, [isClientMounted, sharedTournamentId, tournamentId]);
 
-      if (!isCancelled) {
-        setTournamentReadiness(readiness);
-      }
-    };
-
-    void refreshReadiness();
-
-    return () => {
-      isCancelled = true;
-    };
+  useEffect(() => {
+    void refreshTournamentReadiness();
   }, [
+    refreshTournamentReadiness,
     isClientMounted,
     pairings.length,
     players.length,
@@ -828,6 +827,11 @@ export default function TournamentPage() {
                 setClippdExportState={setClippdExportState}
                 scoreboardImportState={scoreboardImportState}
                 setScoreboardImportState={setScoreboardImportState}
+                tournamentReadiness={tournamentReadiness}
+                readinessCheckEntries={readinessCheckEntries}
+                readinessBlockingReasons={readinessBlockingReasons}
+                onRefreshReadiness={refreshTournamentReadiness}
+                isReadinessRefreshing={isReadinessRefreshing}
               >
                 {({ onPrintTournamentScorecards, onOpenQrModal, onOpenPrintScorecardModal }) =>
                   activeTab === "Live Scoring" ? (

@@ -703,13 +703,8 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   });
 
   await page.route("**/rest/v1/tournaments?**", async (route) => {
-    if (route.request().method() !== "POST") {
-      await route.fallback();
-      return;
-    }
-
     await route.fulfill({
-      status: 201,
+      status: route.request().method() === "POST" ? 201 : 200,
       contentType: "application/json",
       body: JSON.stringify({
         id: sharedTournamentId,
@@ -725,6 +720,15 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
     });
   });
   await page.route("**/rest/v1/tournament_players**", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(syncedPlayerRows),
+      });
+      return;
+    }
+
     const postData = route.request().postDataJSON();
     if (Array.isArray(postData)) {
       syncedPlayerRows.push(...(postData as Array<Record<string, unknown>>));
@@ -754,7 +758,6 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
 
   await page.goto(`${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Live Scoring" }).click();
-  await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
   await expect.poll(() => storageErrors).toEqual([]);
   await expect.poll(() => syncedPlayerRows.length).toBeGreaterThan(0);
   expect(syncedPlayerRows.some((row) => row.tournament_id === sharedTournamentId && row.player_id === "player-1")).toBe(true);
@@ -771,6 +774,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   expect(stateSnapshot.tournament.pairings).toHaveLength(1);
   expect(stateSnapshot.uiState.scorecards.scorecardRows).toHaveLength(2);
 
+  await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
   await expect(page.getByText(new RegExp(`Scorecard URL: .*/scorecard/player-1\\?tournamentId=${sharedTournamentId}&pairing=1`))).toBeVisible();
