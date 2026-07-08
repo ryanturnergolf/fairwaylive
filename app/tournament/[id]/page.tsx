@@ -3,15 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { toDataURL } from "qrcode";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import {
-  getTournamentStateStorageKey,
-  loadSharedTournamentIdFromStorage,
-  loadTournamentsFromStorage,
-  loadTournamentStorageEnvelope,
-  type StoredTournament,
-} from "../../lib/tournamentStorage";
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { getTournamentStateStorageKey } from "../../lib/tournamentStorage";
 import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
 import {
   buildIndividualLeaderboard,
@@ -21,17 +14,12 @@ import {
   formatTotalToPar,
   normalizeTournamentRoundSetup,
 } from "../../lib/services/tournamentDerivedState";
-import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
   findPairingIndexByGroupId,
   findPairingPlayerLocation,
-  hydratePairingsWithPlayerIds,
   isValidPairingMutation,
-  loadTournamentPageState,
   normalizePairings,
-  persistTournamentPageState,
   snapshotPairings,
-  type TournamentPageLoadResult,
 } from "../../lib/services/tournamentService";
 import {
   buildImportedPlayers,
@@ -48,6 +36,17 @@ import {
   validatePlayerForm,
   validateTeamForm,
 } from "../../lib/services/tournamentPageHelpers";
+import {
+  useBodyOverflowLock,
+  useClientMounted,
+  useLatestTournamentPageState,
+  useQrCodeDataUrl,
+  useSharedScoreSynchronization,
+  useTournamentMetadata,
+  useTournamentPageLoading,
+  useTournamentPagePersistence,
+  useTournamentStoragePolling,
+} from "../../lib/hooks/tournamentPageHooks";
 
 const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
 
@@ -161,37 +160,6 @@ const defaultClippdExportState: ClippdExportState = {
 
 const defaultTeamColor = "#0B3D2E";
 
-type PersistedTournamentState = {
-  teams: Team[];
-  players: Player[];
-  pairings: PairingGroup[];
-  scorecards: {
-    scorecardsGenerated: boolean;
-    scorecardRows: ScorecardRow[];
-    roundSetup: RoundSetupState;
-  };
-  clippdExportState: ClippdExportState;
-  scoreboardImportState: {
-    tournamentId: string;
-    tournamentKey: string;
-    options: {
-      tournamentDetails: boolean;
-      teams: boolean;
-      players: boolean;
-      courseSetup: boolean;
-      scorecards: boolean;
-      teeTimes: boolean;
-      startingHoles: boolean;
-    };
-  };
-  autoRepairState: {
-    sourceRound: string;
-    targetRound: string;
-    pairingOrder: string;
-    teeTimeInterval: string;
-  };
-};
-
 type TournamentMeta = {
   id: string;
   name: string;
@@ -204,8 +172,6 @@ type TournamentMeta = {
   status: string;
   settings: unknown;
 };
-
-type SharedScoreEntry = Awaited<ReturnType<typeof loadComparisonScores>>[number];
 
 const createFallbackTournamentMeta = (tournamentId: string): TournamentMeta => ({
   id: tournamentId,
@@ -254,8 +220,6 @@ export default function TournamentPage() {
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>([]);
   const [pairings, setPairings] = useState<PairingGroup[]>([]);
   const [pairingsMessage, setPairingsMessage] = useState("");
-  const hasLoadedFromStorageRef = useRef(false);
-  const hydrationPendingRef = useRef(false);
   const previousValidPairingsRef = useRef<PairingGroup[] | null>(null);
   const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
@@ -279,8 +243,6 @@ export default function TournamentPage() {
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
-  const snapshotSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSnapshotSignatureRef = useRef("");
   const [autoRepairState, setAutoRepairState] = useState({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -288,17 +250,31 @@ export default function TournamentPage() {
     teeTimeInterval: "8 minutes",
   });
   const normalizedRoundSetup = normalizeTournamentRoundSetup(roundSetup, defaultRoundSetupState);
-  const latestStateRef = useRef({
-    teams,
-    players,
-    pairings,
-    scorecardsGenerated,
-    scorecardRows,
-    roundSetup,
-    clippdExportState,
-    scoreboardImportState,
-    autoRepairState,
-  });
+  const latestState = useMemo(
+    () => ({
+      teams,
+      players,
+      pairings,
+      scorecardsGenerated,
+      scorecardRows,
+      roundSetup,
+      clippdExportState,
+      scoreboardImportState,
+      autoRepairState,
+    }),
+    [
+      autoRepairState,
+      clippdExportState,
+      pairings,
+      players,
+      roundSetup,
+      scoreboardImportState,
+      scorecardRows,
+      scorecardsGenerated,
+      teams,
+    ]
+  );
+  const latestStateRef = useLatestTournamentPageState(latestState);
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
 
@@ -321,287 +297,63 @@ export default function TournamentPage() {
     );
   }, [activeQrPairing, activeQrPlayer]);
 
-  useEffect(() => {
-    setIsClientMounted(true);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (snapshotSyncTimeoutRef.current) {
-        clearTimeout(snapshotSyncTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isClientMounted) {
-      return;
-    }
-
-    const savedTournaments = loadTournamentsFromStorage();
-    setTournamentMeta(savedTournaments.find((item) => item.id === tournamentId) ?? createFallbackTournamentMeta(tournamentId));
-    setSharedTournamentId(loadSharedTournamentIdFromStorage(tournamentId));
-  }, [isClientMounted, tournamentId]);
-
-  useEffect(() => {
-    latestStateRef.current = {
-      teams,
-      players,
-      pairings,
-      scorecardsGenerated,
-      scorecardRows,
-      roundSetup,
-      clippdExportState,
-      scoreboardImportState,
-      autoRepairState,
-    };
-  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !tournamentId || !storageKey) {
-      return;
-    }
-
-    let isCancelled = false;
-    hasLoadedFromStorageRef.current = false;
-    hydrationPendingRef.current = false;
-
-    const loadStoredOrRemoteSnapshot = async () => {
-      try {
-        const loadResultOrPromise = loadTournamentPageState(tournamentId);
-        const loadResult: TournamentPageLoadResult =
-          typeof (loadResultOrPromise as Promise<unknown>).then === "function"
-            ? await (loadResultOrPromise as Promise<TournamentPageLoadResult>)
-            : (loadResultOrPromise as TournamentPageLoadResult);
-        if (isCancelled) {
-          return;
-        }
-
-        if (loadResult.status === "empty") {
-          hasLoadedFromStorageRef.current = true;
-          return;
-        }
-
-        if (loadResult.status === "metadata") {
-          setTournamentMeta(loadResult.tournament);
-          setSharedTournamentId(loadResult.sharedTournamentId);
-          hasLoadedFromStorageRef.current = true;
-          return;
-        }
-
-        if (loadResult.tournament) {
-          setTournamentMeta(loadResult.tournament);
-        }
-        if (loadResult.sharedTournamentId) {
-          setSharedTournamentId(loadResult.sharedTournamentId);
-        }
-        setTeams(loadResult.hydration.teams);
-        setPlayers(loadResult.hydration.players);
-        setPairings(hydratePairingsWithPlayerIds(loadResult.hydration.pairings, loadResult.hydration.players));
-        setScorecardsGenerated(loadResult.hydration.scorecardsGenerated);
-        setScorecardRows(loadResult.hydration.scorecardRows);
-        setRoundSetup(loadResult.hydration.roundSetup);
-        setClippdExportState(loadResult.hydration.clippdExportState);
-        setScoreboardImportState(loadResult.hydration.scoreboardImportState);
-        setAutoRepairState(loadResult.hydration.autoRepairState);
-        hasLoadedFromStorageRef.current = true;
-        hydrationPendingRef.current = loadResult.hydrationPending;
-      } catch (error) {
-        if (!isCancelled) {
-          hasLoadedFromStorageRef.current = true;
-          console.warn("[TournamentService] Unable to load tournament state snapshot; local storage fallback remains active.", error);
-        }
-      }
-    };
-
-    void loadStoredOrRemoteSnapshot();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [storageKey, tournamentId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !tournamentId || !storageKey) {
-      return;
-    }
-
-    if (!hasLoadedFromStorageRef.current) {
-      return;
-    }
-
-    if (hydrationPendingRef.current) {
-      hydrationPendingRef.current = false;
-      return;
-    }
-
-    persistTournamentPageState({
-      tournamentId,
-      sharedTournamentId,
-      tournament,
-      state: {
-        teams,
-        players,
-        pairings,
-        scorecards: {
-          scorecardsGenerated,
-          scorecardRows,
-          roundSetup,
-        },
-        clippdExportState,
-        scoreboardImportState,
-        autoRepairState,
-      },
-      snapshotSyncTimeout: snapshotSyncTimeoutRef.current,
-      lastSnapshotSignature: lastSnapshotSignatureRef.current,
-      onSharedTournamentIdChange: setSharedTournamentId,
-      onSnapshotTimeoutChange: (timeout) => {
-        snapshotSyncTimeoutRef.current = timeout;
-      },
-      onSnapshotSignatureChange: (signature) => {
-        lastSnapshotSignatureRef.current = signature;
-      },
-    });
-  }, [teams, players, pairings, scorecardsGenerated, scorecardRows, roundSetup, clippdExportState, scoreboardImportState, autoRepairState, storageKey, tournamentId, sharedTournamentId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !tournamentId || !storageKey) {
-      return;
-    }
-
-    const syncFromStorage = () => {
-      try {
-        const storedValue = window.localStorage.getItem(storageKey);
-        if (!storedValue) {
-          return;
-        }
-
-        const parsedValue = JSON.parse(storedValue) as Partial<PersistedTournamentState>;
-        const latestState = latestStateRef.current;
-
-        if (parsedValue.teams && JSON.stringify(parsedValue.teams) !== JSON.stringify(latestState.teams)) {
-          setTeams(parsedValue.teams);
-        }
-
-        if (parsedValue.players && JSON.stringify(parsedValue.players) !== JSON.stringify(latestState.players)) {
-          setPlayers(parsedValue.players);
-        }
-
-        if (parsedValue.pairings) {
-          const storedPairings = hydratePairingsWithPlayerIds(
-            parsedValue.pairings.filter(
-              (pairing): pairing is PairingGroup =>
-                typeof pairing === "object" &&
-                pairing !== null &&
-                "groupNumber" in pairing &&
-                "teeTime" in pairing &&
-                "startingHole" in pairing &&
-                "players" in pairing
-            ),
-            parsedValue.players ?? latestState.players
-          );
-
-          if (JSON.stringify(storedPairings) !== JSON.stringify(latestState.pairings)) {
-            setPairings(storedPairings);
-          }
-        }
-
-        if (parsedValue.scorecards) {
-          const nextScorecardsGenerated = Boolean(parsedValue.scorecards.scorecardsGenerated);
-
-          if (nextScorecardsGenerated !== latestState.scorecardsGenerated) {
-            setScorecardsGenerated(nextScorecardsGenerated);
-          }
-
-          if (JSON.stringify(parsedValue.scorecards.scorecardRows || []) !== JSON.stringify(latestState.scorecardRows)) {
-            setScorecardRows(parsedValue.scorecards.scorecardRows || []);
-          }
-
-          if (JSON.stringify(parsedValue.scorecards.roundSetup || defaultRoundSetupState) !== JSON.stringify(latestState.roundSetup)) {
-            setRoundSetup(parsedValue.scorecards.roundSetup || defaultRoundSetupState);
-          }
-        }
-
-        if (parsedValue.clippdExportState && JSON.stringify(parsedValue.clippdExportState) !== JSON.stringify(latestState.clippdExportState)) {
-          setClippdExportState(parsedValue.clippdExportState);
-        }
-
-        if (parsedValue.scoreboardImportState && JSON.stringify(parsedValue.scoreboardImportState) !== JSON.stringify(latestState.scoreboardImportState)) {
-          setScoreboardImportState(parsedValue.scoreboardImportState);
-        }
-
-        if (parsedValue.autoRepairState && JSON.stringify(parsedValue.autoRepairState) !== JSON.stringify(latestState.autoRepairState)) {
-          setAutoRepairState(parsedValue.autoRepairState);
-        }
-      } catch {
-        // Ignore polling errors so the page remains responsive.
-      }
-    };
-
-    const intervalId = window.setInterval(syncFromStorage, 5000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [storageKey, tournamentId]);
-
-  useEffect(() => {
-    if (!isClientMounted || !tournamentId || !scorecardsGenerated || scorecardRows.length === 0) {
-      return;
-    }
-
-    let isCancelled = false;
-    if (!sharedTournamentId) {
-      return;
-    }
-
-    const roundNumber = Number(roundSetup.roundNumber) || 1;
-
-    const mergeSharedScores = (rows: ScorecardRow[], entries: SharedScoreEntry[]) => {
-      const entriesByPlayerId = new Map<string, SharedScoreEntry[]>();
-      entries.forEach((entry) => {
-        entriesByPlayerId.set(String(entry.player_id), [...(entriesByPlayerId.get(String(entry.player_id)) ?? []), entry]);
-      });
-
-      return rows.map((row) => {
-        const playerEntries = entriesByPlayerId.get(String(row.id)) ?? [];
-        const selectedEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id));
-
-        if (!selectedEntry?.hole_scores?.length) {
-          return row;
-        }
-
-        return {
-          ...row,
-          scores: selectedEntry.hole_scores.map((score) => (Number.isFinite(Number(score)) ? Number(score) : 0)),
-        };
-      });
-    };
-
-    const refreshSharedScores = async () => {
-      try {
-        const sharedScores = await loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber });
-        if (isCancelled || sharedScores.length === 0) {
-          return;
-        }
-
-        setScorecardRows((currentRows) => {
-          const mergedRows = mergeSharedScores(currentRows, sharedScores);
-          return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
-        });
-      } catch (error) {
-        console.warn("[ScoreService] Unable to load shared tournament score entries.", error);
-      }
-    };
-
-    void refreshSharedScores();
-    const intervalId = window.setInterval(refreshSharedScores, 10000);
-
-    return () => {
-      isCancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [isClientMounted, roundSetup.roundNumber, scorecardRows.length, scorecardsGenerated, tournamentId, sharedTournamentId]);
+  useClientMounted(setIsClientMounted);
+  useTournamentMetadata({
+    isClientMounted,
+    tournamentId,
+    createFallbackTournamentMeta,
+    setTournamentMeta,
+    setSharedTournamentId,
+  });
+  const { hasLoadedFromStorageRef, hydrationPendingRef } = useTournamentPageLoading({
+    tournamentId,
+    storageKey,
+    setTournamentMeta,
+    setSharedTournamentId,
+    setTeams,
+    setPlayers,
+    setPairings,
+    setScorecardsGenerated,
+    setScorecardRows,
+    setRoundSetup,
+    setClippdExportState,
+    setScoreboardImportState,
+    setAutoRepairState,
+  });
+  useTournamentPagePersistence({
+    tournamentId,
+    storageKey,
+    sharedTournamentId,
+    tournament,
+    state: latestState,
+    setSharedTournamentId,
+    hasLoadedFromStorageRef,
+    hydrationPendingRef,
+  });
+  useTournamentStoragePolling({
+    tournamentId,
+    storageKey,
+    latestStateRef,
+    defaultRoundSetupState,
+    setTeams,
+    setPlayers,
+    setPairings,
+    setScorecardsGenerated,
+    setScorecardRows,
+    setRoundSetup,
+    setClippdExportState,
+    setScoreboardImportState,
+    setAutoRepairState,
+  });
+  useSharedScoreSynchronization({
+    isClientMounted,
+    tournamentId,
+    sharedTournamentId,
+    scorecardsGenerated,
+    scorecardRowsLength: scorecardRows.length,
+    roundNumber: roundSetup.roundNumber,
+    setScorecardRows,
+  });
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);
@@ -976,50 +728,12 @@ export default function TournamentPage() {
   const browserMobileScorecardUrl = useMemo(() => buildCurrentBrowserUrl(browserMobileScorecardPath), [browserMobileScorecardPath]);
   const isQrMobileScorecardReady = Boolean(sharedTournamentId && activeQrPairing && activeQrScoringPlayerId);
 
-  useEffect(() => {
-    if (typeof document === "undefined" || !activeQrPlayer) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [activeQrPlayer]);
-
-  useEffect(() => {
-    if (!activeQrPlayer || !isQrMobileScorecardReady || !resolvedMobileScorecardUrl) {
-      setActiveQrCodeDataUrl("");
-      return;
-    }
-
-    let isActive = true;
-
-    toDataURL(resolvedMobileScorecardUrl, {
-      margin: 1,
-      width: 256,
-      color: {
-        dark: "#0B3D2E",
-        light: "#FFFFFF",
-      },
-    })
-      .then((dataUrl) => {
-        if (isActive) {
-          setActiveQrCodeDataUrl(dataUrl);
-        }
-      })
-      .catch(() => {
-        if (isActive) {
-          setActiveQrCodeDataUrl("");
-        }
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [activeQrPlayer, isQrMobileScorecardReady, resolvedMobileScorecardUrl]);
+  useBodyOverflowLock(Boolean(activeQrPlayer));
+  useQrCodeDataUrl({
+    shouldGenerate: Boolean(activeQrPlayer && isQrMobileScorecardReady),
+    resolvedMobileScorecardUrl,
+    setActiveQrCodeDataUrl,
+  });
 
   const handlePrintFromQrModal = () => {
     if (!activeQrPlayer) {
