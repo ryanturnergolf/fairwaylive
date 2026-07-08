@@ -13,6 +13,14 @@ import {
   type StoredTournament,
 } from "../../lib/tournamentStorage";
 import { buildAppUrl, buildCurrentBrowserUrl } from "../../lib/appUrl";
+import {
+  buildIndividualLeaderboard,
+  buildPrintablePairings,
+  buildTeamLeaderboard,
+  calculateTotal,
+  formatTotalToPar,
+  normalizeTournamentRoundSetup,
+} from "../../lib/services/tournamentDerivedState";
 import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
   buildStableRosterPlayerIdMap,
@@ -279,15 +287,7 @@ export default function TournamentPage() {
     pairingOrder: "Worst to Best",
     teeTimeInterval: "8 minutes",
   });
-  const normalizedRoundSetup = {
-    roundNumber: Math.max(1, Number(roundSetup?.roundNumber) || 1),
-    numberOfHoles: Math.max(1, Math.min(18, Number(roundSetup?.numberOfHoles) || 18)),
-    countingScores: Math.max(1, Math.min(6, Number(roundSetup?.countingScores) || 4)),
-    startingHole: Math.max(1, Number(roundSetup?.startingHole) || 1),
-    teeIntervalMinutes: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.teeIntervalMinutes) || 10),
-    defaultGroupSize: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.defaultGroupSize) || 4),
-    teeTime: roundSetup?.teeTime || defaultRoundSetupState.teeTime,
-  };
+  const normalizedRoundSetup = normalizeTournamentRoundSetup(roundSetup, defaultRoundSetupState);
   const latestStateRef = useRef({
     teams,
     players,
@@ -952,41 +952,6 @@ export default function TournamentPage() {
     );
   };
 
-  const calculateTotal = (scores: number[]) =>
-    scores.reduce((total, score) => total + (Number.isFinite(score) ? score : 0), 0);
-
-  const calculatePlayedTotal = (scores: number[]) =>
-    scores.reduce((total, score) => total + (score > 0 ? score : 0), 0);
-
-  const calculatePlayedHoles = (scores: number[]) =>
-    scores.reduce((count, score) => count + (score > 0 ? 1 : 0), 0);
-
-  const formatScoreToPar = (difference: number) => {
-    if (difference === 0) {
-      return "E";
-    }
-    return difference > 0 ? `+${difference}` : `${difference}`;
-  };
-
-  const addTiePositions = <T,>(rows: T[], getScore: (row: T) => number) => {
-    const scoreCounts = rows.reduce((map, row) => {
-      const score = getScore(row);
-      map.set(score, (map.get(score) ?? 0) + 1);
-      return map;
-    }, new Map<number, number>());
-
-    return rows.map((row, index) => {
-      const score = getScore(row);
-      const ordinal = index + 1;
-      const position = (scoreCounts.get(score) ?? 0) > 1 ? `T${ordinal}` : `${ordinal}`;
-
-      return {
-        ...row,
-        position,
-      };
-    });
-  };
-
   const formatMinutesToTime = (minutesSinceMidnight: number) => {
     const normalizedMinutes = ((minutesSinceMidnight % 1440) + 1440) % 1440;
     const hours24 = Math.floor(normalizedMinutes / 60);
@@ -1120,14 +1085,6 @@ export default function TournamentPage() {
     );
   };
 
-  const formatToPar = (total: number) => {
-    const difference = total - 72;
-    if (difference === 0) {
-      return "E";
-    }
-    return difference > 0 ? `+${difference}` : `${difference}`;
-  };
-
   const generateScorecards = () => {
     const holeCount = normalizedRoundSetup.numberOfHoles;
     const nextRows = players.map((player) => ({
@@ -1143,7 +1100,6 @@ export default function TournamentPage() {
 
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
   const countingScores = normalizedRoundSetup.countingScores;
-  const fullRoundPar = displayHoleCount * 4;
 
   const handleClippdInputChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -1322,110 +1278,20 @@ export default function TournamentPage() {
     return groupings.find((pairing) => pairing.players.some((player) => player.playerName === playerName));
   }
 
-  const individualLeaderboard = useMemo(() => {
-    if (!scorecardsGenerated || scorecardRows.length === 0) {
-      return [] as Array<{ position: string; id: number; playerName: string; team: string; totalScore: number; toPar: string; through: string; today: string }>;
-    }
+  const individualLeaderboard = useMemo(
+    () => buildIndividualLeaderboard({ scorecardsGenerated, scorecardRows, displayHoleCount }),
+    [displayHoleCount, scorecardRows, scorecardsGenerated]
+  );
 
-    const standings = [...scorecardRows]
-      .map((row) => {
-        const playedHoles = calculatePlayedHoles(row.scores);
-        const totalScore = calculatePlayedTotal(row.scores);
-        const activePar = playedHoles * 4;
-        const toPar = playedHoles > 0 ? formatScoreToPar(totalScore - activePar) : "--";
-        const through = playedHoles >= displayHoleCount ? "F" : `${playedHoles}/${displayHoleCount}`;
+  const teamLeaderboard = useMemo(
+    () => buildTeamLeaderboard({ scorecardsGenerated, scorecardRows, displayHoleCount, countingScores }),
+    [countingScores, displayHoleCount, scorecardRows, scorecardsGenerated]
+  );
 
-        return {
-          id: row.id,
-          playerName: row.playerName,
-          team: row.team,
-          totalScore,
-          toPar,
-          through,
-          today: toPar,
-        };
-      })
-      .sort((a, b) => a.totalScore - b.totalScore || a.playerName.localeCompare(b.playerName));
-
-    return addTiePositions(standings, (row) => row.totalScore);
-  }, [displayHoleCount, scorecardRows, scorecardsGenerated]);
-
-  const teamLeaderboard = useMemo(() => {
-    if (!scorecardsGenerated || scorecardRows.length === 0) {
-      return [] as Array<{ position: string; teamName: string; totalScore: number; toPar: string; through: string; today: string }>;
-    }
-
-    const grouped = new Map<string, ScorecardRow[]>();
-
-    scorecardRows.forEach((row) => {
-      const current = grouped.get(row.team) ?? [];
-      current.push(row);
-      grouped.set(row.team, current);
-    });
-
-    const standings = Array.from(grouped.entries())
-      .map(([team, rows]) => {
-        const completedRows = rows
-          .map((row) => {
-            const playedHoles = calculatePlayedHoles(row.scores);
-            return {
-              ...row,
-              playedHoles,
-              totalScore: calculatePlayedTotal(row.scores),
-            };
-          })
-          .filter((row) => row.playedHoles >= displayHoleCount)
-          .sort((a, b) => a.totalScore - b.totalScore || a.playerName.localeCompare(b.playerName));
-
-        if (completedRows.length < countingScores) {
-          return null;
-        }
-
-        const countedPlayers = completedRows.slice(0, countingScores);
-        const totalScore = countedPlayers.reduce((total, row) => total + row.totalScore, 0);
-        const toPar = formatScoreToPar(totalScore - fullRoundPar * countingScores);
-
-        return {
-          teamName: team,
-          totalScore,
-          toPar,
-          through: "F",
-          today: toPar,
-        };
-      })
-      .filter((team): team is { teamName: string; totalScore: number; toPar: string; through: string; today: string } => Boolean(team))
-      .sort((a, b) => a.totalScore - b.totalScore || a.teamName.localeCompare(b.teamName));
-
-    return addTiePositions(standings, (row) => row.totalScore);
-  }, [countingScores, displayHoleCount, fullRoundPar, scorecardRows, scorecardsGenerated]);
-
-  const printablePairings = useMemo(() => {
-    if (pairings.length > 0) {
-      return pairings;
-    }
-
-    if (scorecardRows.length === 0) {
-      return [] as PairingGroup[];
-    }
-
-    const fallbackRows = [...scorecardRows].sort((a, b) => a.playerName.localeCompare(b.playerName));
-    const generatedPairings: PairingGroup[] = [];
-
-    for (let index = 0; index < fallbackRows.length; index += 4) {
-      generatedPairings.push({
-        groupNumber: generatedPairings.length + 1,
-          teeTime: normalizedRoundSetup.teeTime || "--",
-          startingHole: String(normalizedRoundSetup.startingHole),
-          players: fallbackRows.slice(index, index + normalizedRoundSetup.defaultGroupSize).map((row, rowIndex) => ({
-          playerId: row.id != null ? String(row.id) : `fallback-${row.playerName}-${rowIndex}`,
-          playerName: row.playerName,
-          teamName: row.team,
-        })),
-      });
-    }
-
-    return generatedPairings;
-  }, [normalizedRoundSetup.defaultGroupSize, normalizedRoundSetup.startingHole, normalizedRoundSetup.teeTime, pairings, scorecardRows]);
+  const printablePairings = useMemo(
+    () => buildPrintablePairings({ pairings, scorecardRows, normalizedRoundSetup }),
+    [normalizedRoundSetup, pairings, scorecardRows]
+  );
 
   const safeScorecardRows = Array.isArray(scorecardRows) ? scorecardRows : [];
 
@@ -1965,7 +1831,7 @@ export default function TournamentPage() {
                             <tbody>
                               {scorecardRows.map((row) => {
                                 const total = calculateTotal(row.scores);
-                                const toPar = formatToPar(total);
+                                const toPar = formatTotalToPar(total);
 
                                 return (
                                   <tr key={row.id} className="border-t border-[#E8DCC8] bg-white/70">
@@ -2688,7 +2554,7 @@ export default function TournamentPage() {
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">To Par</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{formatToPar(activePrintPlayer.scores.reduce((sum, score) => sum + score, 0))}</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{formatTotalToPar(activePrintPlayer.scores.reduce((sum, score) => sum + score, 0))}</p>
                   </div>
                   <div className="rounded-full border border-[#E8DCC8] bg-white px-4 py-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
                     Notes
