@@ -1,36 +1,43 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const gotoApp = (page: Page, url: string) => page.goto(url, { waitUntil: "domcontentloaded" });
 
 test("homepage loads", async ({ page }) => {
-  await page.goto("/");
+  await gotoApp(page, "/");
 
   await expect(page.getByRole("heading", { name: "Clubhouse HQ", level: 1 })).toBeVisible();
 });
 
 test("remote shared tournament appears on dashboard without localStorage", async ({ page }) => {
-  await page.route("**/rest/v1/tournaments**", async (route) => {
+  await page.route("**/rest/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.endsWith("/tournaments")
+      ? JSON.stringify([
+          {
+            id: "99999999-9999-4999-8999-999999999999",
+            created_by: null,
+            name: "Remote Phone Invitational",
+            course: "Shared Links Golf Club",
+            tournament_date: "2026-07-05",
+            number_of_rounds: 1,
+            status: "upcoming",
+            created_at: null,
+            updated_at: null,
+          },
+        ])
+      : "[]";
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "99999999-9999-4999-8999-999999999999",
-          created_by: null,
-          name: "Remote Phone Invitational",
-          course: "Shared Links Golf Club",
-          tournament_date: "2026-07-05",
-          number_of_rounds: 1,
-          status: "upcoming",
-          created_at: null,
-          updated_at: null,
-        },
-      ]),
+      body,
     });
   });
 
   await page.addInitScript(() => {
     window.localStorage.clear();
   });
-  await page.goto("/dashboard");
+  await gotoApp(page, "/dashboard");
 
   await expect(page.getByRole("heading", { name: "Remote Phone Invitational" })).toBeVisible();
   await expect(page.getByText("Shared Links Golf Club")).toBeVisible();
@@ -64,7 +71,7 @@ test("localStorage tournaments still appear on dashboard", async ({ page }) => {
       ])
     );
   });
-  await page.goto("/dashboard");
+  await gotoApp(page, "/dashboard");
 
   await expect(page.getByRole("heading", { name: "Local Storage Classic" })).toBeVisible();
   await expect(page.getByText("Browser Hills")).toBeVisible();
@@ -208,7 +215,7 @@ test("director dashboard review queue links groups needing review to live scorin
     { tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }
   );
 
-  await page.goto("/dashboard");
+  await gotoApp(page, "/dashboard");
 
   await expect(page.getByText("Review Queue", { exact: true })).toBeVisible();
   await expect(page.getByText("Self score ≠ Marker score")).toBeVisible();
@@ -381,7 +388,7 @@ test("director dashboard shows tournament completion ready to close", async ({ p
     { tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }
   );
 
-  await page.goto("/dashboard");
+  await gotoApp(page, "/dashboard");
 
   await expect(page.getByText("Tournament Completion")).toBeVisible();
   await expect(page.getByText("Tournament Ready to Close")).toBeVisible();

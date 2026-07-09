@@ -6,6 +6,7 @@ const sharedTournamentId = "55555555-5555-4555-8555-555555555555";
 const tournamentStorageKey = `clubhouse-hq-tournament-${tournamentId}`;
 const sharedTournamentStorageKey = `clubhouse-hq-shared-tournament-${tournamentId}`;
 const fullRound = Array.from({ length: 18 }, () => 4);
+const gotoApp = (page: Page, url: string) => page.goto(url, { waitUntil: "domcontentloaded" });
 
 const storedTournament = {
   id: tournamentId,
@@ -261,7 +262,7 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
     await dialog.accept();
   });
 
-  await page.goto("/dashboard");
+  await gotoApp(page, "/dashboard");
   await page.evaluate(
     ({ tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }) => {
       window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([storedTournament]));
@@ -270,7 +271,7 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
     },
     { tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }
   );
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Finalize Tournament" }).first().click();
   await expect(page.getByText("Tournament Finalized")).toBeVisible();
 
@@ -282,14 +283,14 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
   expect(finalizedRecord.finalizedBy).toBe("Tournament Director");
   expect(finalizedRecord.finalizationVersion).toBe(1);
 
-  await page.goto(`/tournament/${tournamentId}?tab=Players`);
+  await gotoApp(page, `/tournament/${tournamentId}?tab=Players`);
   await expect(page.getByText("Finalized Read-Only")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Player" })).toBeDisabled();
 
-  await page.goto(`/tournament/${tournamentId}?tab=Pairings`);
+  await gotoApp(page, `/tournament/${tournamentId}?tab=Pairings`);
   await expect(page.getByRole("button", { name: "Generate Pairings" })).toBeDisabled();
 
-  await page.goto(`/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
+  await gotoApp(page, `/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeDisabled();
 });
 
@@ -323,7 +324,7 @@ test("already-open phone scorecard rejects saves after remote finalization", asy
   });
 
   try {
-    await phonePage.goto("/");
+    await gotoApp(phonePage, "/");
     await phonePage.evaluate(
       ({ tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }) => {
         window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([storedTournament]));
@@ -333,7 +334,7 @@ test("already-open phone scorecard rejects saves after remote finalization", asy
       { tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }
     );
 
-    await phonePage.goto(`/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
+    await gotoApp(phonePage, `/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
     await phonePage.getByRole("button", { name: "Edit Scores" }).click();
     await phonePage.getByLabel("Ava Green's Score").fill("4");
     await expect(phonePage.getByRole("button", { name: "Save Hole" })).toBeEnabled();

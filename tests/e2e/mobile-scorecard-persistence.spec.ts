@@ -7,6 +7,7 @@ const tournamentsStorageKey = "clubhouse-hq-tournaments";
 const tournamentStorageKey = `clubhouse-hq-tournament-${tournamentId}`;
 const sharedTournamentStorageKey = `clubhouse-hq-shared-tournament-${tournamentId}`;
 const emptyHoleScores = Array.from({ length: 18 }, () => 0);
+const gotoApp = (page: Page, url: string) => page.goto(url, { waitUntil: "domcontentloaded" });
 
 const storedTournament = {
   id: tournamentId,
@@ -444,14 +445,15 @@ test.use({
 });
 
 test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {
-  await routeSharedScoreEntriesStore(page);
+  const sharedStore = await routeSharedScoreEntriesStore(page);
 
-  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page).toHaveURL(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await expect
     .poll(() => page.evaluate((key) => window.localStorage.getItem(key), tournamentsStorageKey))
     .toContain(storedTournament.name);
   await waitForMobileScorecardControls(page);
+  await waitForSharedScoreHydration(sharedStore);
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
 
   const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
@@ -473,7 +475,7 @@ test("mobile scorecard saves four holes, reloads them from localStorage, and res
 
   await expect(page.getByText("Hole 5")).toBeVisible();
 
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
 
   await expect(page.getByText("Hole 5")).toBeVisible();
   await page.getByRole("button", { name: "Previous Hole" }).click();
@@ -492,7 +494,7 @@ test("mobile scorecard renders while shared score lookup is pending", async ({ p
     });
   });
 
-  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
 
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
@@ -612,7 +614,7 @@ test("phone QR resolver loads shared Supabase player-2 by QR player id", async (
     });
   });
 
-  await page.goto(`${baseUrl}/scorecard/player-2?tournamentId=${sharedTournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/player-2?tournamentId=${sharedTournamentId}&pairing=1`);
 
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
@@ -748,7 +750,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
     });
   });
 
-  await page.goto(`${baseUrl}/dashboard`);
+  await gotoApp(page, `${baseUrl}/dashboard`);
   await page.evaluate(
     ({ tournamentStorageKey, brandNewTournamentEnvelope }) => {
       window.localStorage.setItem(tournamentStorageKey, JSON.stringify(brandNewTournamentEnvelope));
@@ -756,7 +758,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
     { tournamentStorageKey, brandNewTournamentEnvelope }
   );
 
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Live Scoring" }).click();
   await expect.poll(() => storageErrors).toEqual([]);
   await expect.poll(() => syncedPlayerRows.length).toBeGreaterThan(0);
@@ -836,7 +838,7 @@ test("snapshot upsert failure keeps localStorage fallback and roster sync workin
     });
   });
 
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Live Scoring" }).click();
 
   await expect.poll(() => syncedPlayerRows.length).toBeGreaterThan(0);
@@ -859,9 +861,9 @@ test("shared tournament page hydrates generated scorecards from snapshot without
     },
   ]);
 
-  await page.goto(baseUrl);
+  await gotoApp(page, baseUrl);
   await page.evaluate(() => window.localStorage.clear());
-  await page.goto(`${baseUrl}/tournament/${sharedTournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${sharedTournamentId}`);
 
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
   await page.getByRole("button", { name: "Live Scoring" }).click();
@@ -884,7 +886,7 @@ test("add team modal hides optional internal fields", async ({ page }) => {
     });
   });
 
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Teams" }).click();
   await page.getByRole("button", { name: "Add Team" }).click();
 
@@ -938,12 +940,12 @@ test("live scoreboard uses marker scores instead of self-entered scores", async 
     });
   });
 
-  await page.goto(baseUrl);
+  await gotoApp(page, baseUrl);
   await page.evaluate(
     ({ key, value }) => window.localStorage.setItem(key, value),
     { key: sharedTournamentStorageKey, value: sharedTournamentId }
   );
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Live Scoring" }).click();
 
   const avaRow = page.getByRole("row").filter({ hasText: "Ava Green" });
@@ -957,12 +959,12 @@ test("phone shared score save updates live scoreboard", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
   await routeTournamentStateSnapshotStore(page);
 
-  await page.goto(baseUrl);
+  await gotoApp(page, baseUrl);
   await page.evaluate(
     ({ key, value }) => window.localStorage.setItem(key, value),
     { key: sharedTournamentStorageKey, value: sharedTournamentId }
   );
-  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
   await waitForSharedScoreHydration(sharedStore);
 
@@ -976,7 +978,7 @@ test("phone shared score save updates live scoreboard", async ({ page }) => {
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2" && row.entered_by_player_id === "player-1")?.hole_scores[0])
     .toBe(5);
 
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Live Scoring" }).click();
 
   const avaRow = page.getByRole("row").filter({ hasText: "Ava Green" });
@@ -989,12 +991,12 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
   await routeSharedTournamentRoster(page);
   const sharedStore = await routeSharedScoreEntriesStore(page);
 
-  await page.goto(baseUrl);
+  await gotoApp(page, baseUrl);
   await page.evaluate(
     ({ key, value }) => window.localStorage.setItem(key, value),
     { key: sharedTournamentStorageKey, value: sharedTournamentId }
   );
-  await page.goto(`${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
   await waitForSharedScoreHydration(sharedStore);
 
@@ -1018,7 +1020,7 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
     .toBe(4);
 
   await page.evaluate(() => window.localStorage.clear());
-  await page.goto(`${baseUrl}/scorecard/player-1?tournamentId=${sharedTournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/player-1?tournamentId=${sharedTournamentId}&pairing=1`);
 
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Hole 5")).toBeVisible();
@@ -1032,14 +1034,14 @@ test("shared QR phone without local tournament still saves stable IDs to Supabas
   await routeSharedTournamentRoster(page);
   const sharedStore = await routeSharedScoreEntriesStore(page);
 
-  await page.goto(baseUrl);
+  await gotoApp(page, baseUrl);
   await page.evaluate(() => window.localStorage.clear());
-  await page.goto(`${baseUrl}/scorecard/player-2?tournamentId=${sharedTournamentId}&pairing=1`);
+  await gotoApp(page, `${baseUrl}/scorecard/player-2?tournamentId=${sharedTournamentId}&pairing=1`);
 
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
-  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(3);
+  await waitForSharedScoreHydration(sharedStore);
 
   await page.getByLabel("Ben Marker's Score").fill("4");
   await page.getByLabel("Ava Green's Score").fill("5");

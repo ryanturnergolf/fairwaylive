@@ -11,6 +11,11 @@ import {
   mergeTournamentScoreSubmission,
 } from "../../lib/tournamentStorage";
 import { loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
+import {
+  buildScoreHoleEntryInput,
+  saveHoleStatistics,
+  saveRoundHoleStatistics,
+} from "../../lib/services/statisticsService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
 
@@ -913,6 +918,7 @@ export default function PlayerScorecardPage() {
     }
 
     const serviceSave = scope === "round" ? saveRound : saveHole;
+    const entryStatus = getEntryStatus(holeScores);
 
     if (isDevelopment) {
       setScoreDiagnostics((current) => ({
@@ -931,7 +937,7 @@ export default function PlayerScorecardPage() {
       enteredByPlayerId,
       holeScores: [...holeScores],
       total: holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0),
-      entryStatus: getEntryStatus(holeScores),
+      entryStatus,
       submittedAt: null,
     })
       .then((result) => {
@@ -941,6 +947,41 @@ export default function PlayerScorecardPage() {
             supabaseSaveResult: `ok ${result.id}`,
           }));
         }
+
+        return result;
+      })
+      .then((result) => {
+        void (async () => {
+          try {
+            if (scope === "hole") {
+              const strokes = Number(holeScores[currentHoleIndex]) || 0;
+              if (strokes > 0) {
+                await saveHoleStatistics(
+                  buildScoreHoleEntryInput({
+                    tournamentId: sharedScoreTournamentId,
+                    roundNumber,
+                    playerId,
+                    enteredByPlayerId,
+                    holeNumber: currentHole.holeNumber,
+                    strokes,
+                    entryStatus,
+                  })
+                );
+              }
+            } else {
+              await saveRoundHoleStatistics({
+                tournamentId: sharedScoreTournamentId,
+                roundNumber,
+                playerId,
+                enteredByPlayerId,
+                holeScores: [...holeScores],
+                entryStatus,
+              });
+            }
+          } catch (error) {
+            console.warn("[StatisticsService] Unable to save hole statistics.", error);
+          }
+        })();
 
         return result;
       })

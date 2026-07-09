@@ -6,6 +6,7 @@ const baseUrl = "http://127.0.0.1:3100";
 const tournamentStorageKey = `clubhouse-hq-tournament-${tournamentId}`;
 const sharedTournamentStorageKey = `clubhouse-hq-shared-tournament-${tournamentId}`;
 const emptyHoleScores = Array.from({ length: 18 }, () => 0);
+const gotoApp = (page: Page, url: string) => page.goto(url, { waitUntil: "domcontentloaded" });
 
 const storedTournament = {
   id: tournamentId,
@@ -241,6 +242,9 @@ const seedTournamentStorage = async (page: Page) => {
 };
 
 const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-ready") => {
+  let tournamentPlayerReadCount = 0;
+  let snapshotReadCount = 0;
+
   await page.route("**/rest/v1/tournaments?**", async (route) => {
     await route.fulfill({
       status: route.request().method() === "POST" ? 201 : 200,
@@ -250,6 +254,10 @@ const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-read
   });
 
   await page.route("**/rest/v1/tournament_players**", async (route) => {
+    if (route.request().method() === "GET") {
+      tournamentPlayerReadCount += 1;
+    }
+
     await route.fulfill({
       status: route.request().method() === "GET" ? 200 : 201,
       contentType: "application/json",
@@ -266,6 +274,8 @@ const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-read
       });
       return;
     }
+
+    snapshotReadCount += 1;
 
     await route.fulfill({
       status: 200,
@@ -292,13 +302,20 @@ const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-read
       body: "[]",
     });
   });
+
+  return {
+    getTournamentPlayerReadCount: () => tournamentPlayerReadCount,
+    getSnapshotReadCount: () => snapshotReadCount,
+  };
 };
 
 test("Ready tournaments can share QR mobile scoring", async ({ page }) => {
   await seedTournamentStorage(page);
-  await routeReadinessSupabase(page, "ready");
+  const readinessBackend = await routeReadinessSupabase(page, "ready");
 
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
+  await expect.poll(() => readinessBackend.getTournamentPlayerReadCount()).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => readinessBackend.getSnapshotReadCount()).toBeGreaterThanOrEqual(1);
   await page.getByRole("button", { name: "Live Scoring" }).click();
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
 
@@ -309,9 +326,11 @@ test("Ready tournaments can share QR mobile scoring", async ({ page }) => {
 
 test("Non-ready tournaments are blocked from QR sharing and show readiness details", async ({ page }) => {
   await seedTournamentStorage(page);
-  await routeReadinessSupabase(page, "not-ready");
+  const readinessBackend = await routeReadinessSupabase(page, "not-ready");
 
-  await page.goto(`${baseUrl}/tournament/${tournamentId}`);
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
+  await expect.poll(() => readinessBackend.getTournamentPlayerReadCount()).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => readinessBackend.getSnapshotReadCount()).toBeGreaterThanOrEqual(1);
   await page.getByRole("button", { name: "Live Scoring" }).click();
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
 
