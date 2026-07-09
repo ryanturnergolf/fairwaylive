@@ -30,6 +30,8 @@ export type StatCompleteness = {
   missingGir: number;
   missingPutts: number;
   missingPenalties: number;
+  completionPercentage: number | null;
+  isComplete: boolean;
 };
 
 export type PlayerStatisticsReadModel = {
@@ -132,6 +134,7 @@ type StatAccumulator = {
   missingFairways: number;
   missingGir: number;
   missingPutts: number;
+  penaltyAttempts: number;
   missingPenalties: number;
 };
 
@@ -379,6 +382,7 @@ const createAccumulator = (): StatAccumulator => ({
   missingFairways: 0,
   missingGir: 0,
   missingPutts: 0,
+  penaltyAttempts: 0,
   missingPenalties: 0,
 });
 
@@ -416,6 +420,7 @@ const addEntryToAccumulator = (accumulator: StatAccumulator, entry: SelectedHole
   if (entry.penalty_strokes === null) {
     accumulator.missingPenalties += 1;
   } else {
+    accumulator.penaltyAttempts += 1;
     accumulator.penaltyStrokes += entry.penalty_strokes;
   }
 
@@ -426,12 +431,31 @@ const addEntryToAccumulator = (accumulator: StatAccumulator, entry: SelectedHole
   accumulator.doublePlus += scoreToPar >= 2 ? 1 : 0;
 };
 
-const getCompleteness = (accumulator: StatAccumulator): StatCompleteness => ({
-  missingFairways: accumulator.missingFairways,
-  missingGir: accumulator.missingGir,
-  missingPutts: accumulator.missingPutts,
-  missingPenalties: accumulator.missingPenalties,
-});
+const getCompleteness = (accumulator: StatAccumulator): StatCompleteness => {
+  const missingStats =
+    accumulator.missingFairways +
+    accumulator.missingGir +
+    accumulator.missingPutts +
+    accumulator.missingPenalties;
+  const requiredStats =
+    accumulator.fairwayAttempts +
+    accumulator.missingFairways +
+    accumulator.girAttempts +
+    accumulator.missingGir +
+    accumulator.puttAttempts +
+    accumulator.missingPutts +
+    accumulator.penaltyAttempts +
+    accumulator.missingPenalties;
+
+  return {
+    missingFairways: accumulator.missingFairways,
+    missingGir: accumulator.missingGir,
+    missingPutts: accumulator.missingPutts,
+    missingPenalties: accumulator.missingPenalties,
+    completionPercentage: requiredStats > 0 ? roundStat(((requiredStats - missingStats) / requiredStats) * 100) : null,
+    isComplete: requiredStats > 0 && missingStats === 0,
+  };
+};
 
 const summarizeAccumulator = (accumulator: StatAccumulator) => ({
   fairwayPercentage: rate(accumulator.fairwaysHit, accumulator.fairwayAttempts),

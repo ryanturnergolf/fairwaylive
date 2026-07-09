@@ -61,8 +61,9 @@ import TournamentPrintExport, {
   type ClippdExportState,
   type ScoreboardImportState,
 } from "./components/TournamentPrintExport";
+import TournamentStatisticsDashboard from "./components/TournamentStatisticsDashboard";
 
-const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Clippd Export"];
+const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 
 const defaultTeamFormState: TeamFormState = {
   schoolName: "",
@@ -926,6 +927,11 @@ export default function TournamentPage() {
                 onMovePlayerWithinPairing={movePlayerWithinPairing}
                 onMovePlayerBetweenPairings={movePlayerBetweenPairings}
                 isReadOnly={isTournamentFinalized}
+              />
+            ) : activeTab === "Statistics" ? (
+              <TournamentStatisticsDashboard
+                tournamentId={sharedTournamentId || tournamentId}
+                roundNumber={normalizedRoundSetup.roundNumber}
               />
             ) : activeTab === "Live Scoring" || activeTab === "Clippd Export" ? (
               <TournamentPrintExport
