@@ -13,6 +13,7 @@ import {
 import { loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
 import {
   buildScoreHoleEntryInput,
+  type HoleStatisticsInput,
   saveHoleStatistics,
   saveRoundHoleStatistics,
 } from "../../lib/services/statisticsService";
@@ -75,6 +76,13 @@ type ScoreDiagnostics = {
   scoreHydrationComplete: string;
   lastSaveError: string;
   lastHydrationError: string;
+};
+
+type HoleStatCapture = {
+  fairwayHit: boolean | null;
+  greenInRegulation: boolean | null;
+  putts: number | null;
+  penaltyStrokes: number | null;
 };
 
 const initialScoreDiagnostics: ScoreDiagnostics = {
@@ -203,6 +211,16 @@ const normalizeHoleScores = (holeScores: number[] | undefined, holeCount: number
     const score = Number(holeScores?.[index] ?? 0);
     return Number.isFinite(score) ? score : 0;
   });
+
+const emptyHoleStats = (): HoleStatCapture => ({
+  fairwayHit: null,
+  greenInRegulation: null,
+  putts: null,
+  penaltyStrokes: null,
+});
+
+const createEmptyHoleStats = (holeCount: number) =>
+  Array.from({ length: holeCount }, emptyHoleStats);
 
 const hasAnyHoleScore = (holeScores: number[] | null | undefined) =>
   Array.isArray(holeScores) && holeScores.some((score) => Number(score) > 0);
@@ -469,6 +487,7 @@ export default function PlayerScorecardPage() {
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markedPlayerSelfScores, setMarkedPlayerSelfScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
+  const [holeStats, setHoleStats] = useState<HoleStatCapture[]>(createEmptyHoleStats(scorecard.holes.length));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const [savedHoles, setSavedHoles] = useState<number[]>([]);
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
@@ -883,6 +902,27 @@ export default function PlayerScorecardPage() {
     );
   };
 
+  const updateCurrentHoleStats = (patch: Partial<HoleStatCapture>) => {
+    setHoleStats((current) => {
+      const normalizedStats =
+        current.length === scorecard.holes.length ? current : createEmptyHoleStats(scorecard.holes.length);
+
+      return normalizedStats.map((stats, index) =>
+        index === currentHoleIndex ? { ...stats, ...patch } : stats
+      );
+    });
+  };
+
+  const toggleBooleanStat = (field: "fairwayHit" | "greenInRegulation", value: boolean) => {
+    const currentValue = holeStats[currentHoleIndex]?.[field] ?? null;
+    updateCurrentHoleStats({ [field]: currentValue === value ? null : value });
+  };
+
+  const toggleNumberStat = (field: "putts" | "penaltyStrokes", value: number) => {
+    const currentValue = holeStats[currentHoleIndex]?.[field] ?? null;
+    updateCurrentHoleStats({ [field]: currentValue === value ? null : value });
+  };
+
   // Validate player ID is real (non-empty, not demo, not a route group)
   const isValidPlayerId = (id: unknown): boolean => {
     return typeof id === "string" && id.length > 0 && id !== "demo" && !id.startsWith("group-");
@@ -910,7 +950,8 @@ export default function PlayerScorecardPage() {
     enteredByPlayerId: string,
     roundNumber: number,
     holeScores: number[],
-    scope: "hole" | "round"
+    scope: "hole" | "round",
+    stats?: HoleStatisticsInput
   ) => {
     const wasJustVerified = Date.now() - finalizationVerifiedAtRef.current < 1000;
     if (isTournamentFinalized || (!wasJustVerified && (await refreshCurrentFinalizedStateForSave()))) {
@@ -964,6 +1005,10 @@ export default function PlayerScorecardPage() {
                     enteredByPlayerId,
                     holeNumber: currentHole.holeNumber,
                     strokes,
+                    fairwayHit: stats?.fairwayHit ?? null,
+                    greenInRegulation: stats?.greenInRegulation ?? null,
+                    putts: stats?.putts ?? null,
+                    penaltyStrokes: stats?.penaltyStrokes ?? null,
                     entryStatus,
                   })
                 );
@@ -1023,6 +1068,13 @@ export default function PlayerScorecardPage() {
       const parsedRoundNumber = Number(roundNumber);
       const nextScores = normalizeHoleScores(scores, scorecard.holes.length);
       const nextMarkerScores = normalizeHoleScores(markerScores, scorecard.holes.length);
+      const selectedStats = holeStats[currentHoleIndex] ?? emptyHoleStats();
+      const currentHoleStats: HoleStatisticsInput = {
+        fairwayHit: currentHole.par === 3 ? null : selectedStats.fairwayHit,
+        greenInRegulation: selectedStats.greenInRegulation,
+        putts: selectedStats.putts,
+        penaltyStrokes: selectedStats.penaltyStrokes,
+      };
       const stableSelfPlayerId = String(scorecard.playerId);
       const stableMarkerPlayerId = isValidPlayerId(scorecard.markerPlayerId) ? String(scorecard.markerPlayerId) : "";
       const localSelfPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.selectedPlayerIds ?? [stableSelfPlayerId], stableSelfPlayerId);
@@ -1044,7 +1096,7 @@ export default function PlayerScorecardPage() {
       // Save self score with validated playerId
       const selfScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, localSelfPlayerId, roundId, nextScores, "self");
       let markerScoreSaved = false;
-      void saveScoreThroughService(stableSelfPlayerId, stableSelfPlayerId, parsedRoundNumber, nextScores, "hole");
+      void saveScoreThroughService(stableSelfPlayerId, stableSelfPlayerId, parsedRoundNumber, nextScores, "hole", currentHoleStats);
        
       // Save marker score only if markerPlayerId is valid
       if (stableMarkerPlayerId && hasAnyHoleScore(nextMarkerScores)) {
@@ -1122,6 +1174,13 @@ export default function PlayerScorecardPage() {
   };
 
   const isHoleSaved = savedHoles.includes(currentHole.holeNumber);
+  const currentStatCapture = holeStats[currentHoleIndex] ?? emptyHoleStats();
+  const statButtonClass = (isSelected: boolean) =>
+    `min-h-10 rounded-full border px-3 py-2 text-xs font-black uppercase tracking-[0.15em] transition duration-200 ${
+      isSelected
+        ? "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]"
+        : "border-[#E8DCC8] bg-[#FCFAF5] text-[#0B3D2E]"
+    } disabled:cursor-not-allowed disabled:opacity-50`;
 
   const sharedHeader = (
     <header className="sticky top-0 z-10 border-b border-[#E8DCC8] bg-[#F6F1E6]/95 backdrop-blur">
@@ -1442,6 +1501,90 @@ export default function PlayerScorecardPage() {
               />
             </label>
           ) : null}
+
+          <div className="mt-5 border-t border-[#E8DCC8] pt-4">
+            {currentHole.par !== 3 ? (
+              <fieldset className="mt-0" aria-label="Fairway Hit">
+                <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                  Fairway Hit
+                </legend>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {[true, false].map((value) => (
+                    <button
+                      key={String(value)}
+                      type="button"
+                      aria-pressed={currentStatCapture.fairwayHit === value}
+                      onClick={() => toggleBooleanStat("fairwayHit", value)}
+                      disabled={isTournamentFinalized}
+                      className={statButtonClass(currentStatCapture.fairwayHit === value)}
+                    >
+                      {value ? "Yes" : "No"}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            ) : null}
+
+            <fieldset className="mt-4" aria-label="Green in Regulation">
+              <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                Green in Regulation
+              </legend>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {[true, false].map((value) => (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    aria-pressed={currentStatCapture.greenInRegulation === value}
+                    onClick={() => toggleBooleanStat("greenInRegulation", value)}
+                    disabled={isTournamentFinalized}
+                    className={statButtonClass(currentStatCapture.greenInRegulation === value)}
+                  >
+                    {value ? "Yes" : "No"}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="mt-4" aria-label="Putts">
+              <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                Putts
+              </legend>
+              <div className="mt-2 grid grid-cols-6 gap-2">
+                {[1, 2, 3, 4, 5, 6].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={currentStatCapture.putts === value}
+                    onClick={() => toggleNumberStat("putts", value)}
+                    disabled={isTournamentFinalized}
+                    className={statButtonClass(currentStatCapture.putts === value)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="mt-4" aria-label="Penalty Strokes">
+              <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                Penalty Strokes
+              </legend>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {[0, 1, 2, 3, 4].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={currentStatCapture.penaltyStrokes === value}
+                    onClick={() => toggleNumberStat("penaltyStrokes", value)}
+                    disabled={isTournamentFinalized}
+                    className={statButtonClass(currentStatCapture.penaltyStrokes === value)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
 
           <button
             type="button"

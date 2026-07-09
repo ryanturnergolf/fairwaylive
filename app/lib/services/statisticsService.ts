@@ -19,6 +19,11 @@ export type SaveRoundHoleStatisticsInput = Omit<
   markerForPlayerId?: string | null;
 };
 
+export type HoleStatisticsInput = Pick<
+  SaveScoreHoleEntryInput,
+  "fairwayHit" | "greenInRegulation" | "putts" | "penaltyStrokes"
+>;
+
 const getEntrySource = (playerId: string, enteredByPlayerId: string) =>
   String(playerId) === String(enteredByPlayerId) ? "self" : "marker";
 
@@ -36,6 +41,10 @@ export const buildScoreHoleEntryInput = ({
   markerForPlayerId,
   holeNumber,
   strokes,
+  fairwayHit,
+  greenInRegulation,
+  putts,
+  penaltyStrokes,
   entryStatus,
 }: {
   tournamentId: string;
@@ -45,6 +54,10 @@ export const buildScoreHoleEntryInput = ({
   markerForPlayerId?: string | null;
   holeNumber: number;
   strokes: number;
+  fairwayHit?: boolean | null;
+  greenInRegulation?: boolean | null;
+  putts?: number | null;
+  penaltyStrokes?: number | null;
   entryStatus: string;
 }): SaveHoleStatisticsInput => ({
   tournamentId,
@@ -54,10 +67,10 @@ export const buildScoreHoleEntryInput = ({
   markerForPlayerId: getMarkerForPlayerId(playerId, enteredByPlayerId, markerForPlayerId),
   holeNumber,
   strokes,
-  fairwayHit: null,
-  greenInRegulation: null,
-  putts: null,
-  penaltyStrokes: null,
+  fairwayHit: fairwayHit ?? null,
+  greenInRegulation: greenInRegulation ?? null,
+  putts: putts ?? null,
+  penaltyStrokes: penaltyStrokes ?? null,
   entrySource: getEntrySource(playerId, enteredByPlayerId),
   entryStatus,
   reviewStatus: "pending",
