@@ -236,6 +236,7 @@ export const buildScoreHoleEntryInput = ({
   putts,
   penaltyStrokes,
   entryStatus,
+  shareToken,
 }: {
   tournamentId: string;
   roundNumber: number;
@@ -249,6 +250,7 @@ export const buildScoreHoleEntryInput = ({
   putts?: number | null;
   penaltyStrokes?: number | null;
   entryStatus: string;
+  shareToken?: string;
 }): SaveHoleStatisticsInput => ({
   tournamentId,
   roundNumber,
@@ -267,6 +269,7 @@ export const buildScoreHoleEntryInput = ({
   isOfficial: false,
   officialAt: null,
   officialBy: null,
+  shareToken,
 });
 
 export const saveHoleStatistics = async (

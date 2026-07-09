@@ -309,9 +309,35 @@ const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-read
   };
 };
 
+const routeShareTokenApi = async (page: Page, token = "readiness-mobile-scoring-token") => {
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const postData = route.request().postDataJSON() as Record<string, unknown>;
+
+    if (postData.action !== "createShareToken") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "share-token-readiness",
+        tournament_id: sharedTournamentId,
+        purpose: "mobile_scoring",
+        expires_at: "2026-07-22T00:00:00.000Z",
+        revoked_at: null,
+        created_at: "2026-07-09T00:00:00.000Z",
+        token,
+      }),
+    });
+  });
+};
+
 test("Ready tournaments can share QR mobile scoring", async ({ page }) => {
   await seedTournamentStorage(page);
   const readinessBackend = await routeReadinessSupabase(page, "ready");
+  await routeShareTokenApi(page);
 
   await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await expect.poll(() => readinessBackend.getTournamentPlayerReadCount()).toBeGreaterThanOrEqual(1);
@@ -320,7 +346,7 @@ test("Ready tournaments can share QR mobile scoring", async ({ page }) => {
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
 
   await expect(page.getByRole("heading", { name: "Ava Green" })).toBeVisible();
-  await expect(page.getByText(new RegExp(`Scorecard URL: .*/scorecard/player-1\\?tournamentId=${sharedTournamentId}&pairing=1`))).toBeVisible();
+  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&shareToken=/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sharing is blocked" })).toBeHidden();
 });
 

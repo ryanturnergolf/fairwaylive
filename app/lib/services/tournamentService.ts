@@ -822,12 +822,13 @@ const dedupeTournamentPlayerRows = (rows: TournamentPlayerRow[]) => {
 export const loadSharedTournamentScorecardState = async (
   tournamentId: string,
   roundNumber = 1,
-  holeCount = 18
+  holeCount = 18,
+  shareToken = ""
 ): Promise<SharedTournamentScorecardState | null> => {
   const [tournamentRow, playerRows, snapshot] = await Promise.all([
-    getTournamentRow(tournamentId),
-    getTournamentPlayers(tournamentId, roundNumber),
-    getTournamentStateSnapshot(tournamentId).catch(() => null),
+    getTournamentRow(tournamentId, { shareToken }),
+    getTournamentPlayers(tournamentId, roundNumber, { shareToken }),
+    getTournamentStateSnapshot(tournamentId, { shareToken }).catch(() => null),
   ]);
 
   if (!tournamentRow || playerRows.length === 0) {

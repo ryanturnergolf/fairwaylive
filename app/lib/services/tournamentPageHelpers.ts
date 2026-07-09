@@ -360,18 +360,30 @@ export const generateScorecardRows = (players: LegacyPlayer[], holeCount: number
 
 export const buildMobileScorecardPath = ({
   tournamentId,
+  shareToken,
   activeQrPairing,
   activeQrScoringPlayerId,
 }: {
-  tournamentId: string;
+  tournamentId?: string;
+  shareToken?: string;
   activeQrPairing: LegacyPairingGroup | null;
   activeQrScoringPlayerId: string;
 }) => {
-  if (!tournamentId || !activeQrPairing || !activeQrScoringPlayerId) {
+  if ((!tournamentId && !shareToken) || !activeQrPairing || !activeQrScoringPlayerId) {
     return "/scorecard/test";
   }
 
-  return `/scorecard/${encodeURIComponent(activeQrScoringPlayerId)}?tournamentId=${encodeURIComponent(tournamentId)}&pairing=${activeQrPairing.groupNumber}`;
+  const params = new URLSearchParams({
+    pairing: String(activeQrPairing.groupNumber),
+  });
+
+  if (shareToken) {
+    params.set("shareToken", shareToken);
+  } else if (tournamentId) {
+    params.set("tournamentId", tournamentId);
+  }
+
+  return `/scorecard/${encodeURIComponent(activeQrScoringPlayerId)}?${params.toString()}`;
 };
 
 export const pairingExistsForPlayer = (groupings: LegacyPairingGroup[], playerName: string) =>

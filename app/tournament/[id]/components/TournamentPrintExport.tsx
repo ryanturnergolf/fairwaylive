@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { buildAppUrl, buildCurrentBrowserUrl } from "../../../lib/appUrl";
 import {
   buildPrintablePairings,
@@ -23,6 +23,7 @@ import type {
   TournamentReadinessChecks,
   TournamentReadinessReason,
 } from "../../../lib/services/tournamentReadinessService";
+import { createShareToken } from "../../../lib/services/shareTokenService";
 import type { ScorecardRow } from "./LiveScoringLeaderboard";
 
 export type ClippdExportState = {
@@ -122,6 +123,7 @@ export default function TournamentPrintExport({
   const [blockedQrPlayer, setBlockedQrPlayer] = useState<ScorecardRow | null>(null);
   const [activePrintPlayer, setActivePrintPlayer] = useState<ScorecardRow | null>(null);
   const [activeQrCodeDataUrl, setActiveQrCodeDataUrl] = useState("");
+  const [activeQrShareToken, setActiveQrShareToken] = useState("");
 
   const activeQrPairing = useMemo(() => {
     if (!activeQrPlayer) {
@@ -148,12 +150,16 @@ export default function TournamentPrintExport({
   }, [activeQrPairing, activeQrScoringPlayerId, tournamentId]);
 
   const qrMobileScorecardPath = useMemo(() => {
-    return buildMobileScorecardPath({ tournamentId: sharedTournamentId, activeQrPairing, activeQrScoringPlayerId });
-  }, [activeQrPairing, activeQrScoringPlayerId, sharedTournamentId]);
+    return buildMobileScorecardPath({
+      shareToken: activeQrShareToken,
+      activeQrPairing,
+      activeQrScoringPlayerId,
+    });
+  }, [activeQrPairing, activeQrScoringPlayerId, activeQrShareToken]);
 
   const resolvedMobileScorecardUrl = useMemo(() => buildAppUrl(qrMobileScorecardPath), [qrMobileScorecardPath]);
   const browserMobileScorecardUrl = useMemo(() => buildCurrentBrowserUrl(browserMobileScorecardPath), [browserMobileScorecardPath]);
-  const isQrMobileScorecardReady = Boolean(sharedTournamentId && activeQrPairing && activeQrScoringPlayerId);
+  const isQrMobileScorecardReady = Boolean(activeQrShareToken && activeQrPairing && activeQrScoringPlayerId);
   const printablePairings = useMemo(
     () => buildPrintablePairings({ pairings, scorecardRows, normalizedRoundSetup }),
     [normalizedRoundSetup, pairings, scorecardRows]
@@ -164,6 +170,31 @@ export default function TournamentPrintExport({
     : tournamentReadiness?.reasons.filter((reason) => reason.severity !== "pass") ?? [];
 
   useBodyOverflowLock(Boolean(activeQrPlayer || blockedQrPlayer));
+  useEffect(() => {
+    let isCancelled = false;
+
+    setActiveQrShareToken("");
+    setActiveQrCodeDataUrl("");
+
+    if (!activeQrPlayer || !activeQrPairing || !activeQrScoringPlayerId || !sharedTournamentId) {
+      return;
+    }
+
+    void createShareToken(sharedTournamentId, "mobile_scoring")
+      .then((shareToken) => {
+        if (!isCancelled) {
+          setActiveQrShareToken(shareToken.token || "");
+        }
+      })
+      .catch((error) => {
+        console.warn("[ShareTokenService] Unable to create mobile scoring share token.", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeQrPairing, activeQrPlayer, activeQrScoringPlayerId, sharedTournamentId]);
+
   useQrCodeDataUrl({
     shouldGenerate: Boolean(activeQrPlayer && isQrMobileScorecardReady),
     resolvedMobileScorecardUrl,
@@ -670,7 +701,7 @@ export default function TournamentPrintExport({
                   Download QR
                 </button>
                 <Link
-                  href={browserMobileScorecardUrl || mobileScorecardUrl}
+                  href={resolvedMobileScorecardUrl || browserMobileScorecardUrl || mobileScorecardUrl}
                   className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Open Mobile Scorecard

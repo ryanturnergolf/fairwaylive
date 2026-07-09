@@ -19,6 +19,8 @@ import {
 } from "../../lib/services/statisticsService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
+import { resolveShareToken } from "../../lib/services/shareTokenService";
+import { canUseDevelopmentBrowserSupabaseWriteFallback } from "../../lib/supabaseClient";
 
 type Hole = {
   holeNumber: number;
@@ -225,6 +227,22 @@ const createEmptyHoleStats = (holeCount: number) =>
 const hasAnyHoleScore = (holeScores: number[] | null | undefined) =>
   Array.isArray(holeScores) && holeScores.some((score) => Number(score) > 0);
 
+const getCompletedHoleCount = (holeScores: number[] | null | undefined) =>
+  Array.isArray(holeScores) ? holeScores.filter((score) => Number(score) > 0).length : 0;
+
+const chooseMostCompleteScores = (
+  currentScores: number[] | null,
+  candidateScores: number[] | null
+) => {
+  if (!hasAnyHoleScore(candidateScores)) {
+    return currentScores;
+  }
+
+  return getCompletedHoleCount(candidateScores) >= getCompletedHoleCount(currentScores)
+    ? candidateScores
+    : currentScores;
+};
+
 const getScoredHoleNumbers = (holes: Hole[], ...scoreSets: number[][]) =>
   holes
     .filter((_, index) => scoreSets.some((holeScores) => (holeScores[index] ?? 0) > 0))
@@ -246,6 +264,8 @@ export default function PlayerScorecardPage() {
   const routePlayerId = Array.isArray(params?.playerId) ? params.playerId[0] : params?.playerId;
   const requestedTournamentId = searchParams.get("tournamentId") ?? "";
   const requestedPairingId = searchParams.get("pairing") ?? "";
+  const requestedShareToken = searchParams.get("shareToken") ?? "";
+  const [resolvedShareTournamentId, setResolvedShareTournamentId] = useState("");
   const [qrResolvedScorecard, setQrResolvedScorecard] = useState<PlayerScorecard | { error: string } | null>(null);
   const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
   const [isTournamentFinalized, setIsTournamentFinalized] = useState(false);
@@ -266,24 +286,43 @@ export default function PlayerScorecardPage() {
 
     const resolveScorecard = async () => {
       try {
-        if (!requestedTournamentId && !requestedPairingId) {
+        const tokenResolution =
+          requestedShareToken && !requestedTournamentId ? await resolveShareToken(requestedShareToken) : null;
+        const effectiveTournamentId = requestedTournamentId || tokenResolution?.tournamentId || "";
+
+        if (tokenResolution?.tournamentId && !isCancelled) {
+          setResolvedShareTournamentId(tokenResolution.tournamentId);
+        }
+
+        if (!effectiveTournamentId && !requestedPairingId) {
           finishResolution(null);
           return;
         }
 
-        if (!requestedTournamentId || !requestedPairingId) {
+        if (!effectiveTournamentId || !requestedPairingId) {
           finishResolution({ error: "Missing tournament or pairing information in this QR code." });
           return;
         }
 
-        const localTournament = loadTournamentsFromStorage().find((item) => item.id === requestedTournamentId);
-        const localTournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(requestedTournamentId);
-        const storedEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+        const localTournament = loadTournamentsFromStorage().find((item) => item.id === effectiveTournamentId);
+        const localTournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(effectiveTournamentId);
+        const storedEnvelope = loadTournamentStorageEnvelope(effectiveTournamentId);
+        const isLegacySharedLinkWithoutToken = Boolean(requestedTournamentId && !requestedShareToken);
+        const hasLocalLegacyTournamentState = Boolean(localTournament && localTournamentState && storedEnvelope);
+        if (
+          isLegacySharedLinkWithoutToken &&
+          !hasLocalLegacyTournamentState &&
+          !canUseDevelopmentBrowserSupabaseWriteFallback()
+        ) {
+          finishResolution({ error: "This mobile scoring link has expired. Please request a new secure scoring link." });
+          return;
+        }
+
         const sharedState =
-          localTournament && localTournamentState && storedEnvelope
+          hasLocalLegacyTournamentState
             ? null
             : await withTimeout(
-                loadSharedTournamentScorecardState(requestedTournamentId).catch((error) => {
+                loadSharedTournamentScorecardState(effectiveTournamentId, 1, 18, requestedShareToken).catch((error) => {
                   console.warn("[TournamentService] Unable to load shared tournament scorecard state.", error);
                   return null;
                 }),
@@ -450,7 +489,7 @@ export default function PlayerScorecardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [requestedTournamentId, requestedPairingId, routePlayerId]);
+  }, [requestedTournamentId, requestedPairingId, requestedShareToken, routePlayerId]);
 
   // Extract resolved player IDs for reliable hydration
   const resolvedPlayerIds = useMemo(() => {
@@ -482,7 +521,7 @@ export default function PlayerScorecardPage() {
 
     return loadSharedTournamentIdFromStorage(requestedTournamentId) || "";
   }, [requestedTournamentId]);
-  const sharedScoreTournamentId = linkedSharedTournamentId || requestedTournamentId;
+  const sharedScoreTournamentId = resolvedShareTournamentId || linkedSharedTournamentId || requestedTournamentId;
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
@@ -498,12 +537,14 @@ export default function PlayerScorecardPage() {
   const finalizationVerifiedAtRef = useRef(0);
 
   const refreshCurrentFinalizedStateForSave = async () => {
-    if (!requestedTournamentId) {
+    const effectiveTournamentId = requestedTournamentId || resolvedShareTournamentId;
+
+    if (!effectiveTournamentId) {
       finalizationVerifiedAtRef.current = Date.now();
       return false;
     }
 
-    const localEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+    const localEnvelope = loadTournamentStorageEnvelope(effectiveTournamentId);
     if (getTournamentFinalizationRecord(localEnvelope)) {
       finalizationVerifiedAtRef.current = Date.now();
       setIsTournamentFinalized(true);
@@ -511,14 +552,14 @@ export default function PlayerScorecardPage() {
       return true;
     }
 
-    const shouldCheckSharedFinalization = Boolean(linkedSharedTournamentId || uuidPattern.test(requestedTournamentId));
+    const shouldCheckSharedFinalization = Boolean(linkedSharedTournamentId || uuidPattern.test(effectiveTournamentId));
     if (!shouldCheckSharedFinalization || !sharedScoreTournamentId) {
       finalizationVerifiedAtRef.current = Date.now();
       return false;
     }
 
     const sharedState = await withTimeout(
-      loadSharedTournamentScorecardState(sharedScoreTournamentId).catch((error) => {
+      loadSharedTournamentScorecardState(sharedScoreTournamentId, 1, 18, requestedShareToken).catch((error) => {
         console.warn("[TournamentService] Unable to verify tournament finalization before score save.", error);
         return null;
       }),
@@ -628,6 +669,7 @@ export default function PlayerScorecardPage() {
             roundNumber,
             playerId,
             enteredByPlayerId,
+            shareToken: requestedShareToken || undefined,
           });
 
           if (remoteScore?.hole_scores?.length) {
@@ -645,7 +687,7 @@ export default function PlayerScorecardPage() {
         );
         if (hasAnyHoleScore(remoteSelfScores)) {
           supabaseLoadedCount += 1;
-          loadedSelfScores = remoteSelfScores;
+          loadedSelfScores = chooseMostCompleteScores(loadedSelfScores, remoteSelfScores);
         }
 
         if (resolvedPlayerIds.markerPlayerId) {
@@ -655,7 +697,7 @@ export default function PlayerScorecardPage() {
           );
           if (hasAnyHoleScore(remoteMarkerScores)) {
             supabaseLoadedCount += 1;
-            loadedMarkerScores = remoteMarkerScores;
+            loadedMarkerScores = chooseMostCompleteScores(loadedMarkerScores, remoteMarkerScores);
           }
 
           const remoteMarkedPlayerSelfScores = await loadRemoteScore(
@@ -664,11 +706,18 @@ export default function PlayerScorecardPage() {
           );
           if (hasAnyHoleScore(remoteMarkedPlayerSelfScores)) {
             supabaseLoadedCount += 1;
-            loadedMarkedPlayerSelfScores = remoteMarkedPlayerSelfScores;
+            loadedMarkedPlayerSelfScores = chooseMostCompleteScores(
+              loadedMarkedPlayerSelfScores,
+              remoteMarkedPlayerSelfScores
+            );
           }
         }
 
-        const sharedScores = await loadComparisonScores({ tournamentId: sharedScoreTournamentId, roundNumber });
+        const sharedScores = await loadComparisonScores({
+          tournamentId: sharedScoreTournamentId,
+          roundNumber,
+          shareToken: requestedShareToken || undefined,
+        });
         supabaseLoadedCount = Math.max(
           supabaseLoadedCount,
           sharedScores.filter((entry) => hasAnyHoleScore(entry.hole_scores)).length
@@ -980,6 +1029,7 @@ export default function PlayerScorecardPage() {
       total: holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0),
       entryStatus,
       submittedAt: null,
+      shareToken: requestedShareToken || undefined,
     })
       .then((result) => {
         if (isDevelopment) {
@@ -1010,6 +1060,7 @@ export default function PlayerScorecardPage() {
                     putts: stats?.putts ?? null,
                     penaltyStrokes: stats?.penaltyStrokes ?? null,
                     entryStatus,
+                    shareToken: requestedShareToken || undefined,
                   })
                 );
               }
@@ -1021,6 +1072,7 @@ export default function PlayerScorecardPage() {
                 enteredByPlayerId,
                 holeScores: [...holeScores],
                 entryStatus,
+                shareToken: requestedShareToken || undefined,
               });
             }
           } catch (error) {

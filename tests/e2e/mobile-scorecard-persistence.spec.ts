@@ -477,6 +477,31 @@ const routeTournamentStateSnapshotStore = async (
   };
 };
 
+const routeShareTokenApi = async (page: Page, token = "e2e-mobile-scoring-token") => {
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const postData = route.request().postDataJSON() as Record<string, unknown>;
+
+    if (postData.action !== "createShareToken") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "share-token-e2e",
+        tournament_id: sharedTournamentId,
+        purpose: "mobile_scoring",
+        expires_at: "2026-07-22T00:00:00.000Z",
+        revoked_at: null,
+        created_at: "2026-07-09T00:00:00.000Z",
+        token,
+      }),
+    });
+  });
+};
+
 const waitForMobileScorecardControls = async (page: Page) => {
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
@@ -825,6 +850,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   const storageErrors: string[] = [];
   const syncedPlayerRows: Array<Record<string, unknown>> = [];
   const snapshotStore = await routeTournamentStateSnapshotStore(page);
+  await routeShareTokenApi(page);
   const timestampPlayerId = 1783206161404;
   const timestampMarkerId = 1783206161405;
   const brandNewUiState = {
@@ -977,17 +1003,19 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
-  await expect(page.getByText(new RegExp(`Scorecard URL: .*/scorecard/player-1\\?tournamentId=${sharedTournamentId}&pairing=1`))).toBeVisible();
+  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&shareToken=/)).toBeVisible();
 
   const href = await mobileScorecardLink.getAttribute("href");
   expect(href).toBeTruthy();
   expect(href).not.toContain("localhost");
-  expect(href).toContain(baseUrl);
 
   const scorecardUrl = new URL(href || "");
+  expect(scorecardUrl.origin).not.toBe(new URL(baseUrl).origin);
+  expect(scorecardUrl.hostname).not.toBe("localhost");
   expect(scorecardUrl.pathname).toBe("/scorecard/player-1");
-  expect(scorecardUrl.searchParams.get("tournamentId")).toBe(tournamentId);
+  expect(scorecardUrl.searchParams.get("tournamentId")).toBe(null);
   expect(scorecardUrl.searchParams.get("pairing")).toBe("1");
+  expect(scorecardUrl.searchParams.get("shareToken")).toBeTruthy();
 });
 
 test("snapshot upsert failure keeps localStorage fallback and roster sync working", async ({ page }) => {
