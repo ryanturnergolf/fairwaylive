@@ -185,6 +185,93 @@ export type TournamentStatisticsReadModels = {
   tournamentStatistics: TournamentStatisticsReadModel;
 };
 
+export type OfficialRoundScoreReadModel = {
+  roundNumber: number;
+  score: number;
+  toPar: number;
+  label: string;
+};
+
+export type OfficialIndividualResultReadModel = {
+  rank: number;
+  position: string;
+  playerId: string;
+  playerName: string;
+  teamId: string | null;
+  teamName: string;
+  totalScore: number;
+  toPar: number;
+  rounds: OfficialRoundScoreReadModel[];
+  holesPlayed: number;
+  isComplete: boolean;
+  isMedalist: boolean;
+};
+
+export type OfficialTeamCountingScoreReadModel = {
+  playerId: string;
+  playerName: string;
+  score: number;
+  toPar: number;
+};
+
+export type OfficialTeamRoundResultReadModel = {
+  roundNumber: number;
+  countingScore: number;
+  toPar: number;
+  countingScores: OfficialTeamCountingScoreReadModel[];
+  label: string;
+};
+
+export type OfficialTeamResultReadModel = {
+  rank: number;
+  position: string;
+  teamId: string | null;
+  teamName: string;
+  totalScore: number;
+  toPar: number;
+  rounds: OfficialTeamRoundResultReadModel[];
+  isComplete: boolean;
+  isChampion: boolean;
+};
+
+export type OfficialRoundSummaryReadModel = {
+  roundNumber: number;
+  playerCount: number;
+  teamCount: number;
+  lowPlayerScore: OfficialIndividualResultReadModel | null;
+  lowTeamScore: OfficialTeamResultReadModel | null;
+  scoringAverage: number | null;
+};
+
+export type OfficialResultsFactsReadModel = {
+  tournamentName: string;
+  date: string;
+  course: string;
+  players: number;
+  teams: number;
+  rounds: number;
+  winners: string[];
+  teamChampions: string[];
+  tiePolicy: string;
+  generatedAt: string;
+};
+
+export type OfficialResultsReadModel = {
+  tournamentId: string;
+  sharedTournamentId: string;
+  generatedAt: string;
+  holeCount: number;
+  countingScores: number;
+  individualLeaderboard: OfficialIndividualResultReadModel[];
+  teamLeaderboard: OfficialTeamResultReadModel[];
+  medalists: OfficialIndividualResultReadModel[];
+  teamChampions: OfficialTeamResultReadModel[];
+  roundSummaries: OfficialRoundSummaryReadModel[];
+  statisticsSummary: TournamentStatisticsReadModel;
+  facts: OfficialResultsFactsReadModel;
+  csv: string;
+};
+
 export type BuildTournamentStatisticsReadModelsInput = {
   aggregate: TournamentAggregate | null;
   entries: ScoreHoleEntryRow[];
@@ -195,6 +282,16 @@ export type BuildTournamentStatisticsReadModelsInput = {
 export type LoadTournamentStatisticsReadModelsInput = {
   tournamentId: string;
   roundNumber?: number;
+};
+
+export type BuildOfficialResultsReadModelInput = {
+  aggregate: TournamentAggregate | null;
+  entries: ScoreHoleEntryRow[];
+  generatedAt?: string;
+};
+
+export type LoadOfficialResultsReadModelInput = {
+  tournamentId: string;
 };
 
 type SelectedHoleEntry = ScoreHoleEntryRow & {
@@ -605,6 +702,8 @@ const formatToPar = (value: number | null) => {
   return value > 0 ? `+${value}` : String(value);
 };
 
+const formatPosition = (rank: number, isTied: boolean) => `${isTied ? "T" : ""}${rank}`;
+
 const formatAverageToPar = (value: number | null) => {
   if (value === null) {
     return "--";
@@ -813,6 +912,255 @@ const getCompletedRoundTotals = (entries: SelectedHoleEntry[], holeCount: number
       };
     })
     .filter((round): round is { roundNumber: number; total: number } => Boolean(round));
+};
+
+const getTournamentName = (aggregate: TournamentAggregate | null) =>
+  aggregate?.tournament.name || aggregate?.envelope?.tournament.name || "Tournament";
+
+const getTournamentDate = (aggregate: TournamentAggregate | null) =>
+  aggregate?.tournament.date || aggregate?.tournamentRow?.tournament_date || "";
+
+const getTournamentCourse = (aggregate: TournamentAggregate | null) =>
+  aggregate?.tournament.course || aggregate?.envelope?.tournament.course || "";
+
+const getTournamentRoundCount = (aggregate: TournamentAggregate | null, selectedEntries: SelectedHoleEntry[]) => {
+  const configuredRounds = Number(aggregate?.tournament.rounds || aggregate?.envelope?.tournament.settings?.rounds);
+  const scoredRounds = Math.max(0, ...selectedEntries.map((entry) => entry.round_number));
+  return Math.max(1, Number.isFinite(configuredRounds) ? configuredRounds : 0, scoredRounds);
+};
+
+const getTiePolicyLabel = (aggregate: TournamentAggregate | null) => {
+  const settings = asRecord(aggregate?.envelope?.tournament.settings ?? aggregate?.tournament.settings);
+  const tieSetting =
+    settings?.tieBreaker ??
+    settings?.tiebreaker ??
+    settings?.tieBreakers ??
+    settings?.tiePolicy ??
+    settings?.ties;
+
+  if (typeof tieSetting === "string" && tieSetting.trim()) {
+    return tieSetting.trim();
+  }
+
+  if (Array.isArray(tieSetting) && tieSetting.length > 0) {
+    return tieSetting.map((item) => String(item)).join(", ");
+  }
+
+  return "Ties are displayed as shared positions.";
+};
+
+const officialOnlyEntries = (entries: ScoreHoleEntryRow[]) =>
+  entries.filter((entry) => entry.is_official || String(entry.review_status).toLowerCase().startsWith("official"));
+
+const applyCompetitionRanks = <T extends { totalScore: number; toPar: number; name: string }>(
+  rows: T[]
+): Array<T & { rank: number; position: string }> => {
+  const sortedRows = [...rows].sort((left, right) =>
+    left.totalScore - right.totalScore || left.toPar - right.toPar || left.name.localeCompare(right.name)
+  );
+  const scoreCounts = new Map<number, number>();
+  sortedRows.forEach((row) => {
+    scoreCounts.set(row.totalScore, (scoreCounts.get(row.totalScore) ?? 0) + 1);
+  });
+
+  let previousScore: number | null = null;
+  let previousRank = 0;
+
+  return sortedRows.map((row, index) => {
+    const rank = previousScore === row.totalScore ? previousRank : index + 1;
+    previousScore = row.totalScore;
+    previousRank = rank;
+
+    return {
+      ...row,
+      rank,
+      position: formatPosition(rank, (scoreCounts.get(row.totalScore) ?? 0) > 1),
+    };
+  });
+};
+
+const buildOfficialIndividualLeaderboard = (
+  aggregate: TournamentAggregate | null,
+  selectedEntries: SelectedHoleEntry[],
+  holeCount: number
+): OfficialIndividualResultReadModel[] => {
+  const entriesByPlayer = new Map<string, SelectedHoleEntry[]>();
+  selectedEntries.forEach((entry) => {
+    entriesByPlayer.set(entry.player_id, [...(entriesByPlayer.get(entry.player_id) ?? []), entry]);
+  });
+
+  const rankedRows = applyCompetitionRanks(
+    [...entriesByPlayer.entries()]
+      .map(([playerId, playerEntries]) => {
+        const rounds = getCompletedRoundTotals(playerEntries, holeCount).map((round) => {
+          const roundEntries = playerEntries.filter((entry) => entry.round_number === round.roundNumber);
+          const toPar = roundEntries.reduce((sum, entry) => sum + entry.strokes - entry.par, 0);
+
+          return {
+            roundNumber: round.roundNumber,
+            score: round.total,
+            toPar,
+            label: `Round ${round.roundNumber} - ${round.total} (${formatToPar(toPar)})`,
+          };
+        });
+        const team = getPlayerTeam(aggregate, playerId);
+        const totalScore = rounds.reduce((sum, round) => sum + round.score, 0);
+        const toPar = rounds.reduce((sum, round) => sum + round.toPar, 0);
+        const playerName = getPlayerName(aggregate, playerId);
+
+        return rounds.length > 0
+          ? {
+              name: playerName,
+              playerId,
+              playerName,
+              teamId: team.teamId,
+              teamName: team.teamName,
+              totalScore,
+              toPar,
+              rounds,
+              holesPlayed: playerEntries.length,
+              isComplete: playerEntries.length >= rounds.length * holeCount,
+            }
+          : null;
+      })
+      .filter((row): row is Omit<OfficialIndividualResultReadModel, "rank" | "position" | "isMedalist"> & { name: string } => Boolean(row))
+  );
+
+  const medalistScore = rankedRows[0]?.totalScore ?? null;
+  return rankedRows.map(({ name: _name, ...row }) => ({
+    ...row,
+    isMedalist: medalistScore !== null && row.totalScore === medalistScore,
+  }));
+};
+
+const buildOfficialTeamLeaderboard = (
+  aggregate: TournamentAggregate | null,
+  selectedEntries: SelectedHoleEntry[],
+  holeCount: number,
+  countingScores: number
+): OfficialTeamResultReadModel[] => {
+  const entriesByPlayer = new Map<string, SelectedHoleEntry[]>();
+  selectedEntries.forEach((entry) => {
+    entriesByPlayer.set(entry.player_id, [...(entriesByPlayer.get(entry.player_id) ?? []), entry]);
+  });
+
+  const completedRoundsByTeam = new Map<string, { teamId: string | null; teamName: string; rounds: CompletedPlayerRound[] }>();
+  entriesByPlayer.forEach((playerEntries, playerId) => {
+    const team = getPlayerTeam(aggregate, playerId);
+    const teamKey = team.teamId ?? team.teamName;
+    const current = completedRoundsByTeam.get(teamKey) ?? { teamId: team.teamId, teamName: team.teamName, rounds: [] };
+    current.rounds.push(...getCompletedPlayerRounds(playerEntries, holeCount));
+    completedRoundsByTeam.set(teamKey, current);
+  });
+
+  const rankedRows = applyCompetitionRanks(
+    [...completedRoundsByTeam.values()]
+      .map((team) => {
+        const teamRoundCalculations = buildTeamRoundCalculations(team.rounds, countingScores);
+        const rounds = teamRoundCalculations.map((round) => ({
+          roundNumber: round.roundNumber,
+          countingScore: round.countingScore,
+          toPar: round.toPar,
+          countingScores: round.countingPlayers.map((playerRound) => ({
+            playerId: playerRound.playerId,
+            playerName: getPlayerName(aggregate, playerRound.playerId),
+            score: playerRound.total,
+            toPar: playerRound.toPar,
+          })),
+          label: `Round ${round.roundNumber} - ${round.countingScore} (${formatToPar(round.toPar)})`,
+        }));
+        const totalScore = rounds.reduce((sum, round) => sum + round.countingScore, 0);
+        const toPar = rounds.reduce((sum, round) => sum + round.toPar, 0);
+
+        return rounds.length > 0
+          ? {
+              name: team.teamName,
+              teamId: team.teamId,
+              teamName: team.teamName,
+              totalScore,
+              toPar,
+              rounds,
+              isComplete: rounds.every((round) => round.countingScores.length >= countingScores),
+            }
+          : null;
+      })
+      .filter((row): row is Omit<OfficialTeamResultReadModel, "rank" | "position" | "isChampion"> & { name: string } => Boolean(row))
+  );
+
+  const championScore = rankedRows[0]?.totalScore ?? null;
+  return rankedRows.map(({ name: _name, ...row }) => ({
+    ...row,
+    isChampion: championScore !== null && row.totalScore === championScore,
+  }));
+};
+
+const buildRoundSummaries = (
+  aggregate: TournamentAggregate | null,
+  selectedEntries: SelectedHoleEntry[],
+  individualLeaderboard: OfficialIndividualResultReadModel[],
+  teamLeaderboard: OfficialTeamResultReadModel[]
+): OfficialRoundSummaryReadModel[] => {
+  const roundNumbers = [...new Set(selectedEntries.map((entry) => entry.round_number))].sort((left, right) => left - right);
+
+  return roundNumbers.map((roundNumber) => {
+    const roundEntries = selectedEntries.filter((entry) => entry.round_number === roundNumber);
+    const lowPlayerScore =
+      individualLeaderboard
+        .filter((player) => player.rounds.some((round) => round.roundNumber === roundNumber))
+        .sort((left, right) =>
+          (left.rounds.find((round) => round.roundNumber === roundNumber)?.score ?? Number.MAX_SAFE_INTEGER) -
+            (right.rounds.find((round) => round.roundNumber === roundNumber)?.score ?? Number.MAX_SAFE_INTEGER) ||
+          left.playerName.localeCompare(right.playerName)
+        )[0] ?? null;
+    const lowTeamScore =
+      teamLeaderboard
+        .filter((team) => team.rounds.some((round) => round.roundNumber === roundNumber))
+        .sort((left, right) =>
+          (left.rounds.find((round) => round.roundNumber === roundNumber)?.countingScore ?? Number.MAX_SAFE_INTEGER) -
+            (right.rounds.find((round) => round.roundNumber === roundNumber)?.countingScore ?? Number.MAX_SAFE_INTEGER) ||
+          left.teamName.localeCompare(right.teamName)
+        )[0] ?? null;
+
+    return {
+      roundNumber,
+      playerCount: new Set(roundEntries.map((entry) => entry.player_id)).size,
+      teamCount: new Set(roundEntries.map((entry) => getPlayerTeam(aggregate, entry.player_id).teamName)).size,
+      lowPlayerScore,
+      lowTeamScore,
+      scoringAverage: average(roundEntries.reduce((sum, entry) => sum + entry.strokes, 0), roundEntries.length),
+    };
+  });
+};
+
+const csvEscape = (value: string | number | null | undefined) => {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+const buildOfficialResultsCsv = (readModel: Omit<OfficialResultsReadModel, "csv">) => {
+  const rows: Array<Array<string | number | null | undefined>> = [
+    ["Section", "Position", "Name", "Team", "Round", "Score", "To Par", "Detail"],
+  ];
+
+  readModel.individualLeaderboard.forEach((player) => {
+    rows.push(["Individual", player.position, player.playerName, player.teamName, "Total", player.totalScore, player.toPar, player.isMedalist ? "Medalist" : ""]);
+    player.rounds.forEach((round) => {
+      rows.push(["Individual Round", player.position, player.playerName, player.teamName, round.roundNumber, round.score, round.toPar, ""]);
+    });
+  });
+
+  readModel.teamLeaderboard.forEach((team) => {
+    rows.push(["Team", team.position, team.teamName, "", "Total", team.totalScore, team.toPar, team.isChampion ? "Champion" : ""]);
+    team.rounds.forEach((round) => {
+      rows.push(["Team Round", team.position, team.teamName, "", round.roundNumber, round.countingScore, round.toPar, round.countingScores.map((score) => `${score.playerName} ${score.score}`).join("; ")]);
+    });
+  });
+
+  readModel.roundSummaries.forEach((round) => {
+    rows.push(["Round Summary", "", `Round ${round.roundNumber}`, "", round.roundNumber, round.scoringAverage, "", `${round.playerCount} players / ${round.teamCount} teams`]);
+  });
+
+  return rows.map((row) => row.map(csvEscape).join(",")).join("\n");
 };
 
 type CompletedPlayerRound = {
@@ -1310,5 +1658,65 @@ export const loadTournamentStatisticsReadModels = async ({
     aggregate,
     entries,
     roundNumber,
+  });
+};
+
+export const buildOfficialResultsReadModel = ({
+  aggregate,
+  entries,
+  generatedAt = new Date().toISOString(),
+}: BuildOfficialResultsReadModelInput): OfficialResultsReadModel => {
+  const holePars = getHolePars(aggregate);
+  const selectedEntries = selectPreferredHoleEntries(officialOnlyEntries(entries), holePars);
+  const countingScores = getCountingScores(aggregate);
+  const individualLeaderboard = buildOfficialIndividualLeaderboard(aggregate, selectedEntries, holePars.length);
+  const teamLeaderboard = buildOfficialTeamLeaderboard(aggregate, selectedEntries, holePars.length, countingScores);
+  const medalists = individualLeaderboard.filter((player) => player.isMedalist);
+  const teamChampions = teamLeaderboard.filter((team) => team.isChampion);
+  const statisticsSummary = buildTournamentStatistics(selectedEntries, holePars);
+  const facts: OfficialResultsFactsReadModel = {
+    tournamentName: getTournamentName(aggregate),
+    date: getTournamentDate(aggregate),
+    course: getTournamentCourse(aggregate),
+    players: individualLeaderboard.length,
+    teams: teamLeaderboard.length,
+    rounds: getTournamentRoundCount(aggregate, selectedEntries),
+    winners: medalists.map((player) => player.playerName),
+    teamChampions: teamChampions.map((team) => team.teamName),
+    tiePolicy: getTiePolicyLabel(aggregate),
+    generatedAt,
+  };
+  const readModelWithoutCsv: Omit<OfficialResultsReadModel, "csv"> = {
+    tournamentId: aggregate?.localTournamentId || aggregate?.tournamentId || entries[0]?.tournament_id || "",
+    sharedTournamentId: aggregate?.sharedTournamentId || entries[0]?.tournament_id || "",
+    generatedAt,
+    holeCount: holePars.length,
+    countingScores,
+    individualLeaderboard,
+    teamLeaderboard,
+    medalists,
+    teamChampions,
+    roundSummaries: buildRoundSummaries(aggregate, selectedEntries, individualLeaderboard, teamLeaderboard),
+    statisticsSummary,
+    facts,
+  };
+
+  return {
+    ...readModelWithoutCsv,
+    csv: buildOfficialResultsCsv(readModelWithoutCsv),
+  };
+};
+
+export const loadOfficialResultsReadModel = async ({
+  tournamentId,
+}: LoadOfficialResultsReadModelInput): Promise<OfficialResultsReadModel> => {
+  const [aggregate, entries] = await Promise.all([
+    getTournamentAggregate(tournamentId),
+    loadTournamentHoleStatistics({ tournamentId }),
+  ]);
+
+  return buildOfficialResultsReadModel({
+    aggregate,
+    entries,
   });
 };

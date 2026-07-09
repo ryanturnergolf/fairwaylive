@@ -70,8 +70,10 @@ import TournamentPrintExport, {
   type ScoreboardImportState,
 } from "./components/TournamentPrintExport";
 import TournamentStatisticsDashboard from "./components/TournamentStatisticsDashboard";
+import OfficialResultsDashboard from "./components/OfficialResultsDashboard";
 
-const tabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
+const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
+const officialResultsTab = "Official Results";
 
 const defaultTeamFormState: TeamFormState = {
   schoolName: "",
@@ -258,6 +260,10 @@ export default function TournamentPage() {
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
   const isTournamentFinalized = Boolean(finalizationRecord);
+  const visibleTabs = useMemo(
+    () => (isTournamentFinalized ? [...baseTabs, officialResultsTab] : baseTabs),
+    [isTournamentFinalized]
+  );
   const playerIdsByName = useMemo(() => {
     const ids = new Map<string, string>();
     pairings.forEach((pairing) => {
@@ -334,10 +340,16 @@ export default function TournamentPage() {
     }
 
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
-    if (requestedTab && tabs.includes(requestedTab)) {
+    if (requestedTab && [...baseTabs, officialResultsTab].includes(requestedTab)) {
       setActiveTab(requestedTab);
     }
   }, []);
+
+  useEffect(() => {
+    if (!isTournamentFinalized && activeTab === officialResultsTab) {
+      setActiveTab("Overview");
+    }
+  }, [activeTab, isTournamentFinalized]);
 
   const refreshReviewResolutionData = useCallback(async () => {
     if (!sharedTournamentId) {
@@ -962,7 +974,7 @@ export default function TournamentPage() {
               </div>
             ) : null}
             <div className="flex flex-wrap gap-3">
-              {tabs.map((tab) => (
+              {visibleTabs.map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -1122,6 +1134,8 @@ export default function TournamentPage() {
                 tournamentId={sharedTournamentId || tournamentId}
                 roundNumber={normalizedRoundSetup.roundNumber}
               />
+            ) : activeTab === officialResultsTab && isTournamentFinalized ? (
+              <OfficialResultsDashboard tournamentId={sharedTournamentId || tournamentId} />
             ) : activeTab === "Live Scoring" || activeTab === "Clippd Export" ? (
               <TournamentPrintExport
                 activeTab={activeTab}

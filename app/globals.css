@@ -96,4 +96,27 @@ body {
     break-inside: avoid;
     page-break-inside: avoid;
   }
+
+  body.printing-official-results * {
+    visibility: hidden;
+  }
+
+  body.printing-official-results .print-official-results-root,
+  body.printing-official-results .print-official-results-root * {
+    visibility: visible;
+  }
+
+  body.printing-official-results .print-official-results-root {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    padding: 24px;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  body.printing-official-results .print-official-sheet {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
