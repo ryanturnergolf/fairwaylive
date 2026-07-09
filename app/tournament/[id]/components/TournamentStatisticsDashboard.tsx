@@ -22,6 +22,18 @@ type LoadState =
 const formatStat = (value: number | null, suffix = "") =>
   value === null ? "--" : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}${suffix}`;
 
+const formatSignedStat = (value: number | null) => {
+  if (value === null) {
+    return "--";
+  }
+
+  if (value === 0) {
+    return "E";
+  }
+
+  return value > 0 ? `+${formatStat(value)}` : formatStat(value);
+};
+
 const formatHoleSummary = (hole: HoleStatisticsReadModel | null) =>
   hole ? `Hole ${hole.holeNumber} (Par ${hole.par}) - ${formatStat(hole.scoringAverage)}` : "--";
 
@@ -29,6 +41,32 @@ const StatisticCard = ({ label, value }: { label: string; value: string | number
   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3">
     <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#B8892D]">{label}</p>
     <p className="mt-2 text-xl font-black text-[#0B3D2E]">{value}</p>
+  </div>
+);
+
+const PlayerReportMetric = ({ label, value }: { label: string; value: string | number }) => (
+  <div className="border-b border-[#F0E7D8] py-2 last:border-b-0">
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs font-bold text-[#51635C]">{label}</span>
+      <span className="text-right text-sm font-black text-[#0B3D2E]">{value}</span>
+    </div>
+  </div>
+);
+
+const PlayerReportGroup = ({
+  title,
+  metrics,
+}: {
+  title: string;
+  metrics: { label: string; value: string | number }[];
+}) => (
+  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3">
+    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#B8892D]">{title}</p>
+    <div className="mt-2">
+      {metrics.map((metric) => (
+        <PlayerReportMetric key={metric.label} label={metric.label} value={metric.value} />
+      ))}
+    </div>
   </div>
 );
 
@@ -80,6 +118,83 @@ const PlayerStatisticsTable = ({ players }: { players: PlayerStatisticsReadModel
     ) : (
       <div className="mt-5">
         <EmptyState label="No player statistics are available yet." />
+      </div>
+    )}
+  </section>
+);
+
+const PlayerReports = ({ players }: { players: PlayerStatisticsReadModel[] }) => (
+  <section className="rounded-[28px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Player Reports</p>
+        <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">Coach performance reports</h3>
+      </div>
+    </div>
+    {players.length > 0 ? (
+      <div className="mt-5 space-y-4">
+        {players.map((player) => (
+          <article key={player.playerId} className="rounded-[24px] border border-[#E8DCC8] bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">{player.playerName}</h4>
+                <p className="mt-1 text-sm font-semibold text-[#51635C]">{player.teamName}</p>
+              </div>
+              <span className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+                {player.holesPlayed} holes
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+              <PlayerReportGroup
+                title="Performance Summary"
+                metrics={[
+                  { label: "Scoring Average", value: formatStat(player.scoringAverage) },
+                  { label: "Total Strokes", value: player.totalStrokes },
+                  { label: "To Par", value: formatSignedStat(player.toPar) },
+                  { label: "Fairway %", value: formatStat(player.fairwayPercentage, "%") },
+                  { label: "GIR %", value: formatStat(player.girPercentage, "%") },
+                  { label: "Putts per Round", value: formatStat(player.puttsPerRound) },
+                  { label: "Putts per GIR", value: formatStat(player.puttsPerGir) },
+                  { label: "Penalty Strokes", value: player.penaltyStrokes },
+                ]}
+              />
+              <PlayerReportGroup
+                title="Scoring Breakdown"
+                metrics={[
+                  { label: "Birdies", value: player.birdies },
+                  { label: "Pars", value: player.pars },
+                  { label: "Bogeys", value: player.bogeys },
+                  { label: "Double Bogeys+", value: player.doublePlus },
+                  { label: "Best Hole", value: player.bestHole?.label ?? "--" },
+                  { label: "Worst Hole", value: player.worstHole?.label ?? "--" },
+                ]}
+              />
+              <PlayerReportGroup
+                title="Performance Insights"
+                metrics={[
+                  { label: "Strongest Par Type", value: player.strongestParType?.label ?? "--" },
+                  { label: "Weakest Par Type", value: player.weakestParType?.label ?? "--" },
+                  { label: "Hardest Hole", value: player.hardestHole?.label ?? "--" },
+                  { label: "Best Stretch", value: player.bestStretch?.label ?? "--" },
+                  { label: "Worst Stretch", value: player.worstStretch?.label ?? "--" },
+                ]}
+              />
+              <PlayerReportGroup
+                title="Statistics Completeness"
+                metrics={[
+                  { label: "Missing Fairways", value: player.completeness.missingFairways },
+                  { label: "Missing GIR", value: player.completeness.missingGir },
+                  { label: "Missing Putts", value: player.completeness.missingPutts },
+                  { label: "Missing Penalties", value: player.completeness.missingPenalties },
+                ]}
+              />
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div className="mt-5">
+        <EmptyState label="No player reports are available yet." />
       </div>
     )}
   </section>
@@ -174,6 +289,7 @@ export default function TournamentStatisticsDashboard({
   return (
     <div className="space-y-6">
       <PlayerStatisticsTable players={playerStatistics} />
+      <PlayerReports players={playerStatistics} />
       <TeamStatisticsTable teams={teamStatistics} />
 
       <section className="rounded-[28px] border border-[#E8DCC8] bg-white p-5 shadow-sm">

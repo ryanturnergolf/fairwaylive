@@ -623,12 +623,14 @@ test("mobile scorecard saves a hole with no optional stats", async ({ page }) =>
 });
 
 test("mobile scorecard hides Fairway Hit on par 3s", async ({ page }) => {
-  await routeSharedScoreEntriesStore(page);
+  const sharedStore = await routeSharedScoreEntriesStore(page);
 
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
+  await waitForSharedScoreHydration(sharedStore);
 
   await page.getByRole("button", { name: "Next Hole" }).click();
+  await expect(page.getByText("Hole 2")).toBeVisible();
   await page.getByRole("button", { name: "Next Hole" }).click();
 
   await expect(page.getByText("Hole 3")).toBeVisible();

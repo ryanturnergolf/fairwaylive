@@ -34,6 +34,30 @@ export type StatCompleteness = {
   isComplete: boolean;
 };
 
+export type PlayerHoleReport = {
+  holeNumber: number;
+  par: number;
+  strokes: number | null;
+  toPar: number | null;
+  label: string;
+};
+
+export type PlayerParTypeReport = {
+  par: 3 | 4 | 5;
+  scoringAverage: number;
+  toParAverage: number;
+  label: string;
+};
+
+export type PlayerStretchReport = {
+  roundNumber: number;
+  startHole: number;
+  endHole: number;
+  scoringAverage: number;
+  toParAverage: number;
+  label: string;
+};
+
 export type PlayerStatisticsReadModel = {
   playerId: string;
   playerName: string;
@@ -42,15 +66,25 @@ export type PlayerStatisticsReadModel = {
   holesPlayed: number;
   roundsPlayed: number;
   scoringAverage: number | null;
+  totalStrokes: number;
+  toPar: number;
   fairwayPercentage: number | null;
   girPercentage: number | null;
   putts: number;
+  puttsPerRound: number | null;
   puttsPerGir: number | null;
   birdies: number;
   pars: number;
   bogeys: number;
   doublePlus: number;
   penaltyStrokes: number;
+  bestHole: PlayerHoleReport | null;
+  worstHole: PlayerHoleReport | null;
+  strongestParType: PlayerParTypeReport | null;
+  weakestParType: PlayerParTypeReport | null;
+  hardestHole: PlayerHoleReport | null;
+  bestStretch: PlayerStretchReport | null;
+  worstStretch: PlayerStretchReport | null;
   completeness: StatCompleteness;
 };
 
@@ -118,6 +152,7 @@ type SelectedHoleEntry = ScoreHoleEntryRow & {
 type StatAccumulator = {
   entries: SelectedHoleEntry[];
   totalStrokes: number;
+  totalToPar: number;
   fairwayAttempts: number;
   fairwaysHit: number;
   girAttempts: number;
@@ -366,6 +401,7 @@ const selectPreferredHoleEntries = (
 const createAccumulator = (): StatAccumulator => ({
   entries: [],
   totalStrokes: 0,
+  totalToPar: 0,
   fairwayAttempts: 0,
   fairwaysHit: 0,
   girAttempts: 0,
@@ -389,6 +425,7 @@ const createAccumulator = (): StatAccumulator => ({
 const addEntryToAccumulator = (accumulator: StatAccumulator, entry: SelectedHoleEntry) => {
   accumulator.entries.push(entry);
   accumulator.totalStrokes += entry.strokes;
+  accumulator.totalToPar += entry.strokes - entry.par;
 
   if (entry.par !== 3) {
     if (entry.fairway_hit === null) {
@@ -455,6 +492,165 @@ const getCompleteness = (accumulator: StatAccumulator): StatCompleteness => {
     completionPercentage: requiredStats > 0 ? roundStat(((requiredStats - missingStats) / requiredStats) * 100) : null,
     isComplete: requiredStats > 0 && missingStats === 0,
   };
+};
+
+const formatToPar = (value: number | null) => {
+  if (value === null) {
+    return "--";
+  }
+
+  if (value === 0) {
+    return "E";
+  }
+
+  return value > 0 ? `+${value}` : String(value);
+};
+
+const formatAverageToPar = (value: number | null) => {
+  if (value === null) {
+    return "--";
+  }
+
+  const formatted = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (value === 0) {
+    return "E";
+  }
+
+  return value > 0 ? `+${formatted}` : formatted;
+};
+
+const getEntryHoleReport = (entry: SelectedHoleEntry | null): PlayerHoleReport | null => {
+  if (!entry) {
+    return null;
+  }
+
+  const toPar = entry.strokes - entry.par;
+  return {
+    holeNumber: entry.hole_number,
+    par: entry.par,
+    strokes: entry.strokes,
+    toPar,
+    label: `Hole ${entry.hole_number} (Par ${entry.par}) - ${entry.strokes} (${formatToPar(toPar)})`,
+  };
+};
+
+const getAveragedHoleReport = (entries: SelectedHoleEntry[]): PlayerHoleReport | null => {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const firstEntry = entries[0];
+  const strokes = average(entries.reduce((sum, entry) => sum + entry.strokes, 0), entries.length);
+  const toPar = average(entries.reduce((sum, entry) => sum + entry.strokes - entry.par, 0), entries.length);
+
+  return {
+    holeNumber: firstEntry.hole_number,
+    par: firstEntry.par,
+    strokes,
+    toPar,
+    label: `Hole ${firstEntry.hole_number} (Par ${firstEntry.par}) - ${strokes?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? "--"} avg (${formatAverageToPar(toPar)})`,
+  };
+};
+
+const getBestSingleHole = (entries: SelectedHoleEntry[]) =>
+  [...entries].sort((left, right) =>
+    (left.strokes - left.par) - (right.strokes - right.par) ||
+    left.strokes - right.strokes ||
+    left.hole_number - right.hole_number
+  )[0] ?? null;
+
+const getWorstSingleHole = (entries: SelectedHoleEntry[]) =>
+  [...entries].sort((left, right) =>
+    (right.strokes - right.par) - (left.strokes - left.par) ||
+    right.strokes - left.strokes ||
+    left.hole_number - right.hole_number
+  )[0] ?? null;
+
+const buildParTypeReport = (par: number, accumulator: StatAccumulator): PlayerParTypeReport | null => {
+  if (![3, 4, 5].includes(par) || accumulator.entries.length === 0) {
+    return null;
+  }
+
+  const scoringAverage = average(accumulator.totalStrokes, accumulator.entries.length);
+  const toParAverage = average(accumulator.totalToPar, accumulator.entries.length);
+
+  if (scoringAverage === null || toParAverage === null) {
+    return null;
+  }
+
+  return {
+    par: par as 3 | 4 | 5,
+    scoringAverage,
+    toParAverage,
+    label: `Par ${par} - ${scoringAverage.toLocaleString(undefined, { maximumFractionDigits: 2 })} avg (${formatAverageToPar(toParAverage)})`,
+  };
+};
+
+const buildPlayerParTypeReports = (entries: SelectedHoleEntry[]) => {
+  const parAccumulators = new Map<number, StatAccumulator>();
+  entries.forEach((entry) => {
+    const accumulator = parAccumulators.get(entry.par) ?? createAccumulator();
+    addEntryToAccumulator(accumulator, entry);
+    parAccumulators.set(entry.par, accumulator);
+  });
+
+  return [3, 4, 5]
+    .map((par) => buildParTypeReport(par, parAccumulators.get(par) ?? createAccumulator()))
+    .filter((report): report is PlayerParTypeReport => Boolean(report));
+};
+
+const buildPlayerHoleAverageReports = (entries: SelectedHoleEntry[]) => {
+  const entriesByHole = new Map<number, SelectedHoleEntry[]>();
+  entries.forEach((entry) => {
+    entriesByHole.set(entry.hole_number, [...(entriesByHole.get(entry.hole_number) ?? []), entry]);
+  });
+
+  return [...entriesByHole.values()]
+    .map(getAveragedHoleReport)
+    .filter((report): report is PlayerHoleReport => Boolean(report));
+};
+
+const buildPlayerStretchReports = (entries: SelectedHoleEntry[]): PlayerStretchReport[] => {
+  const entriesByRound = new Map<number, SelectedHoleEntry[]>();
+  entries.forEach((entry) => {
+    entriesByRound.set(entry.round_number, [...(entriesByRound.get(entry.round_number) ?? []), entry]);
+  });
+
+  return [...entriesByRound.entries()].flatMap(([roundNumber, roundEntries]) => {
+    const sortedEntries = [...roundEntries].sort((left, right) => left.hole_number - right.hole_number);
+    const stretches: PlayerStretchReport[] = [];
+
+    for (let index = 0; index <= sortedEntries.length - 3; index += 1) {
+      const stretchEntries = sortedEntries.slice(index, index + 3);
+      const hasConsecutiveHoles = stretchEntries.every((entry, stretchIndex) =>
+        stretchIndex === 0 || entry.hole_number === stretchEntries[stretchIndex - 1].hole_number + 1
+      );
+
+      if (!hasConsecutiveHoles) {
+        continue;
+      }
+
+      const totalStrokes = stretchEntries.reduce((sum, entry) => sum + entry.strokes, 0);
+      const totalToPar = stretchEntries.reduce((sum, entry) => sum + entry.strokes - entry.par, 0);
+      const scoringAverage = average(totalStrokes, stretchEntries.length);
+      const toParAverage = average(totalToPar, stretchEntries.length);
+
+      if (scoringAverage === null || toParAverage === null) {
+        continue;
+      }
+
+      stretches.push({
+        roundNumber,
+        startHole: stretchEntries[0].hole_number,
+        endHole: stretchEntries[stretchEntries.length - 1].hole_number,
+        scoringAverage,
+        toParAverage,
+        label: `Round ${roundNumber}, Holes ${stretchEntries[0].hole_number}-${stretchEntries[stretchEntries.length - 1].hole_number} - ${scoringAverage.toLocaleString(undefined, { maximumFractionDigits: 2 })} avg (${formatAverageToPar(toParAverage)})`,
+      });
+    }
+
+    return stretches;
+  });
 };
 
 const summarizeAccumulator = (accumulator: StatAccumulator) => ({
@@ -535,20 +731,55 @@ const buildPlayerStatistics = (
   return [...entriesByPlayer.entries()]
     .map(([playerId, accumulator]) => {
       const team = getPlayerTeam(aggregate, playerId);
+      const roundsPlayed = countCompletedRounds(accumulator.entries, holeCount);
+      const roundsWithEntries = new Set(accumulator.entries.map((entry) => entry.round_number)).size;
+      const puttRoundCount = roundsPlayed > 0 ? roundsPlayed : roundsWithEntries;
+      const parTypeReports = buildPlayerParTypeReports(accumulator.entries);
+      const strongestParType = [...parTypeReports].sort((left, right) =>
+        left.toParAverage - right.toParAverage || left.par - right.par
+      )[0] ?? null;
+      const weakestParType = [...parTypeReports].sort((left, right) =>
+        right.toParAverage - left.toParAverage || left.par - right.par
+      )[0] ?? null;
+      const holeAverageReports = buildPlayerHoleAverageReports(accumulator.entries);
+      const hardestHole = [...holeAverageReports].sort((left, right) =>
+        (right.toPar ?? 0) - (left.toPar ?? 0) || left.holeNumber - right.holeNumber
+      )[0] ?? null;
+      const stretchReports = buildPlayerStretchReports(accumulator.entries);
+      const bestStretch = [...stretchReports].sort((left, right) =>
+        left.toParAverage - right.toParAverage ||
+        left.roundNumber - right.roundNumber ||
+        left.startHole - right.startHole
+      )[0] ?? null;
+      const worstStretch = [...stretchReports].sort((left, right) =>
+        right.toParAverage - left.toParAverage ||
+        left.roundNumber - right.roundNumber ||
+        left.startHole - right.startHole
+      )[0] ?? null;
       return {
         playerId,
         playerName: getPlayerName(aggregate, playerId),
         teamId: team.teamId,
         teamName: team.teamName,
         holesPlayed: accumulator.entries.length,
-        roundsPlayed: countCompletedRounds(accumulator.entries, holeCount),
+        roundsPlayed,
         scoringAverage: average(accumulator.totalStrokes, accumulator.entries.length),
+        totalStrokes: accumulator.totalStrokes,
+        toPar: accumulator.totalToPar,
         ...summarizeAccumulator(accumulator),
+        puttsPerRound: average(accumulator.putts, puttRoundCount),
         puttsPerGir: average(accumulator.girPutts, accumulator.girPuttAttempts),
         birdies: accumulator.birdies,
         pars: accumulator.pars,
         bogeys: accumulator.bogeys,
         doublePlus: accumulator.doublePlus,
+        bestHole: getEntryHoleReport(getBestSingleHole(accumulator.entries)),
+        worstHole: getEntryHoleReport(getWorstSingleHole(accumulator.entries)),
+        strongestParType,
+        weakestParType,
+        hardestHole,
+        bestStretch,
+        worstStretch,
         completeness: getCompleteness(accumulator),
       };
     })
