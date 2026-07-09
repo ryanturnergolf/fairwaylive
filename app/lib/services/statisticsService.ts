@@ -58,6 +58,28 @@ export type PlayerStretchReport = {
   label: string;
 };
 
+export type TeamPlayerContributionReport = {
+  playerId: string;
+  playerName: string;
+  countingRounds: number;
+  countingRoundPercentage: number | null;
+  averageFinishingPositionContribution: number | null;
+  label: string;
+};
+
+export type TeamStatisticStrengthReport = {
+  statistic: string;
+  value: number | null;
+  label: string;
+};
+
+export type TeamRoundTrendReport = {
+  roundNumber: number;
+  countingScore: number;
+  toPar: number;
+  label: string;
+};
+
 export type PlayerStatisticsReadModel = {
   playerId: string;
   playerName: string;
@@ -95,9 +117,26 @@ export type TeamStatisticsReadModel = {
   holesPlayed: number;
   teamScoringAverage: number | null;
   countingScoreAverage: number | null;
+  totalStrokes: number;
+  toPar: number;
   fairwayPercentage: number | null;
   girPercentage: number | null;
   putts: number;
+  puttsPerRound: number | null;
+  penaltyStrokes: number;
+  countingContributions: TeamPlayerContributionReport[];
+  bestParType: PlayerParTypeReport | null;
+  worstParType: PlayerParTypeReport | null;
+  hardestHole: PlayerHoleReport | null;
+  easiestHole: PlayerHoleReport | null;
+  strongestStatistic: TeamStatisticStrengthReport | null;
+  weakestStatistic: TeamStatisticStrengthReport | null;
+  frontNineAverage: number | null;
+  backNineAverage: number | null;
+  bestRound: TeamRoundTrendReport | null;
+  worstRound: TeamRoundTrendReport | null;
+  teamTrend: TeamRoundTrendReport[];
+  completeness: StatCompleteness;
 };
 
 export type HoleStatisticsReadModel = {
@@ -716,6 +755,212 @@ const getCompletedRoundTotals = (entries: SelectedHoleEntry[], holeCount: number
     .filter((round): round is { roundNumber: number; total: number } => Boolean(round));
 };
 
+type CompletedPlayerRound = {
+  playerId: string;
+  roundNumber: number;
+  total: number;
+  toPar: number;
+  entries: SelectedHoleEntry[];
+};
+
+type TeamRoundCalculation = {
+  roundNumber: number;
+  countingPlayers: CompletedPlayerRound[];
+  countingScore: number;
+  toPar: number;
+};
+
+const getCompletedPlayerRounds = (entries: SelectedHoleEntry[], holeCount: number): CompletedPlayerRound[] => {
+  const rounds = new Map<string, SelectedHoleEntry[]>();
+  entries.forEach((entry) => {
+    const key = `${entry.player_id}:${entry.round_number}`;
+    rounds.set(key, [...(rounds.get(key) ?? []), entry]);
+  });
+
+  return [...rounds.values()]
+    .map((roundEntries) => {
+      const uniqueHoles = new Set(roundEntries.map((entry) => entry.hole_number));
+      if (uniqueHoles.size < holeCount) {
+        return null;
+      }
+
+      const sortedEntries = [...roundEntries].sort((left, right) => left.hole_number - right.hole_number);
+      return {
+        playerId: sortedEntries[0].player_id,
+        roundNumber: sortedEntries[0].round_number,
+        total: sortedEntries.reduce((sum, entry) => sum + entry.strokes, 0),
+        toPar: sortedEntries.reduce((sum, entry) => sum + entry.strokes - entry.par, 0),
+        entries: sortedEntries,
+      };
+    })
+    .filter((round): round is CompletedPlayerRound => Boolean(round));
+};
+
+const buildTeamRoundCalculations = (
+  playerRounds: CompletedPlayerRound[],
+  countingScores: number
+): TeamRoundCalculation[] => {
+  const rounds = new Map<number, CompletedPlayerRound[]>();
+  playerRounds.forEach((round) => {
+    rounds.set(round.roundNumber, [...(rounds.get(round.roundNumber) ?? []), round]);
+  });
+
+  return [...rounds.entries()]
+    .filter(([, roundsForNumber]) => roundsForNumber.length >= countingScores)
+    .map(([roundNumber, roundsForNumber]) => {
+      const countingPlayers = [...roundsForNumber]
+        .sort((left, right) => left.total - right.total || left.playerId.localeCompare(right.playerId))
+        .slice(0, countingScores);
+
+      return {
+        roundNumber,
+        countingPlayers,
+        countingScore: countingPlayers.reduce((sum, round) => sum + round.total, 0),
+        toPar: countingPlayers.reduce((sum, round) => sum + round.toPar, 0),
+      };
+    })
+    .sort((left, right) => left.roundNumber - right.roundNumber);
+};
+
+const buildTeamRoundTrendReport = (round: TeamRoundCalculation): TeamRoundTrendReport => ({
+  roundNumber: round.roundNumber,
+  countingScore: round.countingScore,
+  toPar: round.toPar,
+  label: `Round ${round.roundNumber} - ${round.countingScore} (${formatToPar(round.toPar)})`,
+});
+
+const buildTeamContributionReports = (
+  aggregate: TournamentAggregate | null,
+  playerRounds: CompletedPlayerRound[],
+  teamRoundCalculations: TeamRoundCalculation[]
+): TeamPlayerContributionReport[] => {
+  const countingRoundsByPlayer = new Map<string, number>();
+  const finishingPositionsByPlayer = new Map<string, number[]>();
+  const totalCountingSlots = teamRoundCalculations.reduce((sum, round) => sum + round.countingPlayers.length, 0);
+
+  teamRoundCalculations.forEach((round) => {
+    round.countingPlayers.forEach((playerRound) => {
+      countingRoundsByPlayer.set(playerRound.playerId, (countingRoundsByPlayer.get(playerRound.playerId) ?? 0) + 1);
+    });
+  });
+
+  const completedRoundsByNumber = new Map<number, CompletedPlayerRound[]>();
+  playerRounds.forEach((round) => {
+    completedRoundsByNumber.set(round.roundNumber, [...(completedRoundsByNumber.get(round.roundNumber) ?? []), round]);
+  });
+
+  completedRoundsByNumber.forEach((roundsForNumber) => {
+    [...roundsForNumber]
+      .sort((left, right) => left.total - right.total || left.playerId.localeCompare(right.playerId))
+      .forEach((playerRound, index) => {
+        finishingPositionsByPlayer.set(playerRound.playerId, [
+          ...(finishingPositionsByPlayer.get(playerRound.playerId) ?? []),
+          index + 1,
+        ]);
+      });
+  });
+
+  const playerIds = new Set([
+    ...playerRounds.map((round) => round.playerId),
+    ...teamRoundCalculations.flatMap((round) => round.countingPlayers.map((playerRound) => playerRound.playerId)),
+  ]);
+
+  return [...playerIds]
+    .map((playerId) => {
+      const countingRounds = countingRoundsByPlayer.get(playerId) ?? 0;
+      const finishingPositions = finishingPositionsByPlayer.get(playerId) ?? [];
+      const countingRoundPercentage = rate(countingRounds, totalCountingSlots);
+      const averageFinishingPositionContribution = average(
+        finishingPositions.reduce((sum, position) => sum + position, 0),
+        finishingPositions.length
+      );
+
+      return {
+        playerId,
+        playerName: getPlayerName(aggregate, playerId),
+        countingRounds,
+        countingRoundPercentage,
+        averageFinishingPositionContribution,
+        label: `${getPlayerName(aggregate, playerId)} - ${countingRounds} counting (${countingRoundPercentage ?? 0}%)`,
+      };
+    })
+    .sort((left, right) =>
+      right.countingRounds - left.countingRounds ||
+      (left.averageFinishingPositionContribution ?? Number.MAX_SAFE_INTEGER) -
+        (right.averageFinishingPositionContribution ?? Number.MAX_SAFE_INTEGER) ||
+      left.playerName.localeCompare(right.playerName)
+    );
+};
+
+const getTeamNineAverage = (playerRounds: CompletedPlayerRound[], startHole: number, endHole: number) => {
+  const totals = playerRounds
+    .map((round) => {
+      const segmentEntries = round.entries.filter((entry) => entry.hole_number >= startHole && entry.hole_number <= endHole);
+      const expectedHoleCount = endHole - startHole + 1;
+      return segmentEntries.length >= expectedHoleCount
+        ? segmentEntries.reduce((sum, entry) => sum + entry.strokes, 0)
+        : null;
+    })
+    .filter((total): total is number => total !== null);
+
+  return average(totals.reduce((sum, total) => sum + total, 0), totals.length);
+};
+
+const buildTeamStatisticReport = (statistic: string, value: number | null, suffix = ""): TeamStatisticStrengthReport | null =>
+  value === null
+    ? null
+    : {
+        statistic,
+        value,
+        label: `${statistic} - ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}${suffix}`,
+      };
+
+type TeamStatisticCandidate = {
+  key: "fairways" | "gir" | "puttsPerRound" | "penalties";
+  report: TeamStatisticStrengthReport;
+  value: number;
+  higherIsBetter: boolean;
+};
+
+const getTeamStatisticCandidates = (team: TeamStatisticsReadModel): TeamStatisticCandidate[] =>
+  [
+    {
+      key: "fairways" as const,
+      report: buildTeamStatisticReport("Fairway %", team.fairwayPercentage, "%"),
+      value: team.fairwayPercentage,
+      higherIsBetter: true,
+    },
+    {
+      key: "gir" as const,
+      report: buildTeamStatisticReport("GIR %", team.girPercentage, "%"),
+      value: team.girPercentage,
+      higherIsBetter: true,
+    },
+    {
+      key: "puttsPerRound" as const,
+      report: buildTeamStatisticReport("Putts per Round", team.puttsPerRound),
+      value: team.puttsPerRound,
+      higherIsBetter: false,
+    },
+    {
+      key: "penalties" as const,
+      report: buildTeamStatisticReport("Penalty Strokes", team.penaltyStrokes),
+      value: team.penaltyStrokes,
+      higherIsBetter: false,
+    },
+  ]
+    .filter((candidate): candidate is TeamStatisticCandidate => candidate.report !== null && candidate.value !== null);
+
+const getTeamStatisticRank = (candidate: TeamStatisticCandidate, allTeams: TeamStatisticsReadModel[]) => {
+  const comparableValues = allTeams
+    .flatMap((team) => getTeamStatisticCandidates(team).filter((item) => item.key === candidate.key))
+    .map((item) => item.value);
+
+  return comparableValues.filter((value) =>
+    candidate.higherIsBetter ? value > candidate.value : value < candidate.value
+  ).length + 1;
+};
+
 const buildPlayerStatistics = (
   aggregate: TournamentAggregate | null,
   selectedEntries: SelectedHoleEntry[],
@@ -793,8 +1038,8 @@ const buildTeamStatistics = (
 ): TeamStatisticsReadModel[] => {
   const countingScores = getCountingScores(aggregate);
   const entriesByTeam = new Map<string, { teamId: string | null; teamName: string; accumulator: StatAccumulator }>();
-  const completedTotalsByTeamRound = new Map<string, number[]>();
   const playerIdsByTeam = new Map<string, Set<string>>();
+  const entriesByPlayer = new Map<string, SelectedHoleEntry[]>();
 
   selectedEntries.forEach((entry) => {
     const team = getPlayerTeam(aggregate, entry.player_id);
@@ -810,37 +1055,48 @@ const buildTeamStatistics = (
     const playerIds = playerIdsByTeam.get(teamKey) ?? new Set<string>();
     playerIds.add(entry.player_id);
     playerIdsByTeam.set(teamKey, playerIds);
-  });
 
-  const entriesByPlayer = new Map<string, SelectedHoleEntry[]>();
-  selectedEntries.forEach((entry) => {
     entriesByPlayer.set(entry.player_id, [...(entriesByPlayer.get(entry.player_id) ?? []), entry]);
   });
 
+  const completedPlayerRoundsByTeam = new Map<string, CompletedPlayerRound[]>();
   entriesByPlayer.forEach((playerEntries, playerId) => {
     const team = getPlayerTeam(aggregate, playerId);
     const teamKey = team.teamId ?? team.teamName;
-    getCompletedRoundTotals(playerEntries, holeCount).forEach((roundTotal) => {
-      const key = `${teamKey}:${roundTotal.roundNumber}`;
-      completedTotalsByTeamRound.set(key, [...(completedTotalsByTeamRound.get(key) ?? []), roundTotal.total]);
-    });
+    completedPlayerRoundsByTeam.set(teamKey, [
+      ...(completedPlayerRoundsByTeam.get(teamKey) ?? []),
+      ...getCompletedPlayerRounds(playerEntries, holeCount),
+    ]);
   });
 
-  return [...entriesByTeam.entries()]
+  const teamReadModels = [...entriesByTeam.entries()]
     .map(([teamKey, team]) => {
-      const completedRoundsForTeam = [...completedTotalsByTeamRound.entries()]
-        .filter(([key]) => key.startsWith(`${teamKey}:`));
-      const completedRoundTotals = completedRoundsForTeam
-        .flatMap(([, totals]) => totals);
-      const countingRoundTotals = completedRoundsForTeam
-        .map(([, totals]) => totals)
-        .filter((totals) => totals.length >= countingScores)
-        .map((totals) =>
-          [...totals]
-            .sort((left, right) => left - right)
-            .slice(0, countingScores)
-            .reduce((sum, total) => sum + total, 0)
-        );
+      const completedPlayerRounds = completedPlayerRoundsByTeam.get(teamKey) ?? [];
+      const teamRoundCalculations = buildTeamRoundCalculations(completedPlayerRounds, countingScores);
+      const completedRoundTotals = completedPlayerRounds.map((round) => round.total);
+      const countingRoundReports = teamRoundCalculations.map(buildTeamRoundTrendReport);
+      const parTypeReports = buildPlayerParTypeReports(team.accumulator.entries);
+      const bestParType = [...parTypeReports].sort((left, right) =>
+        left.toParAverage - right.toParAverage || left.par - right.par
+      )[0] ?? null;
+      const worstParType = [...parTypeReports].sort((left, right) =>
+        right.toParAverage - left.toParAverage || left.par - right.par
+      )[0] ?? null;
+      const holeAverageReports = buildPlayerHoleAverageReports(team.accumulator.entries);
+      const hardestHole = [...holeAverageReports].sort((left, right) =>
+        (right.toPar ?? 0) - (left.toPar ?? 0) || left.holeNumber - right.holeNumber
+      )[0] ?? null;
+      const easiestHole = [...holeAverageReports].sort((left, right) =>
+        (left.toPar ?? 0) - (right.toPar ?? 0) || left.holeNumber - right.holeNumber
+      )[0] ?? null;
+      const roundsWithEntries = new Set(team.accumulator.entries.map((entry) => `${entry.round_number}:${entry.player_id}`)).size;
+      const puttRoundCount = completedPlayerRounds.length > 0 ? completedPlayerRounds.length : roundsWithEntries;
+      const bestRound = [...countingRoundReports].sort((left, right) =>
+        left.toPar - right.toPar || left.countingScore - right.countingScore || left.roundNumber - right.roundNumber
+      )[0] ?? null;
+      const worstRound = [...countingRoundReports].sort((left, right) =>
+        right.toPar - left.toPar || right.countingScore - left.countingScore || left.roundNumber - right.roundNumber
+      )[0] ?? null;
 
       return {
         teamId: team.teamId,
@@ -852,10 +1108,48 @@ const buildTeamStatistics = (
           completedRoundTotals.length
         ),
         countingScoreAverage: average(
-          countingRoundTotals.reduce((sum, total) => sum + total, 0),
-          countingRoundTotals.length
+          teamRoundCalculations.reduce((sum, round) => sum + round.countingScore, 0),
+          teamRoundCalculations.length
         ),
+        totalStrokes: team.accumulator.totalStrokes,
+        toPar: team.accumulator.totalToPar,
         ...summarizeAccumulator(team.accumulator),
+        puttsPerRound: average(team.accumulator.putts, puttRoundCount),
+        penaltyStrokes: team.accumulator.penaltyStrokes,
+        countingContributions: buildTeamContributionReports(aggregate, completedPlayerRounds, teamRoundCalculations),
+        bestParType,
+        worstParType,
+        hardestHole,
+        easiestHole,
+        strongestStatistic: null,
+        weakestStatistic: null,
+        frontNineAverage: getTeamNineAverage(completedPlayerRounds, 1, Math.min(9, holeCount)),
+        backNineAverage: holeCount > 9 ? getTeamNineAverage(completedPlayerRounds, 10, holeCount) : null,
+        bestRound,
+        worstRound,
+        teamTrend: countingRoundReports,
+        completeness: getCompleteness(team.accumulator),
+      };
+    });
+
+  return teamReadModels
+    .map((team) => {
+      const rankedCandidates = getTeamStatisticCandidates(team)
+        .map((candidate) => ({
+          ...candidate,
+          rank: getTeamStatisticRank(candidate, teamReadModels),
+        }));
+      const strongestStatistic = [...rankedCandidates].sort((left, right) =>
+        left.rank - right.rank || left.report.statistic.localeCompare(right.report.statistic)
+      )[0]?.report ?? null;
+      const weakestStatistic = [...rankedCandidates].sort((left, right) =>
+        right.rank - left.rank || left.report.statistic.localeCompare(right.report.statistic)
+      )[0]?.report ?? null;
+
+      return {
+        ...team,
+        strongestStatistic,
+        weakestStatistic,
       };
     })
     .sort((left, right) => left.teamName.localeCompare(right.teamName));

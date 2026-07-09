@@ -236,6 +236,134 @@ const TeamStatisticsTable = ({ teams }: { teams: TeamStatisticsReadModel[] }) =>
   </section>
 );
 
+const TeamContributionTable = ({ team }: { team: TeamStatisticsReadModel }) => (
+  <div className="mt-3 overflow-x-auto">
+    <table className="min-w-full border-separate border-spacing-0 text-sm">
+      <thead>
+        <tr className="text-left text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
+          {["Player", "Counting Rounds", "Counting Round %", "Avg Finish"].map((heading) => (
+            <th key={heading} className="border-b border-[#E8DCC8] px-3 py-3">{heading}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {team.countingContributions.map((contribution) => (
+          <tr key={contribution.playerId} className="text-[#0B3D2E]">
+            <td className="border-b border-[#F0E7D8] px-3 py-3 font-black">{contribution.playerName}</td>
+            <td className="border-b border-[#F0E7D8] px-3 py-3 font-bold">{contribution.countingRounds}</td>
+            <td className="border-b border-[#F0E7D8] px-3 py-3 font-bold">{formatStat(contribution.countingRoundPercentage, "%")}</td>
+            <td className="border-b border-[#F0E7D8] px-3 py-3 font-bold">{formatStat(contribution.averageFinishingPositionContribution)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+const TeamTrendList = ({ team }: { team: TeamStatisticsReadModel }) => (
+  <div className="mt-3 space-y-2">
+    {team.teamTrend.length > 0 ? (
+      team.teamTrend.map((round) => (
+        <div key={round.roundNumber} className="flex items-center justify-between gap-3 border-b border-[#F0E7D8] py-2 last:border-b-0">
+          <span className="text-xs font-bold text-[#51635C]">Round {round.roundNumber}</span>
+          <span className="text-right text-sm font-black text-[#0B3D2E]">{round.label}</span>
+        </div>
+      ))
+    ) : (
+      <p className="py-2 text-sm font-semibold text-[#51635C]">--</p>
+    )}
+  </div>
+);
+
+const TeamReports = ({ teams }: { teams: TeamStatisticsReadModel[] }) => (
+  <section className="rounded-[28px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Team Reports</p>
+        <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">Coach team analysis</h3>
+      </div>
+    </div>
+    {teams.length > 0 ? (
+      <div className="mt-5 space-y-4">
+        {teams.map((team) => (
+          <article key={team.teamId ?? team.teamName} className="rounded-[24px] border border-[#E8DCC8] bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">{team.teamName}</h4>
+                <p className="mt-1 text-sm font-semibold text-[#51635C]">{team.playerCount} players / {team.holesPlayed} holes</p>
+              </div>
+              {team.completeness.isComplete ? (
+                <span className="rounded-full border border-[#77B98E] bg-[#ECF8EF] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#146233]">
+                  Team Statistics Complete
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+              <PlayerReportGroup
+                title="Team Performance"
+                metrics={[
+                  { label: "Team Scoring Average", value: formatStat(team.teamScoringAverage) },
+                  { label: "Counting Score Average", value: formatStat(team.countingScoreAverage) },
+                  { label: "Total Strokes", value: team.totalStrokes },
+                  { label: "To Par", value: formatSignedStat(team.toPar) },
+                  { label: "Fairway %", value: formatStat(team.fairwayPercentage, "%") },
+                  { label: "GIR %", value: formatStat(team.girPercentage, "%") },
+                  { label: "Putts per Round", value: formatStat(team.puttsPerRound) },
+                  { label: "Penalty Strokes", value: team.penaltyStrokes },
+                ]}
+              />
+              <PlayerReportGroup
+                title="Strengths & Weaknesses"
+                metrics={[
+                  { label: "Best Par Type", value: team.bestParType?.label ?? "--" },
+                  { label: "Worst Par Type", value: team.worstParType?.label ?? "--" },
+                  { label: "Hardest Hole", value: team.hardestHole?.label ?? "--" },
+                  { label: "Easiest Hole", value: team.easiestHole?.label ?? "--" },
+                  { label: "Strongest Statistic", value: team.strongestStatistic?.label ?? "--" },
+                  { label: "Weakest Statistic", value: team.weakestStatistic?.label ?? "--" },
+                ]}
+              />
+              <PlayerReportGroup
+                title="Round Breakdown"
+                metrics={[
+                  { label: "Front Nine Average", value: formatStat(team.frontNineAverage) },
+                  { label: "Back Nine Average", value: formatStat(team.backNineAverage) },
+                  { label: "Best Round", value: team.bestRound?.label ?? "--" },
+                  { label: "Worst Round", value: team.worstRound?.label ?? "--" },
+                ]}
+              />
+              <PlayerReportGroup
+                title="Statistics Completeness"
+                metrics={[
+                  { label: "Missing Fairways", value: team.completeness.missingFairways },
+                  { label: "Missing GIR", value: team.completeness.missingGir },
+                  { label: "Missing Putts", value: team.completeness.missingPutts },
+                  { label: "Missing Penalties", value: team.completeness.missingPenalties },
+                  { label: "Completion Percentage", value: formatStat(team.completeness.completionPercentage, "%") },
+                ]}
+              />
+            </div>
+            <div className="mt-4 grid gap-3 xl:grid-cols-2">
+              <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#B8892D]">Team Contribution</p>
+                {team.countingContributions.length > 0 ? <TeamContributionTable team={team} /> : <p className="mt-3 text-sm font-semibold text-[#51635C]">--</p>}
+              </div>
+              <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#B8892D]">Team Trend</p>
+                <TeamTrendList team={team} />
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div className="mt-5">
+        <EmptyState label="No team reports are available yet." />
+      </div>
+    )}
+  </section>
+);
+
 export default function TournamentStatisticsDashboard({
   tournamentId,
   roundNumber,
@@ -291,6 +419,7 @@ export default function TournamentStatisticsDashboard({
       <PlayerStatisticsTable players={playerStatistics} />
       <PlayerReports players={playerStatistics} />
       <TeamStatisticsTable teams={teamStatistics} />
+      <TeamReports teams={teamStatistics} />
 
       <section className="rounded-[28px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Tournament Statistics</p>
