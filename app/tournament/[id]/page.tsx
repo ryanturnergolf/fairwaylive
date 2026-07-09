@@ -17,6 +17,14 @@ import {
   getTournamentFinalizationRecord,
   type TournamentFinalizationRecord,
 } from "../../lib/services/tournamentFinalizationService";
+import { loadComparisonScores } from "../../lib/services/scoreService";
+import {
+  loadTournamentHoleStatistics,
+  resolveOfficialScore,
+  type OfficialScoreResolutionChoice,
+} from "../../lib/services/statisticsService";
+import type { ScoreEntryRow } from "../../lib/repositories/scoreRepository";
+import type { ScoreHoleEntryRow } from "../../lib/repositories/statisticsRepository";
 import {
   isValidPairingMutation,
   normalizePairings,
@@ -56,7 +64,7 @@ import PairingsScorecardGeneration, {
   type PairingGroup,
   type RoundSetupState,
 } from "./components/PairingsScorecardGeneration";
-import LiveScoringLeaderboard, { type ScorecardRow } from "./components/LiveScoringLeaderboard";
+import LiveScoringLeaderboard, { type ReviewResolutionItem, type ScorecardRow } from "./components/LiveScoringLeaderboard";
 import TournamentPrintExport, {
   type ClippdExportState,
   type ScoreboardImportState,
@@ -210,6 +218,11 @@ export default function TournamentPage() {
   const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
   const [isReadinessRefreshing, setIsReadinessRefreshing] = useState(false);
   const [finalizationRecord, setFinalizationRecord] = useState<TournamentFinalizationRecord | null>(null);
+  const [sharedScoreEntries, setSharedScoreEntries] = useState<ScoreEntryRow[]>([]);
+  const [scoreHoleEntries, setScoreHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
+  const [reviewResolutionMessage, setReviewResolutionMessage] = useState("");
+  const [reviewOverrideValues, setReviewOverrideValues] = useState<Record<string, string>>({});
+  const [reviewOverrideReasons, setReviewOverrideReasons] = useState<Record<string, string>>({});
   const [autoRepairState, setAutoRepairState] = useState<AutoRepairState>({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -245,6 +258,75 @@ export default function TournamentPage() {
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
   const isTournamentFinalized = Boolean(finalizationRecord);
+  const playerIdsByName = useMemo(() => {
+    const ids = new Map<string, string>();
+    pairings.forEach((pairing) => {
+      pairing.players.forEach((player) => {
+        if (player.playerName && player.playerId) {
+          ids.set(player.playerName, String(player.playerId));
+        }
+      });
+    });
+    return ids;
+  }, [pairings]);
+  const officialHoleKeys = useMemo(
+    () =>
+      new Set(
+        scoreHoleEntries
+          .filter((entry) => entry.is_official || String(entry.review_status).toLowerCase().startsWith("official"))
+          .map((entry) => `${entry.player_id}:${entry.hole_number}`)
+      ),
+    [scoreHoleEntries]
+  );
+  const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
+    const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
+    const holeEntriesByKey = new Map<string, ScoreHoleEntryRow[]>();
+
+    sharedScoreEntries.forEach((entry) => {
+      const playerId = String(entry.player_id);
+      entriesByPlayerId.set(playerId, [...(entriesByPlayerId.get(playerId) ?? []), entry]);
+    });
+    scoreHoleEntries.forEach((entry) => {
+      const key = `${entry.player_id}:${entry.hole_number}`;
+      holeEntriesByKey.set(key, [...(holeEntriesByKey.get(key) ?? []), entry]);
+    });
+
+    return scorecardRows.flatMap((row) => {
+      const playerId = playerIdsByName.get(row.playerName) ?? `player-${row.id}`;
+      const playerEntries = entriesByPlayerId.get(playerId) ?? [];
+      const selfEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) === String(entry.player_id));
+      const markerEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id));
+      if (!selfEntry || !markerEntry) {
+        return [];
+      }
+
+      return Array.from({ length: normalizedRoundSetup.numberOfHoles }, (_, index) => {
+        const holeNumber = index + 1;
+        const playerScore = Number(selfEntry.hole_scores[index]) || 0;
+        const markerScore = Number(markerEntry.hole_scores[index]) || 0;
+        if (
+          playerScore <= 0 ||
+          markerScore <= 0 ||
+          playerScore === markerScore ||
+          officialHoleKeys.has(`${playerId}:${holeNumber}`)
+        ) {
+          return null;
+        }
+
+        const holeEntries = holeEntriesByKey.get(`${playerId}:${holeNumber}`) ?? [];
+        return {
+          id: `${playerId}-${holeNumber}`,
+          playerId,
+          playerName: row.playerName,
+          holeNumber,
+          playerScore,
+          markerScore,
+          playerEntry: holeEntries.find((entry) => String(entry.entered_by_player_id) === String(entry.player_id)) ?? null,
+          markerEntry: holeEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id)) ?? null,
+        };
+      }).filter((item): item is ReviewResolutionItem => Boolean(item));
+    });
+  }, [normalizedRoundSetup.numberOfHoles, officialHoleKeys, playerIdsByName, scoreHoleEntries, scorecardRows, sharedScoreEntries]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -256,6 +338,37 @@ export default function TournamentPage() {
       setActiveTab(requestedTab);
     }
   }, []);
+
+  const refreshReviewResolutionData = useCallback(async () => {
+    if (!sharedTournamentId) {
+      setSharedScoreEntries([]);
+      setScoreHoleEntries([]);
+      return;
+    }
+
+    const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
+    const [scores, holes] = await Promise.all([
+      loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
+        console.warn("[ScoreService] Unable to load review score entries.", error);
+        return [];
+      }),
+      loadTournamentHoleStatistics({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
+        console.warn("[StatisticsService] Unable to load review hole entries.", error);
+        return [];
+      }),
+    ]);
+
+    setSharedScoreEntries(scores);
+    setScoreHoleEntries(holes);
+  }, [normalizedRoundSetup.roundNumber, sharedTournamentId]);
+
+  useEffect(() => {
+    if (!isClientMounted || activeTab !== "Live Scoring") {
+      return;
+    }
+
+    void refreshReviewResolutionData();
+  }, [activeTab, isClientMounted, refreshReviewResolutionData]);
 
   useEffect(() => {
     if (!isClientMounted || !tournamentId) {
@@ -586,6 +699,82 @@ export default function TournamentPage() {
     }
 
     setScorecardRows((current) => updateScorecardRows(current, rowId, holeIndex, value));
+  };
+
+  const handleResolveReviewItem = async (item: ReviewResolutionItem, choice: OfficialScoreResolutionChoice) => {
+    if (isTournamentFinalized) {
+      setReviewResolutionMessage("This tournament is finalized. Review resolution is read-only.");
+      return;
+    }
+
+    if (!sharedTournamentId) {
+      setReviewResolutionMessage("Shared tournament data is required before review items can be resolved.");
+      return;
+    }
+
+    const overrideValue = reviewOverrideValues[item.id] ?? "";
+    const overrideReason = reviewOverrideReasons[item.id] ?? "";
+    const selectedScore =
+      choice === "marker"
+        ? item.markerScore
+        : choice === "player"
+          ? item.playerScore
+          : Number(overrideValue);
+
+    if (!Number.isInteger(selectedScore) || selectedScore < 1 || selectedScore > 12) {
+      setReviewResolutionMessage("Enter a coach override score from 1 to 12.");
+      return;
+    }
+
+    if (choice === "coach_override" && !overrideReason.trim()) {
+      setReviewResolutionMessage("Override reason is required for a coach override.");
+      return;
+    }
+
+    const sourceEntry =
+      choice === "marker" ? item.markerEntry : choice === "player" ? item.playerEntry : null;
+
+    try {
+      const officialRow = await resolveOfficialScore({
+        tournamentId: sharedTournamentId,
+        roundNumber: Number(normalizedRoundSetup.roundNumber) || 1,
+        playerId: item.playerId,
+        holeNumber: item.holeNumber,
+        selectedScore,
+        choice,
+        officialBy: "Tournament Director",
+        overrideReason,
+        sourceEntry,
+      });
+
+      setScoreHoleEntries((current) => [
+        ...current.filter(
+          (entry) =>
+            !(
+              String(entry.player_id) === item.playerId &&
+              Number(entry.hole_number) === item.holeNumber &&
+              (entry.is_official || String(entry.review_status).toLowerCase().startsWith("official"))
+            )
+        ),
+        officialRow,
+      ]);
+      setScorecardRows((current) =>
+        current.map((row) =>
+          row.playerName === item.playerName
+            ? {
+                ...row,
+                scores: row.scores.map((score, index) => (index === item.holeNumber - 1 ? selectedScore : score)),
+              }
+            : row
+        )
+      );
+      setReviewOverrideValues((current) => ({ ...current, [item.id]: "" }));
+      setReviewOverrideReasons((current) => ({ ...current, [item.id]: "" }));
+      setReviewResolutionMessage(`Hole ${item.holeNumber} for ${item.playerName} is now official.`);
+      void refreshReviewResolutionData();
+    } catch (error) {
+      setReviewResolutionMessage(error instanceof Error ? error.message : "Unable to resolve review item.");
+    }
   };
 
   const handleGeneratePairings = () => {
@@ -962,10 +1151,21 @@ export default function TournamentPage() {
                       onGenerateScorecards={generateScorecards}
                       onRoundSetupChange={handleRoundSetupChange}
                       onScoreInputChange={handleScoreInputChange}
-                      onOpenQrModal={onOpenQrModal}
-                      onOpenPrintScorecardModal={onOpenPrintScorecardModal}
-                      isReadOnly={isTournamentFinalized}
-                    />
+                       onOpenQrModal={onOpenQrModal}
+                       onOpenPrintScorecardModal={onOpenPrintScorecardModal}
+                       isReadOnly={isTournamentFinalized}
+                       reviewResolutionItems={reviewResolutionItems}
+                       reviewResolutionMessage={reviewResolutionMessage}
+                       reviewOverrideValues={reviewOverrideValues}
+                       reviewOverrideReasons={reviewOverrideReasons}
+                       onReviewOverrideValueChange={(itemId, value) =>
+                         setReviewOverrideValues((current) => ({ ...current, [itemId]: value }))
+                       }
+                       onReviewOverrideReasonChange={(itemId, value) =>
+                         setReviewOverrideReasons((current) => ({ ...current, [itemId]: value }))
+                       }
+                       onResolveReviewItem={handleResolveReviewItem}
+                     />
                   ) : null
                 }
               </TournamentPrintExport>

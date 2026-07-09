@@ -11,6 +11,19 @@ import {
 import { getTournamentAggregate, type TournamentAggregate } from "./tournamentService";
 
 export type SaveHoleStatisticsInput = SaveScoreHoleEntryInput;
+export type OfficialScoreResolutionChoice = "marker" | "player" | "coach_override";
+
+export type ResolveOfficialScoreInput = {
+  tournamentId: string;
+  roundNumber: number;
+  playerId: string;
+  holeNumber: number;
+  selectedScore: number;
+  choice: OfficialScoreResolutionChoice;
+  officialBy: string;
+  overrideReason?: string;
+  sourceEntry?: ScoreHoleEntryRow | null;
+};
 
 export type SaveRoundHoleStatisticsInput = Omit<
   SaveScoreHoleEntryInput,
@@ -276,6 +289,50 @@ export const saveHoleStatistics = async (
   input: SaveHoleStatisticsInput
 ): Promise<ScoreHoleEntryRow> => {
   return saveScoreHoleEntry(input);
+};
+
+export const resolveOfficialScore = async ({
+  tournamentId,
+  roundNumber,
+  playerId,
+  holeNumber,
+  selectedScore,
+  choice,
+  officialBy,
+  overrideReason = "",
+  sourceEntry = null,
+}: ResolveOfficialScoreInput): Promise<ScoreHoleEntryRow> => {
+  const trimmedReason = overrideReason.trim();
+  if (choice === "coach_override" && !trimmedReason) {
+    throw new Error("An override reason is required.");
+  }
+
+  const reviewStatus =
+    choice === "coach_override"
+      ? `official_coach_override: ${trimmedReason}`
+      : choice === "marker"
+        ? "official_marker_accepted"
+        : "official_player_accepted";
+
+  return saveScoreHoleEntry({
+    tournamentId,
+    roundNumber,
+    playerId,
+    enteredByPlayerId: sourceEntry?.entered_by_player_id ?? (choice === "coach_override" ? "coach" : playerId),
+    markerForPlayerId: sourceEntry?.marker_for_player_id ?? null,
+    holeNumber,
+    strokes: selectedScore,
+    fairwayHit: sourceEntry?.fairway_hit ?? null,
+    greenInRegulation: sourceEntry?.green_in_regulation ?? null,
+    putts: sourceEntry?.putts ?? null,
+    penaltyStrokes: sourceEntry?.penalty_strokes ?? null,
+    entrySource: choice,
+    entryStatus: "official",
+    reviewStatus,
+    isOfficial: true,
+    officialAt: new Date().toISOString(),
+    officialBy: officialBy || "Tournament Director",
+  });
 };
 
 export const saveRoundHoleStatistics = async ({

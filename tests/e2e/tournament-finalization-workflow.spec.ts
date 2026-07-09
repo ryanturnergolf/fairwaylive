@@ -199,6 +199,8 @@ const scoreEntries = [
 type FinalizationBackendOptions = {
   getSnapshot?: () => typeof tournamentEnvelope;
   onScoreSave?: (request: Request) => void;
+  scoreEntries?: typeof scoreEntries;
+  scoreHoleEntries?: Array<Record<string, unknown>>;
 };
 
 const routeFinalizationBackend = async (page: Page, options: FinalizationBackendOptions = {}) => {
@@ -250,8 +252,66 @@ const routeFinalizationBackend = async (page: Page, options: FinalizationBackend
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(route.request().method() === "GET" ? scoreEntries : []),
+      body: JSON.stringify(route.request().method() === "GET" ? options.scoreEntries ?? scoreEntries : []),
     });
+  });
+
+  await page.route("**/rest/v1/score_hole_entries**", async (route) => {
+    const request = route.request();
+    if (request.method() !== "GET") {
+      const rows = request.postDataJSON();
+      const entries = Array.isArray(rows) ? rows : [rows];
+      for (const entry of entries) {
+        const index = (options.scoreHoleEntries ?? []).findIndex(
+          (row) =>
+            row.tournament_id === entry.tournament_id &&
+            row.round_number === entry.round_number &&
+            row.player_id === entry.player_id &&
+            row.entered_by_player_id === entry.entered_by_player_id &&
+            row.hole_number === entry.hole_number
+        );
+        if (index >= 0) {
+          options.scoreHoleEntries?.splice(index, 1, entry);
+        } else {
+          options.scoreHoleEntries?.push(entry);
+        }
+      }
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(entries) });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(options.scoreHoleEntries ?? []),
+    });
+  });
+
+  await page.route("**/api/score-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action?: string; rows?: Array<Record<string, unknown>> };
+    if (body.action !== "saveScoreHoleEntries") {
+      await route.fallback();
+      return;
+    }
+
+    const entries = body.rows ?? [];
+    for (const entry of entries) {
+      const index = (options.scoreHoleEntries ?? []).findIndex(
+        (row) =>
+          row.tournament_id === entry.tournament_id &&
+          row.round_number === entry.round_number &&
+          row.player_id === entry.player_id &&
+          row.entered_by_player_id === entry.entered_by_player_id &&
+          row.hole_number === entry.hole_number
+      );
+      if (index >= 0) {
+        options.scoreHoleEntries?.splice(index, 1, entry);
+      } else {
+        options.scoreHoleEntries?.push(entry);
+      }
+    }
+
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(entries) });
   });
 };
 
@@ -292,6 +352,95 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
 
   await gotoApp(page, `/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeDisabled();
+});
+
+test("coach resolves self marker discrepancy and marks the hole official", async ({ page }) => {
+  const conflictScoreEntries = scoreEntries.map((entry) =>
+    entry.player_id === "player-1" && entry.entered_by_player_id === "player-2"
+      ? {
+          ...entry,
+          hole_scores: [5, ...fullRound.slice(1)],
+          total: 73,
+          updated_at: "2026-07-08T16:05:00.000Z",
+        }
+      : entry
+  );
+  const scoreHoleEntries: Array<Record<string, unknown>> = [
+    {
+      tournament_id: sharedTournamentId,
+      round_number: 1,
+      player_id: "player-1",
+      entered_by_player_id: "player-1",
+      marker_for_player_id: null,
+      hole_number: 1,
+      strokes: 4,
+      fairway_hit: true,
+      green_in_regulation: true,
+      putts: 2,
+      penalty_strokes: 0,
+      entry_source: "self",
+      entry_status: "submitted",
+      review_status: "pending",
+      is_official: false,
+      official_at: null,
+      official_by: null,
+    },
+    {
+      tournament_id: sharedTournamentId,
+      round_number: 1,
+      player_id: "player-1",
+      entered_by_player_id: "player-2",
+      marker_for_player_id: "player-1",
+      hole_number: 1,
+      strokes: 5,
+      fairway_hit: false,
+      green_in_regulation: false,
+      putts: 2,
+      penalty_strokes: 1,
+      entry_source: "marker",
+      entry_status: "submitted",
+      review_status: "pending",
+      is_official: false,
+      official_at: null,
+      official_by: null,
+    },
+  ];
+
+  await routeFinalizationBackend(page, { scoreEntries: conflictScoreEntries, scoreHoleEntries });
+  await page.addInitScript(
+    ({ tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }) => {
+      window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([storedTournament]));
+      window.localStorage.setItem(tournamentStorageKey, JSON.stringify(tournamentEnvelope));
+      window.localStorage.setItem(sharedTournamentStorageKey, sharedTournamentId);
+    },
+    { tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }
+  );
+
+  await gotoApp(page, `/tournament/${tournamentId}?tab=Live%20Scoring&review=1&group=1`);
+
+  await expect(page.getByRole("heading", { name: "Resolve Score Discrepancies" })).toBeVisible();
+  await expect(page.getByText("Player 4 vs Marker 5")).toBeVisible();
+
+  await page.getByLabel("Coach Score").fill("6");
+  await page.getByRole("button", { name: "Enter Coach Override" }).click();
+  await expect(page.getByText("Override reason is required for a coach override.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Accept Marker Score" }).click();
+  await expect(page.getByText("Hole 1 for Ava Green is now official.")).toBeVisible();
+  await expect(page.getByText("Player 4 vs Marker 5")).toBeHidden();
+
+  const officialEntry = scoreHoleEntries.find(
+    (entry) => entry.player_id === "player-1" && entry.hole_number === 1 && entry.is_official
+  );
+  expect(officialEntry).toMatchObject({
+    strokes: 5,
+    review_status: "official_marker_accepted",
+    official_by: "Tournament Director",
+  });
+  expect(officialEntry?.official_at).toBeTruthy();
+
+  await gotoApp(page, "/dashboard");
+  await expect(page.getByText("No groups need review.")).toBeVisible();
 });
 
 test("already-open phone scorecard rejects saves after remote finalization", async ({ browser }) => {

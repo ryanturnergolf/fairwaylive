@@ -9,12 +9,25 @@ import {
   type NormalizedRoundSetup,
 } from "../../../lib/services/tournamentDerivedState";
 import PairingsScorecardGeneration from "./PairingsScorecardGeneration";
+import type { OfficialScoreResolutionChoice } from "../../../lib/services/statisticsService";
+import type { ScoreHoleEntryRow } from "../../../lib/repositories/statisticsRepository";
 
 export type ScorecardRow = {
   id: number;
   playerName: string;
   team: string;
   scores: number[];
+};
+
+export type ReviewResolutionItem = {
+  id: string;
+  playerId: string;
+  playerName: string;
+  holeNumber: number;
+  playerScore: number;
+  markerScore: number;
+  playerEntry: ScoreHoleEntryRow | null;
+  markerEntry: ScoreHoleEntryRow | null;
 };
 
 type LiveScoringLeaderboardProps = {
@@ -28,6 +41,13 @@ type LiveScoringLeaderboardProps = {
   onOpenQrModal: (player: ScorecardRow) => void;
   onOpenPrintScorecardModal: (player: ScorecardRow) => void;
   isReadOnly?: boolean;
+  reviewResolutionItems?: ReviewResolutionItem[];
+  reviewResolutionMessage?: string;
+  reviewOverrideValues?: Record<string, string>;
+  reviewOverrideReasons?: Record<string, string>;
+  onReviewOverrideValueChange?: (itemId: string, value: string) => void;
+  onReviewOverrideReasonChange?: (itemId: string, value: string) => void;
+  onResolveReviewItem?: (item: ReviewResolutionItem, choice: OfficialScoreResolutionChoice) => void;
 };
 
 export default function LiveScoringLeaderboard({
@@ -41,6 +61,13 @@ export default function LiveScoringLeaderboard({
   onOpenQrModal,
   onOpenPrintScorecardModal,
   isReadOnly = false,
+  reviewResolutionItems = [],
+  reviewResolutionMessage = "",
+  reviewOverrideValues = {},
+  reviewOverrideReasons = {},
+  onReviewOverrideValueChange,
+  onReviewOverrideReasonChange,
+  onResolveReviewItem,
 }: LiveScoringLeaderboardProps) {
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
   const countingScores = normalizedRoundSetup.countingScores;
@@ -69,6 +96,99 @@ export default function LiveScoringLeaderboard({
       {isReadOnly ? (
         <div className="rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
           This tournament is finalized. Score entry is locked, but leaderboards, scorecards, QR viewing, and print tools remain available.
+        </div>
+      ) : null}
+      {reviewResolutionItems.length > 0 ? (
+        <section className="rounded-[28px] border border-[#E0B14F] bg-[#FFFDF7] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                Official Review
+              </p>
+              <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                Resolve Score Discrepancies
+              </h4>
+            </div>
+            <span className="rounded-full border border-[#E0B14F] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#725D37]">
+              {reviewResolutionItems.length} Open
+            </span>
+          </div>
+          {reviewResolutionMessage ? (
+            <p className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-sm font-bold text-[#51635C]">
+              {reviewResolutionMessage}
+            </p>
+          ) : null}
+          <div className="mt-5 space-y-4">
+            {reviewResolutionItems.map((item) => (
+              <div key={item.id} className="rounded-[20px] border border-[#E8DCC8] bg-white p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                      Hole {item.holeNumber}
+                    </p>
+                    <p className="mt-1 text-lg font-black text-[#0B3D2E]">{item.playerName}</p>
+                    <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                      Player {item.playerScore} vs Marker {item.markerScore}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onResolveReviewItem?.(item, "marker")}
+                      disabled={isReadOnly}
+                      className="rounded-full border border-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#0B3D2E] transition duration-300 hover:bg-[#ECF8EF] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Accept Marker Score
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onResolveReviewItem?.(item, "player")}
+                      disabled={isReadOnly}
+                      className="rounded-full border border-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#0B3D2E] transition duration-300 hover:bg-[#ECF8EF] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Accept Player Score
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-[140px_1fr_auto] md:items-end">
+                  <label className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
+                    Coach Score
+                    <input
+                      type="number"
+                      min="1"
+                      max="12"
+                      value={reviewOverrideValues[item.id] ?? ""}
+                      onChange={(event) => onReviewOverrideValueChange?.(item.id, event.target.value)}
+                      disabled={isReadOnly}
+                      className="mt-2 h-11 w-full rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-4 text-sm font-black text-[#0B3D2E] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </label>
+                  <label className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
+                    Override Reason
+                    <input
+                      type="text"
+                      value={reviewOverrideReasons[item.id] ?? ""}
+                      onChange={(event) => onReviewOverrideReasonChange?.(item.id, event.target.value)}
+                      disabled={isReadOnly}
+                      className="mt-2 h-11 w-full rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-4 text-sm font-semibold text-[#0B3D2E] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onResolveReviewItem?.(item, "coach_override")}
+                    disabled={isReadOnly}
+                    className="h-11 rounded-full bg-[#0B3D2E] px-5 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6] transition duration-300 hover:bg-[#12543F] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Enter Coach Override
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : reviewResolutionMessage ? (
+        <div className="rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
+          {reviewResolutionMessage}
         </div>
       ) : null}
       {scorecardsGenerated ? (

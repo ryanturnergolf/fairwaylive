@@ -205,6 +205,9 @@ test("director dashboard review queue links groups needing review to live scorin
       ]),
     });
   });
+  await page.route("**/rest/v1/score_hole_entries**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
 
   await page.addInitScript(
     ({ tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }) => {
@@ -377,6 +380,9 @@ test("director dashboard shows tournament completion ready to close", async ({ p
         },
       ]),
     });
+  });
+  await page.route("**/rest/v1/score_hole_entries**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   });
 
   await page.addInitScript(

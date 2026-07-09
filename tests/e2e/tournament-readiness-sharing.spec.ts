@@ -302,6 +302,13 @@ const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-read
       body: "[]",
     });
   });
+  await page.route("**/rest/v1/score_hole_entries**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    });
+  });
 
   return {
     getTournamentPlayerReadCount: () => tournamentPlayerReadCount,
