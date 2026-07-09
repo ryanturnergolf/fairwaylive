@@ -1,4 +1,8 @@
-import { getSupabaseBrowserClient } from "../supabaseClient";
+import {
+  canUseDevelopmentBrowserSupabaseWriteFallback,
+  getSupabaseBrowserClient,
+} from "../supabaseClient";
+import { hashShareToken } from "../shareTokens";
 
 export type ScoreEntryRow = {
   id: string;
@@ -35,6 +39,7 @@ export type SaveScoreEntryInput = {
   total: number;
   entryStatus: string;
   submittedAt?: string | null;
+  shareToken?: string;
 };
 
 export type GetScoreEntryInput = {
@@ -42,11 +47,13 @@ export type GetScoreEntryInput = {
   roundNumber: number;
   playerId: string;
   enteredByPlayerId: string;
+  shareToken?: string;
 };
 
 export type GetScoreEntriesForTournamentInput = {
   tournamentId: string;
   roundNumber?: number;
+  shareToken?: string;
 };
 
 export type UpdateReviewStatusInput = {
@@ -56,6 +63,7 @@ export type UpdateReviewStatusInput = {
   selfReviewComplete?: boolean;
   markerReviewComplete?: boolean;
   officialAt?: string | null;
+  shareToken?: string;
 };
 
 const scoreEntryColumns =
@@ -74,7 +82,53 @@ const getClient = () => {
   return supabase;
 };
 
+const getReadClient = async (shareToken?: string) => {
+  if (!shareToken) {
+    return getClient();
+  }
+
+  const supabase = getSupabaseBrowserClient({
+    shareTokenHash: await hashShareToken(shareToken),
+  });
+
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  return supabase;
+};
+
+const postScoreMutation = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const response = await fetch("/api/score-mutations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorBody?.error || "Score mutation failed.");
+  }
+
+  return (await response.json()) as T;
+};
+
 export const saveScoreEntry = async (input: SaveScoreEntryInput): Promise<ScoreEntryRow> => {
+  if (typeof window !== "undefined") {
+    try {
+      return await postScoreMutation<ScoreEntryRow>({
+        action: "saveScoreEntry",
+        shareToken: input.shareToken,
+        input,
+      });
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[ScoreRepository] Server score save failed; using local development Supabase fallback.", error);
+    }
+  }
+
   const supabase = getClient();
   const { data, error } = await supabase
     .from("score_entries")
@@ -102,7 +156,7 @@ export const saveScoreEntry = async (input: SaveScoreEntryInput): Promise<ScoreE
 };
 
 export const getScoreEntry = async (input: GetScoreEntryInput): Promise<ScoreEntryRow | null> => {
-  const supabase = getClient();
+  const supabase = await getReadClient(input.shareToken);
   const { data, error } = await supabase
     .from("score_entries")
     .select(scoreEntryColumns)
@@ -122,7 +176,7 @@ export const getScoreEntry = async (input: GetScoreEntryInput): Promise<ScoreEnt
 export const getScoreEntriesForTournament = async (
   input: GetScoreEntriesForTournamentInput
 ): Promise<ScoreEntryRow[]> => {
-  const supabase = getClient();
+  const supabase = await getReadClient(input.shareToken);
   const query = supabase
     .from("score_entries")
     .select(scoreEntryColumns)
@@ -144,6 +198,21 @@ export const getScoreEntriesForTournament = async (
 export const updateReviewStatus = async (
   input: UpdateReviewStatusInput
 ): Promise<ScoreReviewStatusRow> => {
+  if (typeof window !== "undefined") {
+    try {
+      return await postScoreMutation<ScoreReviewStatusRow>({
+        action: "updateReviewStatus",
+        shareToken: input.shareToken,
+        input,
+      });
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[ScoreRepository] Server review update failed; using local development Supabase fallback.", error);
+    }
+  }
+
   const supabase = getClient();
   const { data, error } = await supabase
     .from("score_review_status")

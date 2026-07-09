@@ -1,4 +1,7 @@
-import { getSupabaseBrowserClient } from "../supabaseClient";
+import {
+  canUseDevelopmentBrowserSupabaseWriteFallback,
+  getSupabaseBrowserClient,
+} from "../supabaseClient";
 
 export type ScoreHoleEntryRow = {
   id: string;
@@ -41,6 +44,7 @@ export type SaveScoreHoleEntryInput = {
   isOfficial?: boolean;
   officialAt?: string | null;
   officialBy?: string | null;
+  shareToken?: string;
 };
 
 export type GetScoreHoleEntriesForTournamentInput = {
@@ -66,6 +70,21 @@ const getClient = () => {
   }
 
   return supabase;
+};
+
+const postScoreMutation = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const response = await fetch("/api/score-mutations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorBody?.error || "Score mutation failed.");
+  }
+
+  return (await response.json()) as T;
 };
 
 const createStatisticsRequestSignal = () => {
@@ -101,6 +120,22 @@ const toScoreHoleEntryRow = (input: SaveScoreHoleEntryInput) => ({
 export const saveScoreHoleEntry = async (
   input: SaveScoreHoleEntryInput
 ): Promise<ScoreHoleEntryRow> => {
+  if (typeof window !== "undefined") {
+    try {
+      const rows = await postScoreMutation<ScoreHoleEntryRow[]>({
+        action: "saveScoreHoleEntries",
+        shareToken: input.shareToken,
+        rows: [toScoreHoleEntryRow(input)],
+      });
+      return rows[0];
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[StatisticsRepository] Server hole stat save failed; using local development Supabase fallback.", error);
+    }
+  }
+
   const supabase = getClient();
   const requestSignal = createStatisticsRequestSignal();
 
@@ -129,6 +164,21 @@ export const saveScoreHoleEntries = async (
 ): Promise<ScoreHoleEntryRow[]> => {
   if (inputs.length === 0) {
     return [];
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      return await postScoreMutation<ScoreHoleEntryRow[]>({
+        action: "saveScoreHoleEntries",
+        shareToken: inputs[0]?.shareToken,
+        rows: inputs.map(toScoreHoleEntryRow),
+      });
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[StatisticsRepository] Server hole stat batch save failed; using local development Supabase fallback.", error);
+    }
   }
 
   const supabase = getClient();

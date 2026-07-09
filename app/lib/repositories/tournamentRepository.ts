@@ -1,13 +1,19 @@
-import { getSupabaseBrowserClient } from "../supabaseClient";
+import {
+  canUseDevelopmentBrowserSupabaseWriteFallback,
+  getSupabaseBrowserClient,
+} from "../supabaseClient";
+import { hashShareToken } from "../shareTokens";
 
 export type TournamentRow = {
   id: string;
   created_by: string | null;
+  owner_id?: string | null;
   name: string;
   course: string | null;
   tournament_date: string | null;
   number_of_rounds: number;
   status: string;
+  aggregate_version?: number;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -47,6 +53,7 @@ export type TournamentStateSnapshotUpsertInput = {
   localTournamentId: string;
   schemaVersion: number;
   stateSnapshot: unknown;
+  expectedAggregateVersion?: number | null;
 };
 
 export type TournamentStateSnapshotRow = {
@@ -54,12 +61,27 @@ export type TournamentStateSnapshotRow = {
   local_tournament_id: string | null;
   schema_version: number;
   state_snapshot: unknown;
+  aggregate_version?: number;
   created_at: string | null;
   updated_at: string | null;
 };
 
+export type TournamentShareTokenRow = {
+  id: string;
+  tournament_id: string;
+  purpose: "mobile_scoring" | "live_leaderboard" | "read_only";
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string | null;
+  token?: string;
+};
+
+export type ShareTokenReadOptions = {
+  shareToken?: string;
+};
+
 const tournamentColumns =
-  "id,created_by,name,course,tournament_date,number_of_rounds,status,created_at,updated_at";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,aggregate_version,created_at,updated_at";
 
 const tournamentPlayerColumns =
   "id,tournament_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
@@ -74,9 +96,54 @@ const getClient = () => {
   return supabase;
 };
 
+const getReadClient = async (options: ShareTokenReadOptions = {}) => {
+  if (!options.shareToken) {
+    return getClient();
+  }
+
+  const supabase = getSupabaseBrowserClient({
+    shareTokenHash: await hashShareToken(options.shareToken),
+  });
+
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  return supabase;
+};
+
+const postTournamentMutation = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const response = await fetch("/api/tournament-mutations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorBody?.error || "Tournament mutation failed.");
+  }
+
+  return (await response.json()) as T;
+};
+
 export const createTournamentRow = async (
   input: CreateTournamentRowInput
 ): Promise<TournamentRow> => {
+  if (typeof window !== "undefined") {
+    try {
+      return await postTournamentMutation<TournamentRow>({
+        action: "createTournament",
+        input,
+      });
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[TournamentRepository] Server tournament create failed; using local development Supabase fallback.", error);
+    }
+  }
+
   const supabase = getClient();
   const { data, error } = await supabase
     .from("tournaments")
@@ -100,6 +167,21 @@ export const createTournamentRow = async (
 export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[]) => {
   if (rows.length === 0) {
     return;
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      await postTournamentMutation<{ ok: true }>({
+        action: "upsertTournamentPlayers",
+        rows,
+      });
+      return;
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[TournamentRepository] Server tournament player sync failed; using local development Supabase fallback.", error);
+    }
   }
 
   const supabase = getClient();
@@ -142,6 +224,21 @@ export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[])
 };
 
 export const upsertTournamentStateSnapshot = async (input: TournamentStateSnapshotUpsertInput) => {
+  if (typeof window !== "undefined") {
+    try {
+      await postTournamentMutation<{ ok: true }>({
+        action: "upsertTournamentStateSnapshot",
+        input,
+      });
+      return;
+    } catch (error) {
+      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
+        throw error;
+      }
+      console.warn("[TournamentRepository] Server snapshot sync failed; using local development Supabase fallback.", error);
+    }
+  }
+
   const supabase = getClient();
   const { error } = await supabase.from("tournament_state_snapshots").upsert(
     {
@@ -159,12 +256,13 @@ export const upsertTournamentStateSnapshot = async (input: TournamentStateSnapsh
 };
 
 export const getTournamentStateSnapshot = async (
-  tournamentId: string
+  tournamentId: string,
+  options: ShareTokenReadOptions = {}
 ): Promise<TournamentStateSnapshotRow | null> => {
-  const supabase = getClient();
+  const supabase = await getReadClient(options);
   const { data, error } = await supabase
     .from("tournament_state_snapshots")
-    .select("tournament_id,local_tournament_id,schema_version,state_snapshot,created_at,updated_at")
+    .select("tournament_id,local_tournament_id,schema_version,state_snapshot,aggregate_version,created_at,updated_at")
     .eq("tournament_id", tournamentId)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -177,8 +275,11 @@ export const getTournamentStateSnapshot = async (
   return data as TournamentStateSnapshotRow | null;
 };
 
-export const getTournamentRow = async (tournamentId: string): Promise<TournamentRow | null> => {
-  const supabase = getClient();
+export const getTournamentRow = async (
+  tournamentId: string,
+  options: ShareTokenReadOptions = {}
+): Promise<TournamentRow | null> => {
+  const supabase = await getReadClient(options);
   const { data, error } = await supabase
     .from("tournaments")
     .select(tournamentColumns)
@@ -209,9 +310,10 @@ export const listTournamentRows = async (): Promise<TournamentRow[]> => {
 
 export const getTournamentPlayers = async (
   tournamentId: string,
-  roundNumber: number
+  roundNumber: number,
+  options: ShareTokenReadOptions = {}
 ): Promise<TournamentPlayerRow[]> => {
-  const supabase = getClient();
+  const supabase = await getReadClient(options);
   const { data, error } = await supabase
     .from("tournament_players")
     .select(tournamentPlayerColumns)
@@ -226,4 +328,17 @@ export const getTournamentPlayers = async (
   }
 
   return (data ?? []) as TournamentPlayerRow[];
+};
+
+export const createTournamentShareToken = async (
+  tournamentId: string,
+  purpose: TournamentShareTokenRow["purpose"]
+): Promise<TournamentShareTokenRow> => {
+  return postTournamentMutation<TournamentShareTokenRow>({
+    action: "createShareToken",
+    input: {
+      tournamentId,
+      purpose,
+    },
+  });
 };
