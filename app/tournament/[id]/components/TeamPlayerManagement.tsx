@@ -83,6 +83,7 @@ type TeamPlayerManagementProps = {
   onPlayerImportTemplateDownload: () => void;
   onPlayerImportFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onPlayerImportConfirm: () => void;
+  isReadOnly?: boolean;
 };
 
 export default function TeamPlayerManagement({
@@ -118,6 +119,7 @@ export default function TeamPlayerManagement({
   onPlayerImportTemplateDownload,
   onPlayerImportFileChange,
   onPlayerImportConfirm,
+  isReadOnly = false,
 }: TeamPlayerManagementProps) {
   return (
     <>
@@ -135,7 +137,8 @@ export default function TeamPlayerManagement({
             <button
               type="button"
               onClick={onOpenAddTeamModal}
-              className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+              disabled={isReadOnly}
+              className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
             >
               Add Team
             </button>
@@ -180,14 +183,16 @@ export default function TeamPlayerManagement({
                     <button
                       type="button"
                       onClick={() => onOpenEditTeamModal(team)}
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      disabled={isReadOnly}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => onDeleteTeam(team.id)}
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      disabled={isReadOnly}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Delete
                     </button>
@@ -211,15 +216,17 @@ export default function TeamPlayerManagement({
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={onOpenPlayerImportModal}
-                className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                  onClick={onOpenPlayerImportModal}
+                  disabled={isReadOnly}
+                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Import Players
               </button>
               <button
                 type="button"
-                onClick={onOpenAddPlayerModal}
-                className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                  onClick={onOpenAddPlayerModal}
+                  disabled={isReadOnly}
+                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
               >
                 Add Player
               </button>
@@ -255,14 +262,16 @@ export default function TeamPlayerManagement({
                     <button
                       type="button"
                       onClick={() => onOpenEditPlayerModal(player)}
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      disabled={isReadOnly}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => onDeletePlayer(player.id)}
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      disabled={isReadOnly}
+                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Delete
                     </button>

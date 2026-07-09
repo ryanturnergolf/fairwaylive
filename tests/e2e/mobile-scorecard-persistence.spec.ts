@@ -1010,7 +1010,12 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
     await page.getByRole("button", { name: "Save Hole" }).click();
   }
 
-  await expect.poll(() => sharedStore.savedScoreRows.filter((row) => row.tournament_id === sharedTournamentId).length).toBeGreaterThanOrEqual(2);
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-1" && row.entered_by_player_id === "player-1")?.hole_scores[3])
+    .toBe(4);
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2" && row.entered_by_player_id === "player-1")?.hole_scores[3])
+    .toBe(4);
 
   await page.evaluate(() => window.localStorage.clear());
   await page.goto(`${baseUrl}/scorecard/player-1?tournamentId=${sharedTournamentId}&pairing=1`);

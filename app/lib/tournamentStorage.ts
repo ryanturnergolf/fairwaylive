@@ -317,6 +317,13 @@ const asNumber = (value: unknown, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const hasFinalizedSettings = (settings: unknown) => {
+  const record = asRecord(settings);
+  const finalization = asRecord(record?.finalization);
+
+  return Boolean(finalization?.isFinalized && finalization.finalizedAt);
+};
+
 const normalizeSettings = (primary: unknown, secondary: unknown, roundCount: number): TournamentSettings => ({
   ...(asRecord(secondary) ?? {}),
   ...(asRecord(primary) ?? {}),
@@ -656,6 +663,10 @@ export const mergeTournamentScoreSubmission = (
 
   const envelope = loadTournamentStorageEnvelope(tournamentId);
   if (!envelope) {
+    return false;
+  }
+
+  if (hasFinalizedSettings(envelope.tournament.settings)) {
     return false;
   }
 

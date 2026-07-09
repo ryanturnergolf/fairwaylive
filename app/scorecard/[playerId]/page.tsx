@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   loadSharedTournamentIdFromStorage,
   loadTournamentStateFromStorage,
@@ -12,6 +12,7 @@ import {
 } from "../../lib/tournamentStorage";
 import { loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
+import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
 
 type Hole = {
   holeNumber: number;
@@ -158,6 +159,9 @@ const fallbackScorecard: PlayerScorecard = {
 };
 
 const SHARED_SCORECARD_LOOKUP_TIMEOUT_MS = 8000;
+const SAVE_FINALIZATION_CHECK_TIMEOUT_MS = 4000;
+const finalizedReadOnlyMessage = "This tournament has been finalized and is read-only. Score submissions are locked for historical viewing.";
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -221,10 +225,12 @@ export default function PlayerScorecardPage() {
   const requestedPairingId = searchParams.get("pairing") ?? "";
   const [qrResolvedScorecard, setQrResolvedScorecard] = useState<PlayerScorecard | { error: string } | null>(null);
   const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
+  const [isTournamentFinalized, setIsTournamentFinalized] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
     setHasResolvedQrScorecard(false);
+    setIsTournamentFinalized(false);
 
     const finishResolution = (scorecard: PlayerScorecard | { error: string } | null) => {
       if (isCancelled) {
@@ -261,6 +267,7 @@ export default function PlayerScorecardPage() {
                 SHARED_SCORECARD_LOOKUP_TIMEOUT_MS
               );
         const tournament = localTournament ?? sharedState?.tournament;
+        setIsTournamentFinalized(Boolean(getTournamentFinalizationRecord(storedEnvelope)) || Boolean(sharedState?.isFinalized));
         if (!tournament) {
           finishResolution({ error: "We could not find that tournament. Please request a new mobile scoring link." });
           return;
@@ -445,13 +452,14 @@ export default function PlayerScorecardPage() {
   const scorecard = (qrResolvedScorecard && "error" in qrResolvedScorecard
     ? fallbackScorecard
     : qrResolvedScorecard ?? sampleScorecards[routePlayerId || ""] ?? fallbackScorecard);
-  const sharedScoreTournamentId = useMemo(() => {
+  const linkedSharedTournamentId = useMemo(() => {
     if (!requestedTournamentId) {
       return "";
     }
 
-    return loadSharedTournamentIdFromStorage(requestedTournamentId) || requestedTournamentId;
+    return loadSharedTournamentIdFromStorage(requestedTournamentId) || "";
   }, [requestedTournamentId]);
+  const sharedScoreTournamentId = linkedSharedTournamentId || requestedTournamentId;
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
@@ -463,6 +471,46 @@ export default function PlayerScorecardPage() {
   const [saveError, setSaveError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [, setScoreDiagnostics] = useState<ScoreDiagnostics>(initialScoreDiagnostics);
+  const finalizationVerifiedAtRef = useRef(0);
+
+  const refreshCurrentFinalizedStateForSave = async () => {
+    if (!requestedTournamentId) {
+      finalizationVerifiedAtRef.current = Date.now();
+      return false;
+    }
+
+    const localEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+    if (getTournamentFinalizationRecord(localEnvelope)) {
+      finalizationVerifiedAtRef.current = Date.now();
+      setIsTournamentFinalized(true);
+      setSaveError(finalizedReadOnlyMessage);
+      return true;
+    }
+
+    const shouldCheckSharedFinalization = Boolean(linkedSharedTournamentId || uuidPattern.test(requestedTournamentId));
+    if (!shouldCheckSharedFinalization || !sharedScoreTournamentId) {
+      finalizationVerifiedAtRef.current = Date.now();
+      return false;
+    }
+
+    const sharedState = await withTimeout(
+      loadSharedTournamentScorecardState(sharedScoreTournamentId).catch((error) => {
+        console.warn("[TournamentService] Unable to verify tournament finalization before score save.", error);
+        return null;
+      }),
+      SAVE_FINALIZATION_CHECK_TIMEOUT_MS
+    );
+
+    if (sharedState?.isFinalized) {
+      finalizationVerifiedAtRef.current = Date.now();
+      setIsTournamentFinalized(true);
+      setSaveError(finalizedReadOnlyMessage);
+      return true;
+    }
+
+    finalizationVerifiedAtRef.current = Date.now();
+    return false;
+  };
 
   useEffect(() => {
     if (!isDevelopment || !requestedTournamentId) {
@@ -852,13 +900,18 @@ export default function PlayerScorecardPage() {
     );
   };
 
-  const saveScoreThroughService = (
+  const saveScoreThroughService = async (
     playerId: string,
     enteredByPlayerId: string,
     roundNumber: number,
     holeScores: number[],
     scope: "hole" | "round"
   ) => {
+    const wasJustVerified = Date.now() - finalizationVerifiedAtRef.current < 1000;
+    if (isTournamentFinalized || (!wasJustVerified && (await refreshCurrentFinalizedStateForSave()))) {
+      return;
+    }
+
     const serviceSave = scope === "round" ? saveRound : saveHole;
 
     if (isDevelopment) {
@@ -871,7 +924,7 @@ export default function PlayerScorecardPage() {
       }));
     }
 
-    return serviceSave({
+    await serviceSave({
       tournamentId: sharedScoreTournamentId,
       roundNumber,
       playerId,
@@ -903,7 +956,12 @@ export default function PlayerScorecardPage() {
     });
   };
 
-  const handleSaveHole = () => {
+  const handleSaveHole = async () => {
+    if (isTournamentFinalized || (await refreshCurrentFinalizedStateForSave())) {
+      setSaveError(finalizedReadOnlyMessage);
+      return;
+    }
+
     if (scores[currentHoleIndex] === 0) return;
 
     // Validate playerId before saving
@@ -981,7 +1039,12 @@ export default function PlayerScorecardPage() {
     setSaveError("");
   };
 
-  const handleConfirmSubmit = () => {
+  const handleConfirmSubmit = async () => {
+    if (isTournamentFinalized || (await refreshCurrentFinalizedStateForSave())) {
+      setSaveError(finalizedReadOnlyMessage);
+      return;
+    }
+
     if (!requestedTournamentId) {
       setSaveError("Unable to submit. Tournament information is missing.");
       return;
@@ -1045,6 +1108,11 @@ export default function PlayerScorecardPage() {
       <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
         {sharedHeader}
         <section className="mx-auto max-w-md px-4 py-5">
+          {isTournamentFinalized ? (
+            <div className="mb-4 rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-semibold text-[#146233]">
+              This tournament is finalized. Score entry is read-only for historical viewing.
+            </div>
+          ) : null}
           <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verification Submitted</p>
             <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
@@ -1136,6 +1204,11 @@ export default function PlayerScorecardPage() {
       <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
         {sharedHeader}
         <section className="mx-auto max-w-md px-4 py-5">
+          {isTournamentFinalized ? (
+            <div className="mb-4 rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-semibold text-[#146233]">
+              This tournament is finalized. Score entry is read-only for historical viewing.
+            </div>
+          ) : null}
           <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verify Score</p>
             <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#0B3D2E]">
@@ -1185,14 +1258,14 @@ export default function PlayerScorecardPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm(true)}
-                disabled={hasDiscrepancies}
+                disabled={hasDiscrepancies || isTournamentFinalized}
                 className={`w-full rounded-full px-6 py-4 text-sm font-black uppercase tracking-[0.25em] transition duration-300 ${
-                  hasDiscrepancies
+                  hasDiscrepancies || isTournamentFinalized
                     ? "cursor-not-allowed border border-[#E8DCC8] bg-[#F6F1E6] text-[#B8892D] opacity-50"
                     : "bg-[#B8892D] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 active:translate-y-0.5"
                 }`}
               >
-                {hasDiscrepancies ? "Fix Score Mismatches to Submit" : "Submit Verification"}
+                {isTournamentFinalized ? "Tournament Finalized" : hasDiscrepancies ? "Fix Score Mismatches to Submit" : "Submit Verification"}
               </button>
             </div>
           ) : (
@@ -1208,7 +1281,8 @@ export default function PlayerScorecardPage() {
                 <button
                   type="button"
                   onClick={handleConfirmSubmit}
-                  className="w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5"
+                  disabled={isTournamentFinalized}
+                  className="w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Confirm Submit
                 </button>
@@ -1232,6 +1306,11 @@ export default function PlayerScorecardPage() {
       {sharedHeader}
 
       <section className="mx-auto max-w-md px-4 py-5">
+        {isTournamentFinalized ? (
+          <div className="mb-4 rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-semibold text-[#146233]">
+            This tournament is finalized. Score entry is read-only for historical viewing.
+          </div>
+        ) : null}
         <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
           <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
             Tournament
@@ -1300,6 +1379,7 @@ export default function PlayerScorecardPage() {
               value={scores[currentHoleIndex] === 0 ? "" : scores[currentHoleIndex]}
               onChange={(event) => updateScore(event.target.value)}
               onInput={(event) => updateScore(event.currentTarget.value)}
+              disabled={isTournamentFinalized}
               placeholder="Enter score"
               className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
             />
@@ -1315,6 +1395,7 @@ export default function PlayerScorecardPage() {
                 value={markerScores[currentHoleIndex] === 0 ? "" : markerScores[currentHoleIndex]}
                 onChange={(event) => updateMarkerScore(event.target.value)}
                 onInput={(event) => updateMarkerScore(event.currentTarget.value)}
+                disabled={isTournamentFinalized}
                 placeholder="Enter score"
                 className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
               />
@@ -1324,11 +1405,14 @@ export default function PlayerScorecardPage() {
           <button
             type="button"
             onClick={handleSaveHole}
-            disabled={scores[currentHoleIndex] === 0}
+            disabled={isTournamentFinalized || scores[currentHoleIndex] === 0}
             className="mt-4 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Save Hole
           </button>
+          {saveError ? (
+            <p className="mt-3 text-center text-sm font-semibold text-red-700">{saveError}</p>
+          ) : null}
 
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
@@ -1353,10 +1437,10 @@ export default function PlayerScorecardPage() {
         <button
           type="button"
           onClick={handleReviewRound}
-          disabled={!allHolesScored}
+          disabled={isTournamentFinalized || !allHolesScored}
           className="mt-5 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Review &amp; Submit Round
+          {isTournamentFinalized ? "Tournament Finalized" : "Review & Submit Round"}
         </button>
 
         {!allHolesScored ? (

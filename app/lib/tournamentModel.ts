@@ -10,6 +10,16 @@ export type TournamentSettings = Record<string, unknown> & {
   state?: string;
   scoringFormat?: string;
   status?: string;
+  finalization?: TournamentFinalizationRecord;
+};
+
+export type TournamentFinalizationRecord = {
+  isFinalized: boolean;
+  finalizedAt: string;
+  finalizedBy: string;
+  finalizationVersion: number;
+  reopenedAt?: string;
+  reopenedBy?: string;
 };
 
 export type Team = {

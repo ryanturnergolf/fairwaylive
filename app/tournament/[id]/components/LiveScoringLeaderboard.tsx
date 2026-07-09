@@ -27,6 +27,7 @@ type LiveScoringLeaderboardProps = {
   onScoreInputChange: (rowId: number, holeIndex: number, value: string) => void;
   onOpenQrModal: (player: ScorecardRow) => void;
   onOpenPrintScorecardModal: (player: ScorecardRow) => void;
+  isReadOnly?: boolean;
 };
 
 export default function LiveScoringLeaderboard({
@@ -39,6 +40,7 @@ export default function LiveScoringLeaderboard({
   onScoreInputChange,
   onOpenQrModal,
   onOpenPrintScorecardModal,
+  isReadOnly = false,
 }: LiveScoringLeaderboardProps) {
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
   const countingScores = normalizedRoundSetup.countingScores;
@@ -62,7 +64,13 @@ export default function LiveScoringLeaderboard({
         onPrintTournamentScorecards={onPrintTournamentScorecards}
         onGenerateScorecards={onGenerateScorecards}
         onRoundSetupChange={onRoundSetupChange}
+        isReadOnly={isReadOnly}
       />
+      {isReadOnly ? (
+        <div className="rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
+          This tournament is finalized. Score entry is locked, but leaderboards, scorecards, QR viewing, and print tools remain available.
+        </div>
+      ) : null}
       {scorecardsGenerated ? (
         scorecardRows.length > 0 ? (
           <div className="space-y-6">
@@ -192,9 +200,10 @@ export default function LiveScoringLeaderboard({
                                 type="number"
                                 min="1"
                                 max="12"
-                                value={score}
-                                onChange={(event) => onScoreInputChange(row.id, holeIndex, event.target.value)}
-                                className="h-9 w-12 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-2 py-1 text-center text-sm font-semibold text-[#0B3D2E] outline-none"
+                                 value={score}
+                                 onChange={(event) => onScoreInputChange(row.id, holeIndex, event.target.value)}
+                                 disabled={isReadOnly}
+                                 className="h-9 w-12 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-2 py-1 text-center text-sm font-semibold text-[#0B3D2E] outline-none"
                               />
                             </td>
                           ))}

@@ -150,6 +150,7 @@ const tournamentAggregateFromRow = (row: TournamentRow): TournamentAggregate => 
 
 export type SharedTournamentScorecardState = {
   tournament: StoredTournament;
+  isFinalized: boolean;
   pairings: Array<{
     groupNumber: number;
     teeTime: string;
@@ -706,12 +707,21 @@ export const persistTournamentPageState = ({
     return;
   }
 
+  const persistedSettings =
+    typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {};
+  const currentFinalization = currentEnvelope?.tournament.settings.finalization;
   const envelope = buildTournamentStorageEnvelope(
     tournamentId,
     tournament.name,
     tournament.course,
     state,
-    typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {},
+    currentFinalization
+      ? {
+          ...persistedSettings,
+          finalization: currentFinalization,
+          status: "Finalized",
+        }
+      : persistedSettings,
     Number(tournament.rounds) || 1
   );
 
@@ -814,9 +824,10 @@ export const loadSharedTournamentScorecardState = async (
   roundNumber = 1,
   holeCount = 18
 ): Promise<SharedTournamentScorecardState | null> => {
-  const [tournamentRow, playerRows] = await Promise.all([
+  const [tournamentRow, playerRows, snapshot] = await Promise.all([
     getTournamentRow(tournamentId),
     getTournamentPlayers(tournamentId, roundNumber),
+    getTournamentStateSnapshot(tournamentId).catch(() => null),
   ]);
 
   if (!tournamentRow || playerRows.length === 0) {
@@ -845,6 +856,12 @@ export const loadSharedTournamentScorecardState = async (
 
   return {
     tournament: toStoredTournament(tournamentRow),
+    isFinalized: Boolean(
+      isTournamentStorageEnvelope(snapshot?.state_snapshot) &&
+        snapshot.state_snapshot.tournament.settings.finalization &&
+        typeof snapshot.state_snapshot.tournament.settings.finalization === "object" &&
+        (snapshot.state_snapshot.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
+    ),
     pairings,
     scorecardRows: sharedPlayerRows.map((row, index) => ({
       id: toScorecardRowId(row.player_id, index),

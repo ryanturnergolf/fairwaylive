@@ -45,6 +45,7 @@ type PairingsScorecardGenerationProps =
       onAutoRepairSubmit: (event: FormEvent<HTMLFormElement>) => void;
       onMovePlayerWithinPairing: (pairingIndex: number, playerIndex: number, direction: -1 | 1) => void;
       onMovePlayerBetweenPairings: (pairingIndex: number, playerIndex: number, direction: -1 | 1) => void;
+      isReadOnly?: boolean;
     }
   | {
       activeTab: "Live Scoring";
@@ -53,6 +54,7 @@ type PairingsScorecardGenerationProps =
       onPrintTournamentScorecards: () => void;
       onGenerateScorecards: () => void;
       onRoundSetupChange: (event: ChangeEvent<HTMLInputElement>) => void;
+      isReadOnly?: boolean;
     };
 
 export default function PairingsScorecardGeneration(props: PairingsScorecardGenerationProps) {
@@ -69,6 +71,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
       onAutoRepairSubmit,
       onMovePlayerWithinPairing,
       onMovePlayerBetweenPairings,
+      isReadOnly = false,
     } = props;
 
     return (
@@ -88,14 +91,16 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
               <button
                 type="button"
                 onClick={onGeneratePairings}
-                className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                disabled={isReadOnly}
+                className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Generate Pairings
               </button>
               <button
                 type="button"
                 onClick={onOpenAutoRepairModal}
-                className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                disabled={isReadOnly}
+                className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
               >
                 Auto Re-Pair by Results
               </button>
@@ -144,7 +149,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                             <button
                               type="button"
                               onClick={() => onMovePlayerBetweenPairings(pairingIndex, playerIndex, -1)}
-                              disabled={pairingIndex === 0}
+                              disabled={isReadOnly || pairingIndex === 0}
                               className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               ← Group
@@ -152,7 +157,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                             <button
                               type="button"
                               onClick={() => onMovePlayerWithinPairing(pairingIndex, playerIndex, -1)}
-                              disabled={playerIndex === 0}
+                              disabled={isReadOnly || playerIndex === 0}
                               className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               ↑
@@ -160,7 +165,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                             <button
                               type="button"
                               onClick={() => onMovePlayerWithinPairing(pairingIndex, playerIndex, 1)}
-                              disabled={playerIndex === pairing.players.length - 1}
+                              disabled={isReadOnly || playerIndex === pairing.players.length - 1}
                               className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               ↓
@@ -168,7 +173,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                             <button
                               type="button"
                               onClick={() => onMovePlayerBetweenPairings(pairingIndex, playerIndex, 1)}
-                              disabled={pairingIndex === pairings.length - 1}
+                              disabled={isReadOnly || pairingIndex === pairings.length - 1}
                               className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               Group →
@@ -307,6 +312,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
     onPrintTournamentScorecards,
     onGenerateScorecards,
     onRoundSetupChange,
+    isReadOnly = false,
   } = props;
 
   return (
@@ -331,7 +337,8 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
           <button
             type="button"
             onClick={onGenerateScorecards}
-            className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+            disabled={isReadOnly}
+            className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
           >
             {scorecardsGenerated ? "Regenerate Scorecards" : "Generate Scorecards"}
           </button>
@@ -345,6 +352,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
             name="roundNumber"
             value={normalizedRoundSetup.roundNumber}
             onChange={onRoundSetupChange}
+            disabled={isReadOnly}
             className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
           />
         </label>
@@ -354,6 +362,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
             name="startingHole"
             value={normalizedRoundSetup.startingHole}
             onChange={onRoundSetupChange}
+            disabled={isReadOnly}
             className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
           />
         </label>
@@ -363,6 +372,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
             name="numberOfHoles"
             value={normalizedRoundSetup.numberOfHoles}
             onChange={onRoundSetupChange}
+            disabled={isReadOnly}
             className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
           />
         </label>
@@ -372,6 +382,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
             name="teeTime"
             value={normalizedRoundSetup.teeTime}
             onChange={onRoundSetupChange}
+            disabled={isReadOnly}
             className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
           />
         </label>
@@ -384,6 +395,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
             max="6"
             value={normalizedRoundSetup.countingScores}
             onChange={onRoundSetupChange}
+            disabled={isReadOnly}
             className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
           />
         </label>

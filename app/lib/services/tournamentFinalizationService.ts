@@ -2,17 +2,22 @@ import {
   loadSharedTournamentIdFromStorage,
   loadTournamentStorageEnvelope,
   loadTournamentsFromStorage,
+  saveTournamentStorageEnvelope,
+  saveTournamentsToStorage,
   type StoredTournament,
 } from "../tournamentStorage";
-import type { TournamentStorageEnvelope } from "../tournamentModel";
+import type { TournamentFinalizationRecord, TournamentSettings, TournamentStorageEnvelope } from "../tournamentModel";
 import {
   buildDirectorTournamentSummary,
   type DirectorTournamentSummary,
 } from "./tournamentDirectorDashboardService";
 import {
   getTournamentAggregate,
+  syncTournamentStateSnapshot,
   type TournamentAggregate,
 } from "./tournamentService";
+
+export type { TournamentFinalizationRecord };
 
 export type TournamentFinalizationBlockingReasonCode =
   | "finalization_load_failed"
@@ -62,10 +67,31 @@ export type TournamentFinalizationStatus = {
   eligible: boolean;
   tournamentId: string;
   sharedTournamentId: string;
+  finalizationRecord: TournamentFinalizationRecord | null;
   blockingReasons: TournamentFinalizationReason[];
   warnings: TournamentFinalizationWarning[];
   summaryCounts: TournamentFinalizationSummaryCounts;
   checkedAt: string;
+};
+
+export type FinalizeTournamentInput = {
+  tournamentId: string;
+  sharedTournamentId?: string;
+  finalizedBy?: string;
+  finalizationVersion?: number;
+};
+
+export type FinalizeTournamentResult = {
+  finalized: boolean;
+  status: TournamentFinalizationStatus;
+  finalizationRecord?: TournamentFinalizationRecord;
+};
+
+export type ReopenFinalizedTournamentInput = {
+  tournamentId: string;
+  sharedTournamentId?: string;
+  reopenedBy: string;
+  adminOverride: true;
 };
 
 export type BuildTournamentFinalizationStatusInput = {
@@ -85,6 +111,9 @@ export type LoadTournamentFinalizationStatusInput = {
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 const isUuid = (value: string) => uuidPattern.test(value);
+
+const defaultFinalizedBy = "Tournament Director";
+export const currentFinalizationVersion = 1;
 
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
@@ -114,6 +143,82 @@ const isSnapshotCurrent = (
   }
 
   return stableStringify(aggregate.envelope) === stableStringify(localEnvelope);
+};
+
+export const getTournamentFinalizationRecord = (
+  envelope: TournamentStorageEnvelope | null | undefined
+): TournamentFinalizationRecord | null => {
+  const settings = envelope?.tournament.settings;
+  const finalization = settings?.finalization;
+
+  if (!finalization || typeof finalization !== "object") {
+    return null;
+  }
+
+  const record = finalization as Partial<TournamentFinalizationRecord>;
+  if (!record.isFinalized || !record.finalizedAt || !record.finalizedBy || !record.finalizationVersion) {
+    return null;
+  }
+
+  return {
+    isFinalized: true,
+    finalizedAt: record.finalizedAt,
+    finalizedBy: record.finalizedBy,
+    finalizationVersion: Number(record.finalizationVersion) || currentFinalizationVersion,
+    reopenedAt: record.reopenedAt,
+    reopenedBy: record.reopenedBy,
+  };
+};
+
+export const isTournamentFinalized = (envelope: TournamentStorageEnvelope | null | undefined) =>
+  Boolean(getTournamentFinalizationRecord(envelope));
+
+const updateStoredTournamentFinalizationSettings = (
+  tournamentId: string,
+  status: string,
+  finalization: TournamentFinalizationRecord | null
+) => {
+  const tournaments = loadTournamentsFromStorage();
+  const nextTournaments = tournaments.map((tournament) => {
+    if (tournament.id !== tournamentId) {
+      return tournament;
+    }
+
+    const settings = (typeof tournament.settings === "object" && tournament.settings !== null
+      ? tournament.settings
+      : {}) as TournamentSettings;
+    const nextSettings = { ...settings };
+
+    if (finalization) {
+      nextSettings.finalization = finalization;
+    } else {
+      delete nextSettings.finalization;
+    }
+
+    return {
+      ...tournament,
+      status,
+      settings: nextSettings,
+    };
+  });
+
+  saveTournamentsToStorage(nextTournaments);
+};
+
+const syncFinalizedSnapshot = async (
+  tournamentId: string,
+  sharedTournamentId: string,
+  envelope: TournamentStorageEnvelope
+) => {
+  if (!sharedTournamentId) {
+    return;
+  }
+
+  await syncTournamentStateSnapshot({
+    tournamentId: sharedTournamentId,
+    localTournamentId: tournamentId,
+    envelope,
+  });
 };
 
 const addBlockingReason = (
@@ -229,6 +334,7 @@ export const buildTournamentFinalizationStatus = ({
     eligible: blockingReasons.length === 0,
     tournamentId: summary.tournamentId,
     sharedTournamentId: summary.sharedTournamentId,
+    finalizationRecord: getTournamentFinalizationRecord(localEnvelope),
     blockingReasons,
     warnings,
     summaryCounts: {
@@ -278,10 +384,136 @@ export const loadTournamentFinalizationStatus = async ({
     localTournament: storedTournament,
   });
 
-  return buildTournamentFinalizationStatus({
+  const status = buildTournamentFinalizationStatus({
     summary,
     aggregate,
     localEnvelope,
     loadError,
   });
+
+  return {
+    ...status,
+    finalizationRecord: getTournamentFinalizationRecord(localEnvelope),
+  };
+};
+
+export const finalizeTournament = async ({
+  tournamentId,
+  sharedTournamentId = "",
+  finalizedBy = defaultFinalizedBy,
+  finalizationVersion = currentFinalizationVersion,
+}: FinalizeTournamentInput): Promise<FinalizeTournamentResult> => {
+  const status = await loadTournamentFinalizationStatus({ tournamentId, sharedTournamentId });
+  if (!status.eligible) {
+    return {
+      finalized: false,
+      status,
+    };
+  }
+
+  const envelope = loadTournamentStorageEnvelope(tournamentId);
+  if (!envelope) {
+    return {
+      finalized: false,
+      status: {
+        ...status,
+        eligible: false,
+        finalizationRecord: null,
+        blockingReasons: [
+          ...status.blockingReasons,
+          {
+            code: "finalization_load_failed",
+            message: "Tournament finalization could not load local tournament state.",
+          },
+        ],
+      },
+    };
+  }
+
+  const finalizationRecord: TournamentFinalizationRecord = {
+    isFinalized: true,
+    finalizedAt: new Date().toISOString(),
+    finalizedBy: finalizedBy || defaultFinalizedBy,
+    finalizationVersion,
+  };
+  const nextSettings: TournamentSettings = {
+    ...envelope.tournament.settings,
+    status: "Finalized",
+    finalization: finalizationRecord,
+  };
+  const finalizedEnvelope: TournamentStorageEnvelope = {
+    ...envelope,
+    tournament: {
+      ...envelope.tournament,
+      settings: nextSettings,
+      rounds: envelope.tournament.rounds.map((round) => ({
+        ...round,
+        status: "complete",
+      })),
+    },
+  };
+
+  saveTournamentStorageEnvelope(tournamentId, finalizedEnvelope);
+  updateStoredTournamentFinalizationSettings(tournamentId, "Finalized", finalizationRecord);
+  await syncFinalizedSnapshot(tournamentId, status.sharedTournamentId || sharedTournamentId, finalizedEnvelope);
+
+  return {
+    finalized: true,
+    status: {
+      ...status,
+      eligible: true,
+      finalizationRecord,
+      checkedAt: finalizationRecord.finalizedAt,
+    },
+    finalizationRecord,
+  };
+};
+
+export const reopenFinalizedTournament = async ({
+  tournamentId,
+  sharedTournamentId = "",
+  reopenedBy,
+  adminOverride,
+}: ReopenFinalizedTournamentInput): Promise<TournamentStorageEnvelope | null> => {
+  if (!adminOverride) {
+    throw new Error("Admin override is required to reopen a finalized tournament.");
+  }
+
+  const envelope = loadTournamentStorageEnvelope(tournamentId);
+  const existingRecord = getTournamentFinalizationRecord(envelope);
+  if (!envelope || !existingRecord) {
+    return envelope;
+  }
+
+  const nextSettings: TournamentSettings = {
+    ...envelope.tournament.settings,
+    status: "Reopened",
+  };
+  delete nextSettings.finalization;
+
+  const reopenedEnvelope: TournamentStorageEnvelope = {
+    ...envelope,
+    tournament: {
+      ...envelope.tournament,
+      settings: {
+        ...nextSettings,
+        finalizationHistory: [
+          ...((Array.isArray(envelope.tournament.settings.finalizationHistory)
+            ? envelope.tournament.settings.finalizationHistory
+            : []) as unknown[]),
+          {
+            ...existingRecord,
+            reopenedAt: new Date().toISOString(),
+            reopenedBy,
+          },
+        ],
+      },
+    },
+  };
+
+  saveTournamentStorageEnvelope(tournamentId, reopenedEnvelope);
+  updateStoredTournamentFinalizationSettings(tournamentId, "Reopened", null);
+  await syncFinalizedSnapshot(tournamentId, sharedTournamentId || loadSharedTournamentIdFromStorage(tournamentId), reopenedEnvelope);
+
+  return reopenedEnvelope;
 };

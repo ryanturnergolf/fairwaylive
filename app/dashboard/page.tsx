@@ -10,6 +10,7 @@ import {
   type DirectorReviewSeverity,
 } from "../lib/services/tournamentDirectorDashboardService";
 import {
+  finalizeTournament,
   loadTournamentFinalizationStatus,
   type TournamentFinalizationStatus,
 } from "../lib/services/tournamentFinalizationService";
@@ -247,6 +248,38 @@ export default function DashboardPage() {
     }).catch((error) => {
       console.warn("[DirectorDashboardService] Unable to load director dashboard read model.", error);
     });
+
+  const handleFinalizeTournament = async (summaryTournamentId: string, summarySharedTournamentId: string) => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm("Finalize this tournament? Scores, roster, and pairings will become read-only.");
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const result = await finalizeTournament({
+      tournamentId: summaryTournamentId,
+      sharedTournamentId: summarySharedTournamentId,
+    });
+
+    setFinalizationStatuses((current) => ({
+      ...current,
+      [summaryTournamentId || summarySharedTournamentId]: result.status,
+    }));
+
+    if (result.finalized) {
+      setTournaments((current) =>
+        current.map((tournament) =>
+          tournament.id === summaryTournamentId
+            ? {
+                ...tournament,
+                status: "Finalized",
+              }
+            : tournament
+        )
+      );
+    }
+  };
 
   useEffect(() => {
     let isCancelled = false;
@@ -802,11 +835,20 @@ export default function DashboardPage() {
                           {finalizationStatus ? (
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${finalizationStatus.eligible ? finalizationStatusStyles.eligible : finalizationStatusStyles.blocked}`}>
-                                {finalizationStatus.eligible ? "Eligible" : "Not Eligible"}
+                                {finalizationStatus.finalizationRecord ? "Finalized" : finalizationStatus.eligible ? "Eligible" : "Not Eligible"}
                               </span>
                               <span className="w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
                                 Last checked {formatDirectorTimestamp(finalizationStatus.checkedAt)}
                               </span>
+                              {finalizationStatus.eligible && !finalizationStatus.finalizationRecord ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleFinalizeTournament(summary.tournamentId, summary.sharedTournamentId)}
+                                  className="rounded-full bg-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                                >
+                                  Finalize Tournament
+                                </button>
+                              ) : null}
                             </div>
                           ) : (
                             <span className="w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
@@ -817,7 +859,16 @@ export default function DashboardPage() {
 
                         {finalizationStatus ? (
                           <>
-                            {finalizationStatus.eligible ? (
+                            {finalizationStatus.finalizationRecord ? (
+                              <div className="mt-4 rounded-[18px] border border-[#0B3D2E] bg-[#E6F3F1] p-4">
+                                <p className="text-sm font-black uppercase tracking-[0.22em] text-[#0B3D2E]">
+                                  Tournament Finalized
+                                </p>
+                                <p className="mt-2 text-sm font-semibold text-[#51635C]">
+                                  This tournament is read-only. Finalized by {finalizationStatus.finalizationRecord.finalizedBy} at {formatDirectorTimestamp(finalizationStatus.finalizationRecord.finalizedAt)}.
+                                </p>
+                              </div>
+                            ) : finalizationStatus.eligible ? (
                               <div className="mt-4 rounded-[18px] border border-[#0B3D2E] bg-[#E6F3F1] p-4">
                                 <p className="text-sm font-black uppercase tracking-[0.22em] text-[#0B3D2E]">
                                   Ready to Finalize Tournament

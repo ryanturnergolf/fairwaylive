@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { getTournamentStateStorageKey } from "../../lib/tournamentStorage";
+import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import {
   normalizeTournamentRoundSetup,
 } from "../../lib/services/tournamentDerivedState";
@@ -13,6 +13,10 @@ import {
   type TournamentReadinessChecks,
   type TournamentReadinessStatus,
 } from "../../lib/services/tournamentReadinessService";
+import {
+  getTournamentFinalizationRecord,
+  type TournamentFinalizationRecord,
+} from "../../lib/services/tournamentFinalizationService";
 import {
   isValidPairingMutation,
   normalizePairings,
@@ -204,6 +208,7 @@ export default function TournamentPage() {
   const [sharedTournamentId, setSharedTournamentId] = useState("");
   const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
   const [isReadinessRefreshing, setIsReadinessRefreshing] = useState(false);
+  const [finalizationRecord, setFinalizationRecord] = useState<TournamentFinalizationRecord | null>(null);
   const [autoRepairState, setAutoRepairState] = useState<AutoRepairState>({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -238,6 +243,7 @@ export default function TournamentPage() {
   const latestStateRef = useLatestTournamentPageState(latestState);
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
+  const isTournamentFinalized = Boolean(finalizationRecord);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -249,6 +255,22 @@ export default function TournamentPage() {
       setActiveTab(requestedTab);
     }
   }, []);
+
+  useEffect(() => {
+    if (!isClientMounted || !tournamentId) {
+      return;
+    }
+
+    setFinalizationRecord(getTournamentFinalizationRecord(loadTournamentStorageEnvelope(tournamentId)));
+  }, [
+    isClientMounted,
+    pairings.length,
+    players.length,
+    scorecardsGenerated,
+    teams.length,
+    tournamentId,
+    tournamentMeta.settings,
+  ]);
 
   useClientMounted(setIsClientMounted);
   useTournamentMetadata({
@@ -391,6 +413,11 @@ export default function TournamentPage() {
   };
 
   const handlePlayerImportConfirm = () => {
+    if (isTournamentFinalized) {
+      setPlayerImportError("This tournament is finalized. Roster edits are locked.");
+      return;
+    }
+
     if (playerImportRows.length === 0) {
       return;
     }
@@ -402,11 +429,19 @@ export default function TournamentPage() {
   };
 
   const openAddTeamModal = () => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     resetTeamForm();
     setIsTeamModalOpen(true);
   };
 
   const openEditTeamModal = (team: Team) => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     setTeamFormState({
       schoolName: team.schoolName,
       shortName: team.shortName,
@@ -436,6 +471,9 @@ export default function TournamentPage() {
 
   const handleTeamSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isTournamentFinalized) {
+      return;
+    }
 
     const nextErrors = validateTeamForm(teamFormState);
     setTeamErrors(nextErrors);
@@ -463,6 +501,10 @@ export default function TournamentPage() {
   };
 
   const openAddPlayerModal = () => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     const initialTeamId = teams.length > 0 ? String(teams[0].id) : "";
     setPlayerFormState({ ...defaultPlayerFormState, teamId: initialTeamId });
     setPlayerErrors({});
@@ -471,6 +513,10 @@ export default function TournamentPage() {
   };
 
   const openEditPlayerModal = (player: Player) => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     setPlayerFormState({
       firstName: player.firstName,
       lastName: player.lastName,
@@ -501,6 +547,9 @@ export default function TournamentPage() {
 
   const handlePlayerSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isTournamentFinalized) {
+      return;
+    }
 
     const nextErrors = validatePlayerForm(playerFormState);
     setPlayerErrors(nextErrors);
@@ -522,15 +571,28 @@ export default function TournamentPage() {
   };
 
   const handleRoundSetupChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     const { name, value } = event.target;
     setRoundSetup((current) => ({ ...current, [name]: value }));
   };
 
   const handleScoreInputChange = (rowId: number, holeIndex: number, value: string) => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     setScorecardRows((current) => updateScorecardRows(current, rowId, holeIndex, value));
   };
 
   const handleGeneratePairings = () => {
+    if (isTournamentFinalized) {
+      setPairingsMessage("This tournament is finalized. Pairings are read-only.");
+      return;
+    }
+
     if (players.length === 0) {
       setPairings([]);
       setPairingsMessage("Add players before generating pairings.");
@@ -542,6 +604,11 @@ export default function TournamentPage() {
   };
 
   const commitPairingMutation = (mutator: (current: PairingGroup[]) => PairingGroup[]) => {
+    if (isTournamentFinalized) {
+      setPairingsMessage("This tournament is finalized. Pairings are read-only.");
+      return;
+    }
+
     setPairings((current) => {
       const baselinePairings = previousValidPairingsRef.current ?? snapshotPairings(current);
       const nextPairings = mutator(snapshotPairings(current));
@@ -594,6 +661,10 @@ export default function TournamentPage() {
   };
 
   const generateScorecards = () => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
     setScorecardsGenerated(true);
     setScorecardRows(generateScorecardRows(players, normalizedRoundSetup.numberOfHoles));
   };
@@ -604,6 +675,11 @@ export default function TournamentPage() {
   };
 
   const openAutoRepairModal = () => {
+    if (isTournamentFinalized) {
+      setPairingsMessage("This tournament is finalized. Pairings are read-only.");
+      return;
+    }
+
     setIsAutoRepairModalOpen(true);
   };
 
@@ -613,6 +689,10 @@ export default function TournamentPage() {
 
   const handleAutoRepairSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isTournamentFinalized) {
+      closeAutoRepairModal();
+      return;
+    }
     closeAutoRepairModal();
   };
 
@@ -653,8 +733,15 @@ export default function TournamentPage() {
                   {tournament.name}
                 </h2>
               </div>
-              <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#F6F1E6]/80">
-                Status: Upcoming
+              <div className="flex flex-wrap gap-2">
+                {isTournamentFinalized ? (
+                  <span className="rounded-full border border-[#77B98E] bg-[#ECF8EF] px-4 py-2 text-sm font-black uppercase tracking-[0.25em] text-[#146233]">
+                    Finalized Read-Only
+                  </span>
+                ) : null}
+                <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#F6F1E6]/80">
+                  Status: {isTournamentFinalized ? "Finalized" : "Upcoming"}
+                </span>
               </div>
             </div>
 
@@ -679,6 +766,11 @@ export default function TournamentPage() {
           </div>
 
           <div className="border-b border-[#E8DCC8] bg-[#FCFAF5] px-6 py-4 lg:px-10">
+            {isTournamentFinalized ? (
+              <div className="mb-4 rounded-[20px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
+                This tournament is finalized and read-only. Viewing, printing, exports, reports, and historical QR scorecards remain available.
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-3">
               {tabs.map((tab) => (
                 <button
@@ -794,14 +886,22 @@ export default function TournamentPage() {
                 playerImportFileName={playerImportFileName}
                 onOpenAddTeamModal={openAddTeamModal}
                 onOpenEditTeamModal={openEditTeamModal}
-                onDeleteTeam={(teamId) => setTeams((current) => current.filter((item) => item.id !== teamId))}
+                onDeleteTeam={(teamId) => {
+                  if (!isTournamentFinalized) {
+                    setTeams((current) => current.filter((item) => item.id !== teamId));
+                  }
+                }}
                 onCloseTeamModal={closeTeamModal}
                 onTeamInputChange={handleTeamInputChange}
                 onTeamSubmit={handleTeamSubmit}
                 onOpenPlayerImportModal={openPlayerImportModal}
                 onOpenAddPlayerModal={openAddPlayerModal}
                 onOpenEditPlayerModal={openEditPlayerModal}
-                onDeletePlayer={(playerId) => setPlayers((current) => current.filter((item) => item.id !== playerId))}
+                onDeletePlayer={(playerId) => {
+                  if (!isTournamentFinalized) {
+                    setPlayers((current) => current.filter((item) => item.id !== playerId));
+                  }
+                }}
                 onClosePlayerModal={closePlayerModal}
                 onPlayerInputChange={handlePlayerInputChange}
                 onPlayerSubmit={handlePlayerSubmit}
@@ -809,6 +909,7 @@ export default function TournamentPage() {
                 onPlayerImportTemplateDownload={handlePlayerImportTemplateDownload}
                 onPlayerImportFileChange={handlePlayerImportFileChange}
                 onPlayerImportConfirm={handlePlayerImportConfirm}
+                isReadOnly={isTournamentFinalized}
               />
             ) : activeTab === "Pairings" ? (
               <PairingsScorecardGeneration
@@ -824,6 +925,7 @@ export default function TournamentPage() {
                 onAutoRepairSubmit={handleAutoRepairSubmit}
                 onMovePlayerWithinPairing={movePlayerWithinPairing}
                 onMovePlayerBetweenPairings={movePlayerBetweenPairings}
+                isReadOnly={isTournamentFinalized}
               />
             ) : activeTab === "Live Scoring" || activeTab === "Clippd Export" ? (
               <TournamentPrintExport
@@ -856,6 +958,7 @@ export default function TournamentPage() {
                       onScoreInputChange={handleScoreInputChange}
                       onOpenQrModal={onOpenQrModal}
                       onOpenPrintScorecardModal={onOpenPrintScorecardModal}
+                      isReadOnly={isTournamentFinalized}
                     />
                   ) : null
                 }
