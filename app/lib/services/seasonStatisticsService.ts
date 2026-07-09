@@ -82,6 +82,23 @@ export type TeamSeasonStatisticsReadModel = {
   tournamentTrend: SeasonTeamTournamentTrendReport[];
 };
 
+export type SeasonLeaderboardEntryReadModel = {
+  id: string;
+  name: string;
+  secondaryLabel: string;
+  value: number;
+  displayValue: string;
+};
+
+export type SeasonLeaderboardsReadModel = {
+  lowestScoringAverage: SeasonLeaderboardEntryReadModel[];
+  bestFairwayPercentage: SeasonLeaderboardEntryReadModel[];
+  bestGirPercentage: SeasonLeaderboardEntryReadModel[];
+  fewestPutts: SeasonLeaderboardEntryReadModel[];
+  mostBirdies: SeasonLeaderboardEntryReadModel[];
+  bestAverageFinish: SeasonLeaderboardEntryReadModel[];
+};
+
 export type SeasonSummaryReadModel = {
   totalTournaments: number;
   completedTournaments: number;
@@ -96,6 +113,7 @@ export type SeasonStatisticsReadModels = {
   generatedAt: string;
   playerStatistics: PlayerSeasonStatisticsReadModel[];
   teamStatistics: TeamSeasonStatisticsReadModel[];
+  leaderboards: SeasonLeaderboardsReadModel;
   seasonSummary: SeasonSummaryReadModel;
   tournamentStatistics: TournamentStatisticsReadModels[];
 };
@@ -177,6 +195,9 @@ const formatToPar = (value: number) => {
 
   return value > 0 ? `+${value}` : String(value);
 };
+
+const formatLeaderboardNumber = (value: number, suffix = "") =>
+  `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}${suffix}`;
 
 const isFinalizedTournament = (aggregate: TournamentAggregate) => {
   const finalization = aggregate.envelope?.tournament.settings.finalization;
@@ -603,6 +624,54 @@ const buildSeasonSummary = (
   };
 };
 
+const buildPlayerLeaderboard = (
+  players: PlayerSeasonStatisticsReadModel[],
+  getValue: (player: PlayerSeasonStatisticsReadModel) => number | null,
+  direction: "asc" | "desc",
+  formatValue: (value: number) => string = formatLeaderboardNumber
+): SeasonLeaderboardEntryReadModel[] =>
+  players
+    .map((player) => ({
+      player,
+      value: getValue(player),
+    }))
+    .filter((entry): entry is { player: PlayerSeasonStatisticsReadModel; value: number } => entry.value !== null)
+    .sort((left, right) => {
+      const valueComparison = direction === "asc" ? left.value - right.value : right.value - left.value;
+      return valueComparison || left.player.playerName.localeCompare(right.player.playerName);
+    })
+    .slice(0, 5)
+    .map(({ player, value }) => ({
+      id: player.playerIdentityKey,
+      name: player.playerName,
+      secondaryLabel: player.teamName,
+      value,
+      displayValue: formatValue(value),
+    }));
+
+const buildSeasonLeaderboards = (
+  players: PlayerSeasonStatisticsReadModel[]
+): SeasonLeaderboardsReadModel => ({
+  lowestScoringAverage: buildPlayerLeaderboard(players, (player) => player.scoringAverage, "asc"),
+  bestFairwayPercentage: buildPlayerLeaderboard(
+    players,
+    (player) => player.fairwayPercentage,
+    "desc",
+    (value) => formatLeaderboardNumber(value, "%")
+  ),
+  bestGirPercentage: buildPlayerLeaderboard(
+    players,
+    (player) => player.girPercentage,
+    "desc",
+    (value) => formatLeaderboardNumber(value, "%")
+  ),
+  fewestPutts: buildPlayerLeaderboard(players, (player) => player.puttsPerRound, "asc"),
+  mostBirdies: buildPlayerLeaderboard(players, (player) => player.birdies, "desc", (value) =>
+    formatLeaderboardNumber(value)
+  ),
+  bestAverageFinish: buildPlayerLeaderboard(players, (player) => player.averageFinish, "asc"),
+});
+
 export const buildSeasonStatisticsReadModels = ({
   tournaments,
   seasonId = null,
@@ -611,13 +680,15 @@ export const buildSeasonStatisticsReadModels = ({
   generatedAt = new Date().toISOString(),
 }: BuildSeasonStatisticsReadModelsInput): SeasonStatisticsReadModels => {
   const contexts = buildTournamentContexts(tournaments, generatedAt);
+  const playerStatistics = buildPlayerSeasonStatistics(contexts);
 
   return {
     seasonId,
     seasonName,
     generatedAt,
-    playerStatistics: buildPlayerSeasonStatistics(contexts),
+    playerStatistics,
     teamStatistics: buildTeamSeasonStatistics(contexts),
+    leaderboards: buildSeasonLeaderboards(playerStatistics),
     seasonSummary: buildSeasonSummary(totalTournaments, contexts, generatedAt),
     tournamentStatistics: contexts.map((context) => context.readModels),
   };

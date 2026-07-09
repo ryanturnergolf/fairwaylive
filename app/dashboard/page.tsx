@@ -676,6 +676,12 @@ export default function DashboardPage() {
             >
               Templates
             </Link>
+            <Link
+              href="/dashboard/season-statistics"
+              className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+            >
+              Season Statistics
+            </Link>
             <a className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10" href="#">
               Import Teams
             </a>
