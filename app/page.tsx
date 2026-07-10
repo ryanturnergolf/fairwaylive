@@ -147,6 +147,9 @@ export default function Home() {
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
             Dashboard
           </Link>
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-dashboard">
+            Coach Portal
+          </Link>
           <a className="transition duration-300 hover:text-[#B8892D]" href="#">
             Login
           </a>
