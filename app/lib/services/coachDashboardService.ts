@@ -280,6 +280,7 @@ const isActiveTournament = (source: TournamentSource, summary: DirectorTournamen
 };
 
 const buildQuickActions = (): CoachDashboardAction[] => [
+  { label: "Tasks", href: "/coach-dashboard/tasks", detail: "Open unified attention queue", enabled: true },
   { label: "Calendar", href: "/coach-dashboard/calendar", detail: "Open unified program schedule", enabled: true },
   { label: "Create Tournament", href: "/dashboard", detail: "Open tournament setup", enabled: true },
   { label: "Practice Planner", href: "/coach-dashboard/practice-planner", detail: "Organize upcoming practices", enabled: true },
