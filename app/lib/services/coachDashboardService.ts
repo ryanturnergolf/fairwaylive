@@ -282,7 +282,12 @@ const isActiveTournament = (source: TournamentSource, summary: DirectorTournamen
 const buildQuickActions = (): CoachDashboardAction[] => [
   { label: "Create Tournament", href: "/dashboard", detail: "Open tournament setup", enabled: true },
   { label: "Practice Planner", href: "/coach-dashboard/practice-planner", detail: "Organize upcoming practices", enabled: true },
-  { label: "Start Qualifying Session", href: "#", detail: "Qualifying workflow placeholder", enabled: false },
+  {
+    label: "Qualifying Manager",
+    href: "/coach-dashboard/qualifying-manager",
+    detail: "Review qualifying sessions",
+    enabled: true,
+  },
   { label: "View Statistics", href: "/dashboard/season-statistics", detail: "Open statistics workspace", enabled: true },
   { label: "Season Statistics", href: "/dashboard/season-statistics", detail: "Review season trends", enabled: true },
   { label: "Team Management", href: "#", detail: "Team management placeholder", enabled: false },

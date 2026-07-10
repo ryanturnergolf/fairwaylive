@@ -139,6 +139,9 @@ export default function CoachDashboardPage() {
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/practice-planner">
               Practice Planner
             </Link>
+            <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/qualifying-manager">
+              Qualifying Manager
+            </Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/dashboard">
               Director Dashboard
             </Link>
