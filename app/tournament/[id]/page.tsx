@@ -26,9 +26,13 @@ import {
 import type { ScoreEntryRow } from "../../lib/repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../../lib/repositories/statisticsRepository";
 import {
+  buildTournamentRoundManagerReadModel,
   isValidPairingMutation,
+  loadTournamentPageRoundHydration,
   normalizePairings,
+  persistTournamentPageState,
   snapshotPairings,
+  type TournamentRoundManagerReadModel,
 } from "../../lib/services/tournamentService";
 import {
   buildImportedPlayers,
@@ -199,6 +203,9 @@ export default function TournamentPage() {
   const [pairings, setPairings] = useState<PairingGroup[]>([]);
   const [pairingsMessage, setPairingsMessage] = useState("");
   const previousValidPairingsRef = useRef<PairingGroup[] | null>(null);
+  const [roundManager, setRoundManager] = useState<TournamentRoundManagerReadModel>(() =>
+    buildTournamentRoundManagerReadModel(null, 1)
+  );
   const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
   const [scoreboardImportState, setScoreboardImportState] = useState<ScoreboardImportState>({
     tournamentId: "",
@@ -456,6 +463,26 @@ export default function TournamentPage() {
     setScorecardRows,
   });
 
+  useEffect(() => {
+    if (!isClientMounted || !tournamentId) {
+      return;
+    }
+
+    setRoundManager(
+      buildTournamentRoundManagerReadModel(
+        loadTournamentStorageEnvelope(tournamentId),
+        normalizedRoundSetup.roundNumber
+      )
+    );
+  }, [
+    isClientMounted,
+    normalizedRoundSetup.roundNumber,
+    pairings.length,
+    scorecardRows.length,
+    scorecardsGenerated,
+    tournamentId,
+  ]);
+
   const refreshTournamentReadiness = useCallback(async () => {
     if (!isClientMounted || !tournamentId) {
       return null;
@@ -703,6 +730,122 @@ export default function TournamentPage() {
 
     const { name, value } = event.target;
     setRoundSetup((current) => ({ ...current, [name]: value }));
+  };
+
+  const persistVisibleRoundState = useCallback(() => {
+    if (!tournamentId) {
+      return;
+    }
+
+    persistTournamentPageState({
+      tournamentId,
+      sharedTournamentId,
+      tournament,
+      state: {
+        teams,
+        players,
+        pairings,
+        scorecards: {
+          scorecardsGenerated,
+          scorecardRows,
+          roundSetup,
+        },
+        clippdExportState,
+        scoreboardImportState,
+        autoRepairState,
+      },
+      snapshotSyncTimeout: null,
+      lastSnapshotSignature: "",
+      onSharedTournamentIdChange: setSharedTournamentId,
+      onSnapshotTimeoutChange: () => undefined,
+      onSnapshotSignatureChange: () => undefined,
+    });
+  }, [
+    autoRepairState,
+    clippdExportState,
+    pairings,
+    players,
+    roundSetup,
+    scoreboardImportState,
+    scorecardRows,
+    scorecardsGenerated,
+    sharedTournamentId,
+    teams,
+    tournament,
+    tournamentId,
+  ]);
+
+  const applyRoundHydration = useCallback(
+    (roundNumber: number) => {
+      const roundHydration = loadTournamentPageRoundHydration(tournamentId, roundNumber);
+      if (!roundHydration) {
+        return;
+      }
+
+      hydrationPendingRef.current = true;
+      setTeams(roundHydration.hydration.teams);
+      setPlayers(roundHydration.hydration.players);
+      setPairings(roundHydration.hydration.pairings);
+      setScorecardsGenerated(roundHydration.hydration.scorecardsGenerated);
+      setScorecardRows(roundHydration.hydration.scorecardRows);
+      setRoundSetup(roundHydration.hydration.roundSetup);
+      setClippdExportState(roundHydration.hydration.clippdExportState);
+      setScoreboardImportState(roundHydration.hydration.scoreboardImportState);
+      setAutoRepairState(roundHydration.hydration.autoRepairState);
+      previousValidPairingsRef.current = snapshotPairings(roundHydration.hydration.pairings);
+      setRoundManager(roundHydration.roundManager);
+      setPairingsMessage("");
+      setReviewResolutionMessage("");
+    },
+    [hydrationPendingRef, tournamentId]
+  );
+
+  const handleRoundSelectChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextRoundNumber = Number(event.target.value) || 1;
+    if (nextRoundNumber === normalizedRoundSetup.roundNumber) {
+      return;
+    }
+
+    persistVisibleRoundState();
+    applyRoundHydration(nextRoundNumber);
+  };
+
+  const handleAddRound = () => {
+    if (isTournamentFinalized) {
+      return;
+    }
+
+    const nextRoundNumber = roundManager.roundOptions.length + 1;
+    persistVisibleRoundState();
+    setTournamentMeta((current) => ({
+      ...current,
+      rounds: String(Math.max(Number(current.rounds) || 1, nextRoundNumber)),
+    }));
+    hydrationPendingRef.current = true;
+    setPairings([]);
+    setScorecardsGenerated(false);
+    setScorecardRows([]);
+    setRoundSetup({
+      ...defaultRoundSetupState,
+      roundNumber: String(nextRoundNumber),
+      roundName: `Round ${nextRoundNumber}`,
+    });
+    setRoundManager((current) => ({
+      activeRoundNumber: nextRoundNumber,
+      roundOptions: [
+        ...current.roundOptions.map((round) => ({ ...round, isActive: false })),
+        {
+          roundNumber: nextRoundNumber,
+          roundId: `round-${nextRoundNumber}`,
+          name: `Round ${nextRoundNumber}`,
+          status: "upcoming",
+          pairingsCount: 0,
+          scorecardsCount: 0,
+          scorecardsGenerated: false,
+          isActive: true,
+        },
+      ],
+    }));
   };
 
   const handleScoreInputChange = (rowId: number, holeIndex: number, value: string) => {
@@ -990,6 +1133,66 @@ export default function TournamentPage() {
               ))}
             </div>
 
+            <section className="mt-4 rounded-[24px] border border-[#D6E0D8] bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div className="grid gap-3 md:grid-cols-[220px_minmax(220px,1fr)]">
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
+                      Active Round
+                    </span>
+                    <select
+                      value={normalizedRoundSetup.roundNumber}
+                      onChange={handleRoundSelectChange}
+                      className="mt-2 w-full rounded-2xl border border-[#D6E0D8] bg-[#F8FBF8] px-4 py-3 text-sm font-black text-[#0B3D2E] outline-none"
+                    >
+                      {roundManager.roundOptions.map((round) => (
+                        <option key={round.roundId} value={round.roundNumber}>
+                          {round.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
+                      Round Name
+                    </span>
+                    <input
+                      type="text"
+                      name="roundName"
+                      value={roundSetup.roundName || `Round ${normalizedRoundSetup.roundNumber}`}
+                      onChange={handleRoundSetupChange}
+                      disabled={isTournamentFinalized}
+                      className="mt-2 w-full rounded-2xl border border-[#D6E0D8] bg-[#F8FBF8] px-4 py-3 text-sm font-black text-[#0B3D2E] outline-none disabled:opacity-60"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                      ["Groups", roundManager.roundOptions.find((round) => round.isActive)?.pairingsCount ?? pairings.length],
+                      ["Cards", roundManager.roundOptions.find((round) => round.isActive)?.scorecardsCount ?? scorecardRows.length],
+                      ["Status", scorecardsGenerated ? "Ready" : "Draft"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-2xl border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">{label}</p>
+                        <p className="mt-1 text-sm font-black text-[#0B3D2E]">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddRound}
+                    disabled={isTournamentFinalized}
+                    className="rounded-full border border-[#0B3D2E] px-5 py-3 text-xs font-black uppercase tracking-[0.24em] text-[#0B3D2E] transition duration-300 hover:bg-[#0B3D2E] hover:text-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Add Round
+                  </button>
+                </div>
+              </div>
+            </section>
+
             <section className="mt-4 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
@@ -1133,6 +1336,10 @@ export default function TournamentPage() {
               <TournamentStatisticsDashboard
                 tournamentId={sharedTournamentId || tournamentId}
                 roundNumber={normalizedRoundSetup.roundNumber}
+                roundOptions={roundManager.roundOptions.map((round) => ({
+                  roundNumber: round.roundNumber,
+                  name: round.name,
+                }))}
               />
             ) : activeTab === officialResultsTab && isTournamentFinalized ? (
               <OfficialResultsDashboard tournamentId={sharedTournamentId || tournamentId} />

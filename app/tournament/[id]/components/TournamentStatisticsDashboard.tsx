@@ -12,6 +12,7 @@ import {
 type TournamentStatisticsDashboardProps = {
   tournamentId: string;
   roundNumber: number;
+  roundOptions?: Array<{ roundNumber: number; name: string }>;
 };
 
 type LoadState =
@@ -367,14 +368,21 @@ const TeamReports = ({ teams }: { teams: TeamStatisticsReadModel[] }) => (
 export default function TournamentStatisticsDashboard({
   tournamentId,
   roundNumber,
+  roundOptions = [],
 }: TournamentStatisticsDashboardProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading", readModels: null, error: "" });
+  const [selectedScope, setSelectedScope] = useState<string>(String(roundNumber));
+  const selectedRoundNumber = selectedScope === "total" ? undefined : Number(selectedScope) || roundNumber;
+
+  useEffect(() => {
+    setSelectedScope(String(roundNumber));
+  }, [roundNumber]);
 
   useEffect(() => {
     let isActive = true;
 
     setLoadState({ status: "loading", readModels: null, error: "" });
-    loadTournamentStatisticsReadModels({ tournamentId, roundNumber })
+    loadTournamentStatisticsReadModels({ tournamentId, roundNumber: selectedRoundNumber })
       .then((readModels) => {
         if (isActive) {
           setLoadState({ status: "ready", readModels, error: "" });
@@ -393,7 +401,7 @@ export default function TournamentStatisticsDashboard({
     return () => {
       isActive = false;
     };
-  }, [roundNumber, tournamentId]);
+  }, [selectedRoundNumber, tournamentId]);
 
   if (loadState.status === "loading") {
     return (
@@ -416,6 +424,28 @@ export default function TournamentStatisticsDashboard({
 
   return (
     <div className="space-y-6">
+      <section className="rounded-[28px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Statistics Scope</p>
+            <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+              {selectedScope === "total" ? "Tournament totals" : `Round ${selectedRoundNumber}`}
+            </h3>
+          </div>
+          <select
+            value={selectedScope}
+            onChange={(event) => setSelectedScope(event.target.value)}
+            className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-sm font-black text-[#0B3D2E] outline-none"
+          >
+            {roundOptions.map((round) => (
+              <option key={round.roundNumber} value={round.roundNumber}>
+                {round.name}
+              </option>
+            ))}
+            <option value="total">Tournament Total</option>
+          </select>
+        </div>
+      </section>
       <PlayerStatisticsTable players={playerStatistics} />
       <PlayerReports players={playerStatistics} />
       <TeamStatisticsTable teams={teamStatistics} />

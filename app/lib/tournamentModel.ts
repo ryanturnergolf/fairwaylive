@@ -10,6 +10,9 @@ export type TournamentSettings = Record<string, unknown> & {
   state?: string;
   scoringFormat?: string;
   status?: string;
+  activeRoundNumber?: number;
+  roundSetups?: Record<string, LegacyRoundSetupState>;
+  roundStates?: Record<string, { scorecardsGenerated?: boolean }>;
   finalization?: TournamentFinalizationRecord;
 };
 
@@ -126,6 +129,7 @@ export type LegacyPairingGroup = {
 
 export type LegacyRoundSetupState = {
   roundNumber: string;
+  roundName?: string;
   startingHole: string;
   numberOfHoles: string;
   teeTime: string;

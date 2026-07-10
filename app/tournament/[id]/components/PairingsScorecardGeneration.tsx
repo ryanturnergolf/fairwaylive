@@ -18,6 +18,7 @@ export type PairingGroup = {
 
 export type RoundSetupState = {
   roundNumber: string;
+  roundName?: string;
   startingHole: string;
   numberOfHoles: string;
   teeTime: string;

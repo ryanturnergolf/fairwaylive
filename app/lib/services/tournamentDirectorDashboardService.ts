@@ -24,6 +24,8 @@ export type DirectorTournamentSummary = {
   sharedTournamentId: string;
   tournamentName: string;
   course: string;
+  activeRoundNumber: number;
+  activeRoundName: string;
   readiness: TournamentReadiness;
   completion: DirectorTournamentCompletion;
   totalGroups: number;
@@ -625,6 +627,10 @@ export const buildDirectorTournamentSummary = async ({
     localEnvelope,
   });
   const roundNumber = Number(aggregate?.roundSetup?.roundNumber ?? localEnvelope?.uiState.scorecards.roundSetup.roundNumber) || 1;
+  const activeRoundName =
+    aggregate?.rounds.find((round) => round.roundNumber === roundNumber)?.name ||
+    (localEnvelope?.tournament.rounds ?? []).find((round) => round.roundNumber === roundNumber)?.name ||
+    `Round ${roundNumber}`;
   const scoreEntries = await loadScoreEntries(sharedTournamentId, roundNumber);
   const officialHoleSet = buildOfficialHoleSet(await loadOfficialHoleEntries(sharedTournamentId, roundNumber));
   const scores = [...scoreEntries.map(scoreEntryToScoreLike), ...getAggregateScores(aggregate)];
@@ -651,6 +657,8 @@ export const buildDirectorTournamentSummary = async ({
     sharedTournamentId,
     tournamentName: localTournament?.name ?? aggregate?.tournament.name ?? "Tournament",
     course: localTournament?.course ?? aggregate?.tournament.course ?? "",
+    activeRoundNumber: roundNumber,
+    activeRoundName,
     readiness,
     completion: buildCompletion(groupSummary.groups, scores, holeCount, reviewQueue),
     ...groupSummary,

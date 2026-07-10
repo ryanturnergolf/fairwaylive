@@ -742,6 +742,9 @@ export default function DashboardPage() {
                           <p className="mt-1 text-sm font-semibold text-[#51635C]">
                             {summary.tournamentName}
                           </p>
+                          <p className="mt-2 w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#2E6F76]">
+                            Active {summary.activeRoundName}
+                          </p>
                         </div>
                         <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${directorReadinessStyles[summary.readiness.status]}`}>
                           Readiness {summary.readiness.status}
