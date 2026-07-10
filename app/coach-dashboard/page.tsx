@@ -136,6 +136,9 @@ export default function CoachDashboardPage() {
             </div>
           </Link>
           <nav className="hidden items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.25em] text-[#0B3D2E]/75 md:flex">
+            <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/practice-planner">
+              Practice Planner
+            </Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/dashboard">
               Director Dashboard
             </Link>

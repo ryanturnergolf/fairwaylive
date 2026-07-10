@@ -9,6 +9,7 @@ import {
   loadSharedTournamentAggregates,
   type TournamentAggregate,
 } from "./tournamentService";
+import { loadPracticePlannerReadModel } from "./practicePlannerService";
 
 export type CoachDashboardListItem = {
   id: string;
@@ -280,7 +281,7 @@ const isActiveTournament = (source: TournamentSource, summary: DirectorTournamen
 
 const buildQuickActions = (): CoachDashboardAction[] => [
   { label: "Create Tournament", href: "/dashboard", detail: "Open tournament setup", enabled: true },
-  { label: "Start Practice", href: "#", detail: "Practice workflow placeholder", enabled: false },
+  { label: "Practice Planner", href: "/coach-dashboard/practice-planner", detail: "Organize upcoming practices", enabled: true },
   { label: "Start Qualifying Session", href: "#", detail: "Qualifying workflow placeholder", enabled: false },
   { label: "View Statistics", href: "/dashboard/season-statistics", detail: "Open statistics workspace", enabled: true },
   { label: "Season Statistics", href: "/dashboard/season-statistics", detail: "Review season trends", enabled: true },
@@ -395,6 +396,7 @@ export const loadCoachDashboardReadModel = async (
     return null;
   });
   const sources = mergeTournamentSources(localTournaments, aggregates);
+  const practicePlanner = loadPracticePlannerReadModel(today);
   const summariesById = new Map(
     directorReadModel.tournaments.map((summary) => [summary.tournamentId || summary.sharedTournamentId, summary])
   );
@@ -430,9 +432,13 @@ export const loadCoachDashboardReadModel = async (
     generatedAt,
     today: {
       currentDate: formatDate(today),
-      upcomingPractices: [
-        emptyPlaceholder("practice-placeholder", "No practices scheduled", "Practice scheduling will appear here in a later phase."),
-      ],
+      upcomingPractices: practicePlanner.upcomingPractices.slice(0, 3).map((practice) => ({
+        id: practice.id,
+        title: practice.title,
+        detail: practice.detail,
+        meta: practice.meta,
+        href: "/coach-dashboard/practice-planner",
+      })),
       upcomingTournaments,
       tasksRequiringAttention,
       activeTournaments,
@@ -451,9 +457,13 @@ export const loadCoachDashboardReadModel = async (
     recentActivity: {
       recentlyEditedTournaments,
       recentlyFinalizedTournaments,
-      recentlyCompletedPractices: [
-        emptyPlaceholder("completed-practice-placeholder", "No completed practices yet", "Practice results will appear here in a later phase."),
-      ],
+      recentlyCompletedPractices: practicePlanner.recentPractices.slice(0, 3).map((practice) => ({
+        id: practice.id,
+        title: practice.title,
+        detail: practice.detail,
+        meta: practice.meta,
+        href: "/coach-dashboard/practice-planner",
+      })),
       recentPlayerUpdates: [
         emptyPlaceholder("player-updates-placeholder", "No player updates yet", "Roster changes will appear here in a later phase."),
       ],
