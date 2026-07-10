@@ -27,6 +27,10 @@ export type PracticePlannerCard = {
 export type PracticePlannerListItem = {
   id: string;
   title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
   detail: string;
   meta: string;
   href: string;
@@ -222,6 +226,10 @@ const toListItem = (practice: Practice): PracticePlannerListItem => {
   return {
     id: practice.id,
     title: practice.name,
+    date: practice.date,
+    startTime: practice.startTime,
+    endTime: practice.endTime,
+    location: practice.location,
     detail: `${dateLabel} at ${timeLabel} - ${practice.location}`,
     meta: practice.practiceType,
     href: "#",

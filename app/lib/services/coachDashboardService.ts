@@ -280,6 +280,7 @@ const isActiveTournament = (source: TournamentSource, summary: DirectorTournamen
 };
 
 const buildQuickActions = (): CoachDashboardAction[] => [
+  { label: "Calendar", href: "/coach-dashboard/calendar", detail: "Open unified program schedule", enabled: true },
   { label: "Create Tournament", href: "/dashboard", detail: "Open tournament setup", enabled: true },
   { label: "Practice Planner", href: "/coach-dashboard/practice-planner", detail: "Organize upcoming practices", enabled: true },
   {
@@ -372,7 +373,7 @@ const buildAlerts = (
           title: `${upcomingEvents.length} upcoming events`,
           detail: "Tournament dates are on the program calendar.",
           severity: "info" as const,
-          href: "/coach-dashboard",
+          href: "/coach-dashboard/calendar",
         }]
       : []),
     ...(unsyncedItems > 0

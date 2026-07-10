@@ -40,6 +40,9 @@ export type QualifyingDashboardCard = {
 export type QualifyingSessionListItem = {
   id: string;
   title: string;
+  date: string;
+  course: string;
+  format: QualifyingFormat;
   detail: string;
   meta: string;
   status: QualifyingStatus;
@@ -227,6 +230,9 @@ const sortSessionsByDate = (left: QualifyingSession, right: QualifyingSession) =
 const toListItem = (session: QualifyingSession): QualifyingSessionListItem => ({
   id: session.id,
   title: session.name,
+  date: session.date,
+  course: session.course,
+  format: session.format,
   detail: `${formatSessionDate(session.date)} - ${session.course} - ${session.format}`,
   meta: `${session.numberOfRounds} ${session.numberOfRounds === 1 ? "round" : "rounds"}`,
   status: session.status,
