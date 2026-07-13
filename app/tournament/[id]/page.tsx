@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
+import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
 import {
   normalizeTournamentRoundSetup,
 } from "../../lib/services/tournamentDerivedState";
@@ -222,6 +223,7 @@ export default function TournamentPage() {
   });
   const [isAutoRepairModalOpen, setIsAutoRepairModalOpen] = useState(false);
   const [isClientMounted, setIsClientMounted] = useState(false);
+  const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
   const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
@@ -406,6 +408,26 @@ export default function TournamentPage() {
   ]);
 
   useClientMounted(setIsClientMounted);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      return;
+    }
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setIsCoachAuthenticated(Boolean(data.session && !data.session.user.is_anonymous));
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsCoachAuthenticated(Boolean(session && !session.user.is_anonymous));
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   useTournamentMetadata({
     isClientMounted,
     tournamentId,
@@ -437,6 +459,7 @@ export default function TournamentPage() {
     setSharedTournamentId,
     hasLoadedFromStorageRef,
     hydrationPendingRef,
+    isCoachAuthenticated,
   });
   useTournamentStoragePolling({
     tournamentId,
@@ -1114,6 +1137,17 @@ export default function TournamentPage() {
             {isTournamentFinalized ? (
               <div className="mb-4 rounded-[20px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
                 This tournament is finalized and read-only. Viewing, printing, exports, reports, and historical QR scorecards remain available.
+              </div>
+            ) : null}
+            {isClientMounted && !isCoachAuthenticated ? (
+              <div className="mb-4 rounded-[20px] border border-[#D8C9AE] bg-[#F6F1E6] px-5 py-4 text-sm font-semibold text-[#725D37]">
+                Sign in as a coach to sync this tournament and enable mobile scoring.{" "}
+                <Link
+                  href={`/coach-auth?next=${encodeURIComponent(`/tournament/${tournamentId}`)}`}
+                  className="font-black text-[#B8892D] underline underline-offset-2"
+                >
+                  Sign in
+                </Link>
               </div>
             ) : null}
             <div className="flex flex-wrap gap-3">

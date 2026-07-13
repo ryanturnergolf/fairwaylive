@@ -11,6 +11,7 @@ import {
   type TournamentRow,
   type TournamentPlayerUpsertRow,
 } from "../repositories/tournamentRepository";
+import { getSupabaseAuthAccessToken } from "../supabaseClient";
 import {
   buildTournamentStorageEnvelope,
   loadSharedTournamentIdFromStorage,
@@ -1009,6 +1010,13 @@ export const persistTournamentPageState = ({
   }
 
   void (async () => {
+    // Guard all remote mutations against unauthenticated state. The local
+    // envelope save above has already completed; skip remote sync silently.
+    const accessToken = typeof window === "undefined" ? "" : await getSupabaseAuthAccessToken().catch(() => "");
+    if (!accessToken) {
+      return;
+    }
+
     const nextSharedTournamentId = await ensureSharedTournament({
       fallbackId: tournamentId,
       existingSharedTournamentId: sharedTournamentId || loadSharedTournamentIdFromStorage(tournamentId),
@@ -1072,7 +1080,7 @@ export const persistTournamentPageState = ({
 
     onSnapshotTimeoutChange(nextSnapshotTimeout);
   })().catch((error) => {
-    console.error("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
+    console.warn("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
   });
 };
 

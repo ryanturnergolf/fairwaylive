@@ -210,6 +210,7 @@ export const useTournamentPagePersistence = ({
   setSharedTournamentId,
   hasLoadedFromStorageRef,
   hydrationPendingRef,
+  isCoachAuthenticated,
 }: {
   tournamentId: string;
   storageKey: string;
@@ -219,6 +220,7 @@ export const useTournamentPagePersistence = ({
   setSharedTournamentId: SetState<string>;
   hasLoadedFromStorageRef: MutableRefObject<boolean>;
   hydrationPendingRef: MutableRefObject<boolean>;
+  isCoachAuthenticated: boolean;
 }) => {
   const snapshotSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSnapshotSignatureRef = useRef("");
@@ -263,6 +265,7 @@ export const useTournamentPagePersistence = ({
   }, [
     hasLoadedFromStorageRef,
     hydrationPendingRef,
+    isCoachAuthenticated,
     setSharedTournamentId,
     sharedTournamentId,
     state,
