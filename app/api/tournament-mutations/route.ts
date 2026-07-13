@@ -46,23 +46,58 @@ type MutationBody =
 const tournamentColumns =
   "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,aggregate_version,created_at,updated_at";
 
-const getClient = () => {
-  const supabase = getSupabaseServerClient();
+const getAuthenticatedClient = async (request: Request) => {
+  const authorization = request.headers.get("authorization") ?? "";
+  const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+
+  if (!accessToken) {
+    throw new AuthenticationError("Coach authentication is required.");
+  }
+
+  const supabase = getSupabaseServerClient({ accessToken });
 
   if (!supabase) {
     throw new Error("Supabase is not configured.");
   }
 
-  return supabase;
+  const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+  if (userError || !userData.user || userData.user.is_anonymous) {
+    throw new AuthenticationError("The coach session is invalid or expired.");
+  }
+
+  const { data: coach, error: coachError } = await supabase
+    .from("coaches")
+    .select("id")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (coachError || !coach) {
+    throw new AuthorizationError("This account is not authorized as a coach.");
+  }
+
+  return { supabase, coachId: userData.user.id };
 };
 
-const jsonError = (error: unknown, status = 400) =>
-  NextResponse.json(
-    {
-      error: error instanceof Error ? error.message : "Request failed.",
-    },
-    { status }
-  );
+class AuthenticationError extends Error {}
+class AuthorizationError extends Error {}
+
+const extractErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return "Request failed.";
+};
+
+const jsonError = (error: unknown, status = 400) => {
+  const message = extractErrorMessage(error);
+  const httpStatus = error instanceof AuthenticationError
+    ? 401
+    : error instanceof AuthorizationError || (error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "42501")
+      ? 403
+      : status;
+  return NextResponse.json({ error: message }, { status: httpStatus });
+};
 
 export async function POST(request: Request) {
   let body: MutationBody;
@@ -74,23 +109,56 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = getClient();
+    const { supabase, coachId } = await getAuthenticatedClient(request);
 
     if (body.action === "createTournament") {
-      const { data, error } = await supabase
-        .from("tournaments")
-        .insert({
+      // Use INSERT (Prefer: return=minimal) then a separate SELECT to avoid a timing issue
+      // where PostgREST's RETURNING clause evaluates the SELECT RLS policy before the AFTER
+      // trigger has inserted the required tournament_memberships row.
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      const authorization = request.headers.get("authorization") ?? "";
+      const rawAccessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+
+      const insertResp = await fetch(`${supabaseUrl}/rest/v1/tournaments`, {
+        method: "POST",
+        headers: {
+          "apikey": supabaseAnonKey ?? "",
+          "Authorization": `Bearer ${rawAccessToken}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal",
+        },
+        body: JSON.stringify({
           name: body.input.name,
           course: body.input.course,
           tournament_date: body.input.tournamentDate || null,
           number_of_rounds: body.input.numberOfRounds,
           status: body.input.status,
-        })
-        .select(tournamentColumns)
-        .single();
+          owner_id: coachId,
+        }),
+      });
 
-      if (error) throw error;
-      return NextResponse.json(data, { status: 201 });
+      if (!insertResp.ok) {
+        const errBody = await insertResp.json().catch(() => null) as { message?: string } | null;
+        throw Object.assign(new Error(errBody?.message ?? "Tournament insert failed."), {
+          code: insertResp.status === 403 ? "42501" : "ERROR",
+        });
+      }
+
+      // Now SELECT the newly created tournament (membership exists now, SELECT RLS passes)
+      const selectResp = await fetch(
+        `${supabaseUrl}/rest/v1/tournaments?owner_id=eq.${coachId}&order=created_at.desc&limit=1&select=${tournamentColumns}`,
+        {
+          headers: {
+            "apikey": supabaseAnonKey ?? "",
+            "Authorization": `Bearer ${rawAccessToken}`,
+          },
+        }
+      );
+      const rows = await selectResp.json() as Array<Record<string, unknown>>;
+      const inserted = rows[0];
+      if (!inserted) throw new Error("Tournament was created but could not be retrieved.");
+      return NextResponse.json(inserted, { status: 201 });
     }
 
     if (body.action === "upsertTournamentPlayers") {

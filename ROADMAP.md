@@ -2,6 +2,66 @@
 
 A lightweight tournament management and live scoring platform for golf coaches and tournament directors.
 
+## Architecture Stabilization Roadmap
+
+Last updated: 2026-07-07
+
+This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
+
+### Milestone 1: Shared Tournament Read Model
+
+Goal: make a phone with no localStorage understand whether a shared tournament has already started.
+
+- Add a service-level shared Tournament Aggregate loader.
+- Hydrate teams, players, pairings, scorecard rows, round setup, and scorecard generation state from Supabase rows where possible.
+- Keep localStorage as the first local recovery source.
+- Do not change scoring rules.
+- Add focused tests for shared dashboard/detail hydration with empty localStorage.
+
+### Milestone 2: Shared QR Readiness
+
+Goal: prevent QR links from appearing ready before shared scorecard data can resolve.
+
+- Track whether `syncTournamentPlayers` has succeeded for the shared tournament UUID.
+- Keep existing browser/local scorecard links.
+- Keep existing QR URL format unless a deliberate migration is approved.
+- Add a visible pending/failed shared sync state for tournament directors.
+- Add a phone QR test where tournament row exists but player rows are missing.
+
+### Milestone 3: Tournament Aggregate Helpers
+
+Goal: reduce duplicated hydration and identity logic without a rewrite.
+
+- Introduce small domain helpers for player identity, pairing hydration, scorecard row derivation, and aggregate completeness checks.
+- Move logic only when covered by the existing behavior.
+- Avoid broad component restructuring.
+
+### Milestone 4: Review Hub Foundation
+
+Goal: centralize review data without changing scoring behavior.
+
+- Create a read model for self vs. marker comparison.
+- Preserve marker-entered scores as live leaderboard source.
+- Add review status fields only after schema need is explicit.
+- Keep mobile score entry behavior unchanged.
+
+### Milestone 5: Hole Stats Schema Planning
+
+Goal: prepare future default-on stat tracking per tournament.
+
+- Model fairway hit, green in regulation, and putts 1-6 as fields tied to each hole score.
+- Decide whether stats live in `score_entries.hole_scores` JSON or a separate normalized table.
+- Do not expose stat UI until score stability is protected.
+
+### Stabilization Guardrails
+
+- No big rewrite.
+- No localStorage removal.
+- No scoring rule changes.
+- No QR resolver breakage.
+- No marker-only leaderboard regression.
+- No silent overwrite of populated localStorage with empty shared state.
+
 ## Current Stable Foundation
 
 ### Core Features (✓ Implemented)
@@ -437,6 +497,9 @@ Clubhouse HQ becomes the **coach's OS** for:
 
 ### Storage Architecture
 - **Versioned Envelope**: `{ version: 2, tournament: {...}, uiState: {...} }` in localStorage
+- **Supabase Direction**: Supabase is the future durable source of truth for shared tournament state and scores.
+- **localStorage Direction**: localStorage remains a cache, offline fallback, and recovery path.
+- **Tournament Aggregate Direction**: both localStorage and Supabase should hydrate the same aggregate shape before UI state decisions are made.
 - **Score Structure**: 
   ```typescript
   Score = {
@@ -451,7 +514,7 @@ Clubhouse HQ becomes the **coach's OS** for:
     resolutionNote?: string,    // future
   }
   ```
-- **No Backend Required**: All state in-app; export to file for backup
+- **Backend Status**: Supabase is now part of the shared scoring architecture. Avoid treating the app as local-only.
 
 ### Build & Deploy
 - Next.js 16+ (App Router)

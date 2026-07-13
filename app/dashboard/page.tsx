@@ -220,6 +220,7 @@ export default function DashboardPage() {
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
+  const [creationError, setCreationError] = useState("");
 
   const refreshDirectorReadModel = (sourceTournaments: Tournament[]) =>
     loadDirectorDashboardReadModel(sourceTournaments, {
@@ -455,6 +456,7 @@ export default function DashboardPage() {
     }
 
     setIsCreatingTournament(true);
+    setCreationError("");
 
     const normalizedFormState = normalizeFormState(formState);
     const nextId = String(
@@ -464,7 +466,9 @@ export default function DashboardPage() {
       }, 0) + 1
     );
 
-    const createResult = await createTournament({
+    let createResult;
+    try {
+      createResult = await createTournament({
       fallbackId: nextId,
       name: normalizedFormState.name.trim(),
       date: normalizedFormState.date,
@@ -475,7 +479,16 @@ export default function DashboardPage() {
       scoringFormat: normalizedFormState.scoringFormat,
       status: "Upcoming",
       settings: normalizedFormState,
-    });
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Tournament creation failed.";
+      setCreationError(message);
+      setIsCreatingTournament(false);
+      if (/authentication|required|session/i.test(message)) {
+        router.push("/coach-auth?next=/dashboard");
+      }
+      return;
+    }
     const newTournament = createResult.tournament as Tournament;
 
     const normalizedRoundCount = Number(normalizedFormState.rounds) || 1;
@@ -614,6 +627,9 @@ export default function DashboardPage() {
           </a>
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
             Dashboard
+          </Link>
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-auth?next=/dashboard">
+            Coach Sign In
           </Link>
           <a className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="#">
             Get Started
@@ -1213,6 +1229,7 @@ export default function DashboardPage() {
             </div>
 
             <form className="min-h-0 overflow-y-auto px-7 py-7" onSubmit={handleCreateTournament}>
+              {creationError ? <p role="alert" className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">{creationError}</p> : null}
               <div className="mb-5 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Create From Template</p>
                 <div className="mt-3 flex flex-col gap-3 sm:flex-row">

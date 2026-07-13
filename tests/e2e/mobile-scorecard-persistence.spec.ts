@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
+
 const tournamentId = "e2e-tournament";
 const sharedTournamentId = "11111111-1111-4111-8111-111111111111";
 const baseUrl = "http://127.0.0.1:3100";
@@ -479,6 +481,7 @@ const routeTournamentStateSnapshotStore = async (
 
 const routeShareTokenApi = async (page: Page, token = "e2e-mobile-scoring-token") => {
   await page.route("**/api/tournament-mutations", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${e2eCoachAccessToken}`);
     const postData = route.request().postDataJSON() as Record<string, unknown>;
 
     if (postData.action !== "createShareToken") {
@@ -499,6 +502,87 @@ const routeShareTokenApi = async (page: Page, token = "e2e-mobile-scoring-token"
         token,
       }),
     });
+  });
+};
+
+const routeAuthenticatedTournamentSyncApi = async (
+  page: Page,
+  syncedPlayerRows: Array<Record<string, unknown>>,
+  savedSnapshots?: Array<Record<string, unknown>>,
+  snapshotStatus = 200
+) => {
+  await page.route("**/api/tournament-mutations", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${e2eCoachAccessToken}`);
+    const postData = route.request().postDataJSON() as {
+      action?: string;
+      rows?: Array<Record<string, unknown>>;
+      input?: Record<string, unknown>;
+    };
+
+    if (postData.action === "createTournament") {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: sharedTournamentId,
+          created_by: null,
+          owner_id: "11111111-1111-4111-8111-111111111111",
+          name: postData.input?.name,
+          course: postData.input?.course,
+          tournament_date: postData.input?.tournamentDate,
+          number_of_rounds: postData.input?.numberOfRounds,
+          status: postData.input?.status,
+          aggregate_version: 1,
+          created_at: null,
+          updated_at: null,
+        }),
+      });
+      return;
+    }
+
+    if (postData.action === "createShareToken") {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "share-token-e2e",
+          tournament_id: sharedTournamentId,
+          purpose: "mobile_scoring",
+          expires_at: "2026-07-22T00:00:00.000Z",
+          revoked_at: null,
+          created_at: "2026-07-09T00:00:00.000Z",
+          token: "e2e-mobile-scoring-token",
+        }),
+      });
+      return;
+    }
+
+    if (postData.action === "upsertTournamentPlayers") {
+      syncedPlayerRows.push(...(postData.rows ?? []));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+
+    if (postData.action === "upsertTournamentStateSnapshot") {
+      if (snapshotStatus < 400 && savedSnapshots && postData.input) {
+        savedSnapshots.push({
+          tournament_id: postData.input.tournamentId,
+          local_tournament_id: postData.input.localTournamentId,
+          schema_version: postData.input.schemaVersion,
+          state_snapshot: postData.input.stateSnapshot,
+          created_at: "2026-07-12T00:00:00.000Z",
+          updated_at: "2026-07-12T00:00:00.000Z",
+        });
+      }
+      await route.fulfill({
+        status: snapshotStatus,
+        contentType: "application/json",
+        body: JSON.stringify(snapshotStatus < 400 ? { ok: true } : { error: "snapshot unavailable" }),
+      });
+      return;
+    }
+
+    await route.fallback();
   });
 };
 
@@ -537,6 +621,23 @@ test.use({
       {
         origin: baseUrl,
         localStorage: [
+          {
+            name: "clubhouse-hq-coach-auth",
+            value: JSON.stringify({
+              access_token: e2eCoachAccessToken,
+              refresh_token: "e2e-coach-refresh-token",
+              token_type: "bearer",
+              expires_in: 3600,
+              expires_at: 4102444800,
+              user: {
+                id: "11111111-1111-4111-8111-111111111111",
+                aud: "authenticated",
+                role: "authenticated",
+                email: "coach@example.com",
+                is_anonymous: false,
+              },
+            }),
+          },
           {
             name: tournamentsStorageKey,
             value: JSON.stringify([storedTournament]),
@@ -851,6 +952,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   const syncedPlayerRows: Array<Record<string, unknown>> = [];
   const snapshotStore = await routeTournamentStateSnapshotStore(page);
   await routeShareTokenApi(page);
+  await routeAuthenticatedTournamentSyncApi(page, syncedPlayerRows, snapshotStore.savedSnapshots);
   const timestampPlayerId = 1783206161404;
   const timestampMarkerId = 1783206161405;
   const brandNewUiState = {
@@ -1000,6 +1102,14 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   expect(stateSnapshot.tournament.pairings).toHaveLength(1);
   expect(stateSnapshot.uiState.scorecards.scorecardRows).toHaveLength(2);
 
+  await page.route("**/rest/v1/tournament_state_snapshots**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(latestSnapshot) });
+  });
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await expect(page.getByText("Shared tournament data is ready for coaches and players to use on mobile scorecards.")).toBeVisible();
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await expect(page.getByRole("button", { name: "Open QR code for Ava Green" })).toBeVisible();
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
@@ -1021,6 +1131,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
 test("snapshot upsert failure keeps localStorage fallback and roster sync working", async ({ page }) => {
   const syncedPlayerRows: Array<Record<string, unknown>> = [];
   await routeTournamentStateSnapshotStore(page, 500);
+  await routeAuthenticatedTournamentSyncApi(page, syncedPlayerRows, undefined, 500);
 
   await page.route("**/rest/v1/tournaments?**", async (route) => {
     if (route.request().method() !== "POST") {

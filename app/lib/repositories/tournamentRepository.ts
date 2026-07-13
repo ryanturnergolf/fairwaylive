@@ -1,5 +1,5 @@
 import {
-  canUseDevelopmentBrowserSupabaseWriteFallback,
+  getSupabaseAuthAccessToken,
   getSupabaseBrowserClient,
 } from "../supabaseClient";
 import { hashShareToken } from "../shareTokens";
@@ -112,36 +112,47 @@ const getReadClient = async (options: ShareTokenReadOptions = {}) => {
   return supabase;
 };
 
-const postTournamentMutation = async <T>(body: Record<string, unknown>): Promise<T> => {
+const postTournamentMutationRequest = async <T>(body: Record<string, unknown>, accessToken = "") => {
   const response = await fetch("/api/tournament-mutations", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(errorBody?.error || "Tournament mutation failed.");
+    return {
+      ok: false as const,
+      status: response.status,
+      error: errorBody?.error || "Tournament mutation failed.",
+    };
   }
 
-  return (await response.json()) as T;
+  return {
+    ok: true as const,
+    data: (await response.json()) as T,
+  };
+};
+
+const postTournamentMutation = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const existingAccessToken = typeof window === "undefined" ? "" : await getSupabaseAuthAccessToken();
+  if (!existingAccessToken) {
+    throw new Error("Coach authentication is required. Sign in before changing tournament data.");
+  }
+
+  const response = await postTournamentMutationRequest<T>(body, existingAccessToken);
+  if (response.ok) return response.data;
+  throw new Error(response.error);
 };
 
 export const createTournamentRow = async (
   input: CreateTournamentRowInput
 ): Promise<TournamentRow> => {
   if (typeof window !== "undefined") {
-    try {
-      return await postTournamentMutation<TournamentRow>({
-        action: "createTournament",
-        input,
-      });
-    } catch (error) {
-      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
-        throw error;
-      }
-      console.warn("[TournamentRepository] Server tournament create failed; using local development Supabase fallback.", error);
-    }
+    return postTournamentMutation<TournamentRow>({ action: "createTournament", input });
   }
 
   const supabase = getClient();
@@ -170,18 +181,8 @@ export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[])
   }
 
   if (typeof window !== "undefined") {
-    try {
-      await postTournamentMutation<{ ok: true }>({
-        action: "upsertTournamentPlayers",
-        rows,
-      });
-      return;
-    } catch (error) {
-      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
-        throw error;
-      }
-      console.warn("[TournamentRepository] Server tournament player sync failed; using local development Supabase fallback.", error);
-    }
+    await postTournamentMutation<{ ok: true }>({ action: "upsertTournamentPlayers", rows });
+    return;
   }
 
   const supabase = getClient();
@@ -225,18 +226,8 @@ export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[])
 
 export const upsertTournamentStateSnapshot = async (input: TournamentStateSnapshotUpsertInput) => {
   if (typeof window !== "undefined") {
-    try {
-      await postTournamentMutation<{ ok: true }>({
-        action: "upsertTournamentStateSnapshot",
-        input,
-      });
-      return;
-    } catch (error) {
-      if (!canUseDevelopmentBrowserSupabaseWriteFallback()) {
-        throw error;
-      }
-      console.warn("[TournamentRepository] Server snapshot sync failed; using local development Supabase fallback.", error);
-    }
+    await postTournamentMutation<{ ok: true }>({ action: "upsertTournamentStateSnapshot", input });
+    return;
   }
 
   const supabase = getClient();

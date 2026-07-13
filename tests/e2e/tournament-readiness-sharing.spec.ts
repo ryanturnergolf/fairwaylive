@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
+
 const tournamentId = "readiness-share-tournament";
 const sharedTournamentId = "22222222-2222-4222-8222-222222222222";
 const baseUrl = "http://127.0.0.1:3100";
@@ -239,6 +241,22 @@ const seedTournamentStorage = async (page: Page) => {
     },
     { tournamentStorageKey, sharedTournamentStorageKey, tournamentEnvelope, sharedTournamentId }
   );
+  await page.addInitScript((accessToken) => {
+    window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
+      access_token: accessToken,
+      refresh_token: "e2e-coach-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: 4102444800,
+      user: {
+        id: "11111111-1111-4111-8111-111111111111",
+        aud: "authenticated",
+        role: "authenticated",
+        email: "coach@example.com",
+        is_anonymous: false,
+      },
+    }));
+  }, e2eCoachAccessToken);
 };
 
 const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-ready") => {
@@ -318,6 +336,7 @@ const routeReadinessSupabase = async (page: Page, readiness: "ready" | "not-read
 
 const routeShareTokenApi = async (page: Page, token = "readiness-mobile-scoring-token") => {
   await page.route("**/api/tournament-mutations", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${e2eCoachAccessToken}`);
     const postData = route.request().postDataJSON() as Record<string, unknown>;
 
     if (postData.action !== "createShareToken") {
