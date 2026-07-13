@@ -598,7 +598,7 @@ export default function PlayerScorecardPage() {
     let isCancelled = false;
 
     const loadExistingScores = async () => {
-      if (scoresLoaded || !requestedTournamentId || !resolvedPlayerIds) {
+      if (scoresLoaded || !sharedScoreTournamentId || !resolvedPlayerIds) {
         return;
       }
 
@@ -864,7 +864,7 @@ export default function PlayerScorecardPage() {
   const markedPlayerFront9Total = markedPlayerSelfScores.slice(0, 9).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
   const markedPlayerBack9Total = markedPlayerSelfScores.slice(9, scorecard.holes.length).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
 
-  const isQrScorecardRequest = Boolean(requestedTournamentId && requestedPairingId);
+  const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
   if (isQrScorecardRequest && !hasResolvedQrScorecard) {
     return (
