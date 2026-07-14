@@ -286,8 +286,16 @@ export default function PlayerScorecardPage() {
 
     const resolveScorecard = async () => {
       try {
+        // Wrap resolveShareToken with the same timeout used for state-snapshot
+        // lookups — without it, a slow or hung server-side Supabase query keeps
+        // the loading screen stuck indefinitely.
         const tokenResolution =
-          requestedShareToken && !requestedTournamentId ? await resolveShareToken(requestedShareToken) : null;
+          requestedShareToken && !requestedTournamentId
+            ? await withTimeout(
+                resolveShareToken(requestedShareToken).catch(() => null),
+                SHARED_SCORECARD_LOOKUP_TIMEOUT_MS
+              )
+            : null;
         const effectiveTournamentId = requestedTournamentId || tokenResolution?.tournamentId || "";
 
         if (tokenResolution?.tournamentId && !isCancelled) {

@@ -21,10 +21,22 @@ const createSupabaseClient = ({ shareTokenHash, accessToken }: SupabaseClientOpt
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 
+  // Temporary clients (share-token or access-token) must not share the coach auth
+  // storage key with the main singleton. Sharing the storageKey causes multiple
+  // GoTrueClient instances to compete for the same session — they can race to
+  // refresh the token, corrupt it, or sign the coach out unexpectedly.
+  const isTemporaryClient = Boolean(shareTokenHash || accessToken);
+
   return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      storageKey: coachAuthStorageKey,
-    },
+    auth: isTemporaryClient
+      ? {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        }
+      : {
+          storageKey: coachAuthStorageKey,
+        },
     global: Object.keys(headers).length > 0
       ? {
           headers,
