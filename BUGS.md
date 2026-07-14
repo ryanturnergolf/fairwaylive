@@ -1,6 +1,40 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-07
+Last updated: 2026-07-13
+
+## Open Bugs
+
+### Duplicate React keys on tournament print-scorecard rows
+
+Status: open.
+
+The tournament live-scoring view emits duplicate React key errors for player print-scorecard rows.
+
+### Multiple anonymous GoTrueClient warnings
+
+Status: open.
+
+The signed-out share-token scorecard creates multiple anonymous GoTrueClient instances using the default Supabase storage key. These clients do not compete for `clubhouse-hq-coach-auth`, but the warnings and redundant clients remain to be resolved.
+
+## Resolved
+
+### QR modal stuck on Preparing
+
+Status: resolved in commit `38853c5590067f9dd21646e2b753c9aa4c889bbd`.
+
+Share-token resolution now uses the shared-scorecard lookup timeout, preventing the QR modal from remaining on "Preparing" indefinitely.
+
+### Share-token loading hang
+
+Status: resolved in commit `38853c5590067f9dd21646e2b753c9aa4c889bbd`.
+
+Slow or failed share-token resolution now exits through the bounded lookup path instead of leaving the signed-out scorecard loading indefinitely.
+
+### GoTrueClient competition for clubhouse-hq-coach-auth
+
+Status: resolved in commit `38853c5590067f9dd21646e2b753c9aa4c889bbd`.
+
+Temporary share-token and access-token clients no longer persist sessions or use the coach authentication storage key.
 
 ## Active Architecture Risks
 

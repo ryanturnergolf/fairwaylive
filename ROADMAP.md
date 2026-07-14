@@ -4,9 +4,23 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-07
+Last updated: 2026-07-13
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
+
+### Completed Milestone: Secure QR And Share-Token Verification
+
+Status: complete.
+
+- Isolated temporary Supabase clients from `clubhouse-hq-coach-auth`.
+- Bounded QR/share-token loading so "Preparing" resolves.
+- Verified real Supabase tournament creation, player synchronization, and share-token reads.
+- Verified the mobile scorecard from a clean signed-out browser context.
+
+### Next Milestone: Resolve duplicate React keys and remaining anonymous GoTrueClient warnings.
+
+- Remove duplicate React keys from tournament print-scorecard rows.
+- Consolidate anonymous share-token clients so the default Supabase storage-key warnings no longer occur.
 
 ### Milestone 1: Shared Tournament Read Model
 

@@ -1,8 +1,16 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-07
+Last updated: 2026-07-13
 
 ## Active Decisions
+
+### Temporary clients never manage coach authentication
+
+Temporary share-token and access-token Supabase clients must not persist, refresh, detect, or otherwise manage the coach authentication session. They must be isolated from the durable authenticated browser client.
+
+### Only the authenticated singleton uses clubhouse-hq-coach-auth
+
+The singleton authenticated Supabase browser client is the only client allowed to use `clubhouse-hq-coach-auth`. Temporary clients must use non-persistent authentication settings and must never share that storage key.
 
 ### Clubhouse HQ is not recruiting software
 
