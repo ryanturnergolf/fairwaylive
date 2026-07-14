@@ -230,7 +230,7 @@ test("director dashboard review queue links groups needing review to live scorin
   await expect(page.getByText("Live Leaderboard")).toBeVisible();
 });
 
-test("director dashboard shows tournament completion ready to close", async ({ page }) => {
+test("director dashboard shows compact finalization state", async ({ page }) => {
   const tournamentId = "director-completion-tournament";
   const sharedTournamentId = "44444444-4444-4444-8444-444444444444";
   const tournamentStorageKey = `clubhouse-hq-tournament-${tournamentId}`;
@@ -396,10 +396,9 @@ test("director dashboard shows tournament completion ready to close", async ({ p
 
   await gotoApp(page, "/dashboard");
 
-  await expect(page.getByText("Tournament Completion")).toBeVisible();
-  await expect(page.getByText("Tournament Ready to Close")).toBeVisible();
-  await expect(page.getByText("Overall completion").locator("..").getByText("100%")).toBeVisible();
-  await expect(page.getByText("Holes remaining").locator("..").getByText("0")).toBeVisible();
-  await expect(page.getByText("Verification").locator("..").getByText("Verified")).toBeVisible();
+  await expect(page.getByText("Not ready to finalize", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Finalize Tournament" })).toBeDisabled();
+  await expect(page.getByText("Tournament Completion")).toHaveCount(0);
+  await expect(page.getByText("Remaining Blocking Issues")).toHaveCount(0);
   await expect(page.getByText("No groups need review.")).toBeVisible();
 });

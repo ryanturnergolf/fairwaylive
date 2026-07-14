@@ -71,13 +71,6 @@ const directorReviewSeverityStyles: Record<DirectorReviewSeverity, string> = {
   Critical: "border-[#8A2E2E] bg-[#8A2E2E] text-white",
 };
 
-const directorCompletionStateStyles: Record<string, string> = {
-  "On Pace": "border-[#2E6F76] bg-[#E6F3F1] text-[#0B3D2E]",
-  "Nearly Complete": "border-[#B8892D] bg-[#F0C96A]/35 text-[#0B3D2E]",
-  "Ready to Close": "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]",
-  Complete: "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]",
-};
-
 const finalizationStatusStyles = {
   eligible: "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]",
   blocked: "border-[#8A2E2E] bg-[#FFF4F1] text-[#8A2E2E]",
@@ -737,16 +730,6 @@ export default function DashboardPage() {
                     ["Last player sync time", formatDirectorTimestamp(summary.lastPlayerSyncAt)],
                   ];
                   const finalizationStatus = finalizationStatuses[summary.tournamentId || summary.sharedTournamentId];
-                  const finalizationCounts = finalizationStatus
-                    ? [
-                        ["Groups", `${finalizationStatus.summaryCounts.groupsFinished}/${finalizationStatus.summaryCounts.totalGroups} finished`],
-                        ["Scorecards", `${finalizationStatus.summaryCounts.scorecardsComplete}/${finalizationStatus.summaryCounts.totalScorecards} complete`],
-                        ["Required scores", `${finalizationStatus.summaryCounts.requiredScoresSubmitted}/${finalizationStatus.summaryCounts.requiredScoresTotal} submitted`],
-                        ["Open reviews", finalizationStatus.summaryCounts.reviewQueueItems],
-                        ["Remaining holes", finalizationStatus.summaryCounts.holesRemaining],
-                        ["Snapshot current", finalizationStatus.summaryCounts.snapshotCurrent ? "Yes" : "No"],
-                      ]
-                    : [];
 
                   return (
                     <article key={`${summary.tournamentId}-${summary.sharedTournamentId}`} className="rounded-[24px] border border-[#D6E0D8] bg-white p-5">
@@ -794,176 +777,26 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-[#F8FBF8] p-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#2E6F76]">
-                              Tournament Completion
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-[#51635C]">
-                              End-of-round progress and blockers before the tournament can be closed.
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${directorCompletionStateStyles[summary.completion.estimatedState]}`}>
-                              {summary.completion.estimatedState}
+                            <span className={`inline-flex w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${finalizationStatus?.eligible ? finalizationStatusStyles.eligible : finalizationStatusStyles.blocked}`}>
+                              {finalizationStatus?.eligible ? "Ready to finalize" : "Not ready to finalize"}
                             </span>
-                            {summary.completion.isReadyToClose ? (
-                              <span className="w-fit rounded-full border border-[#0B3D2E] bg-[#0B3D2E] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6]">
-                                Tournament Ready to Close
-                              </span>
+                            {!finalizationStatus?.eligible ? (
+                              <p className="mt-3 text-sm font-semibold text-[#51635C]">
+                                Tournament scoring and verification must be completed before finalization.
+                              </p>
                             ) : null}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleFinalizeTournament(summary.tournamentId, summary.sharedTournamentId)}
+                            disabled={!finalizationStatus?.eligible || Boolean(finalizationStatus?.finalizationRecord)}
+                            className="rounded-full bg-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                          >
+                            {finalizationStatus?.finalizationRecord ? "Tournament Finalized" : "Finalize Tournament"}
+                          </button>
                         </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                          {[
-                            ["Overall completion", `${summary.completion.overallCompletionPercentage}%`],
-                            ["Holes remaining", summary.completion.holesRemaining],
-                            ["Groups remaining", summary.completion.groupsRemaining],
-                            ["Players remaining", summary.completion.playersRemaining],
-                            ["Review items", summary.completion.reviewItemsRemaining],
-                            ["Verification", summary.completion.verificationStatus],
-                          ].map(([label, value]) => (
-                            <div key={label} className="rounded-[16px] border border-[#E2E9E3] bg-white p-4">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
-                                {label}
-                              </p>
-                              <p className="mt-2 text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">
-                                {value}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="mt-4 grid gap-2 md:grid-cols-2">
-                          {summary.completion.checklist.map((item) => (
-                            <div key={item.label} className="flex items-center justify-between gap-3 rounded-[16px] border border-[#E2E9E3] bg-white px-4 py-3">
-                              <span className="text-sm font-black text-[#0B3D2E]">{item.label}</span>
-                              <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${item.passed ? "border-[#0B3D2E] bg-[#E6F3F1] text-[#0B3D2E]" : "border-[#8A2E2E] bg-[#FFF4F1] text-[#8A2E2E]"}`}>
-                                {item.passed ? "Pass" : "Fail"}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-white p-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#2E6F76]">
-                              Tournament Finalization
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-[#51635C]">
-                              Eligibility checks for tournament closeout.
-                            </p>
-                          </div>
-                          {finalizationStatus ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${finalizationStatus.eligible ? finalizationStatusStyles.eligible : finalizationStatusStyles.blocked}`}>
-                                {finalizationStatus.finalizationRecord ? "Finalized" : finalizationStatus.eligible ? "Eligible" : "Not Eligible"}
-                              </span>
-                              <span className="w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
-                                Last checked {formatDirectorTimestamp(finalizationStatus.checkedAt)}
-                              </span>
-                              {finalizationStatus.eligible && !finalizationStatus.finalizationRecord ? (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleFinalizeTournament(summary.tournamentId, summary.sharedTournamentId)}
-                                  className="rounded-full bg-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
-                                >
-                                  Finalize Tournament
-                                </button>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="w-fit rounded-full border border-[#D6E0D8] bg-[#F8FBF8] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
-                              Checking
-                            </span>
-                          )}
-                        </div>
-
-                        {finalizationStatus ? (
-                          <>
-                            {finalizationStatus.finalizationRecord ? (
-                              <div className="mt-4 rounded-[18px] border border-[#0B3D2E] bg-[#E6F3F1] p-4">
-                                <p className="text-sm font-black uppercase tracking-[0.22em] text-[#0B3D2E]">
-                                  Tournament Finalized
-                                </p>
-                                <p className="mt-2 text-sm font-semibold text-[#51635C]">
-                                  This tournament is read-only. Finalized by {finalizationStatus.finalizationRecord.finalizedBy} at {formatDirectorTimestamp(finalizationStatus.finalizationRecord.finalizedAt)}.
-                                </p>
-                              </div>
-                            ) : finalizationStatus.eligible ? (
-                              <div className="mt-4 rounded-[18px] border border-[#0B3D2E] bg-[#E6F3F1] p-4">
-                                <p className="text-sm font-black uppercase tracking-[0.22em] text-[#0B3D2E]">
-                                  Ready to Finalize Tournament
-                                </p>
-                                <p className="mt-2 text-sm font-semibold text-[#51635C]">
-                                  No blocking finalization issues remain.
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="mt-4 rounded-[18px] border border-[#8A2E2E] bg-[#FFF4F1] p-4">
-                                <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8A2E2E]">
-                                  Remaining Blocking Issues
-                                </p>
-                                <ul className="mt-3 space-y-2">
-                                  {finalizationStatus.blockingReasons.map((reason) => (
-                                    <li key={`${reason.code}-${reason.message}`} className="rounded-[14px] border border-[#E8C6BE] bg-white px-4 py-3 text-sm font-semibold text-[#51635C]">
-                                      <span className="font-black text-[#8A2E2E]">{reason.message}</span>
-                                      {typeof reason.count === "number" ? ` Count: ${reason.count}.` : ""}
-                                      {typeof reason.expected === "number" && typeof reason.actual === "number"
-                                        ? ` Progress: ${reason.actual}/${reason.expected}.`
-                                        : ""}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                              {finalizationCounts.map(([label, value]) => (
-                                <div key={label} className="rounded-[16px] border border-[#E2E9E3] bg-[#F8FBF8] p-4">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
-                                    {label}
-                                  </p>
-                                  <p className="mt-2 text-lg font-black tracking-[-0.02em] text-[#0B3D2E]">
-                                    {value}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="mt-4 rounded-[18px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
-                                  Warnings
-                                </p>
-                                <span className="w-fit rounded-full border border-[#E3D4B7] bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">
-                                  {finalizationStatus.warnings.length} warnings
-                                </span>
-                              </div>
-                              {finalizationStatus.warnings.length === 0 ? (
-                                <p className="mt-3 text-sm font-semibold text-[#51635C]">
-                                  No finalization warnings.
-                                </p>
-                              ) : (
-                                <ul className="mt-3 space-y-2">
-                                  {finalizationStatus.warnings.map((warning) => (
-                                    <li key={`${warning.code}-${warning.message}`} className="rounded-[14px] border border-[#E8DCC8] bg-white px-4 py-3 text-sm font-semibold text-[#51635C]">
-                                      {warning.message}
-                                      {typeof warning.count === "number" ? ` Count: ${warning.count}.` : ""}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="mt-4 rounded-[16px] border border-[#E2E9E3] bg-[#F8FBF8] p-4 text-sm font-semibold text-[#51635C]">
-                            Finalization checks are loading.
-                          </div>
-                        )}
                       </div>
 
                       <div className="mt-6 rounded-[20px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
