@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import { buildAppUrl, buildCurrentBrowserUrl } from "../../../lib/appUrl";
+import { buildAppUrl } from "../../../lib/appUrl";
 import {
   buildPrintablePairings,
   formatTotalToPar,
@@ -11,7 +11,6 @@ import {
 } from "../../../lib/services/tournamentDerivedState";
 import {
   buildMobileScorecardPath,
-  pairingExistsForPlayer,
 } from "../../../lib/services/tournamentPageHelpers";
 import {
   useBodyOverflowLock,
@@ -88,8 +87,6 @@ type TournamentPrintExportProps = {
   children: (controls: PrintExportControls) => ReactNode;
 };
 
-const mobileScorecardUrl = "/scorecard/test";
-
 const scoreboardImportOptions: Array<[keyof ScoreboardImportState["options"], string]> = [
   ["tournamentDetails", "Tournament details"],
   ["teams", "Teams"],
@@ -128,40 +125,46 @@ export default function TournamentPrintExport({
   const [activeQrShareToken, setActiveQrShareToken] = useState("");
   const [qrIntegrityError, setQrIntegrityError] = useState("");
 
-  const activeQrPairing = useMemo(() => {
+  const activeQrSelection = useMemo(() => {
     if (!activeQrPlayer) {
-      return null;
+      return { pairing: null, playerId: "", error: "" };
     }
 
-    return pairingExistsForPlayer(pairings, activeQrPlayer.playerName) ?? null;
-  }, [activeQrPlayer, pairings]);
-
-  const activeQrScoringPlayerId = useMemo(() => {
-    if (!activeQrPairing || !activeQrPlayer) {
-      return "";
-    }
-
-    return (
-      activeQrPairing.players.find(
-        (player) => player.playerName === activeQrPlayer.playerName && player.teamName === activeQrPlayer.team
-      )?.playerId || String(activeQrPlayer.id)
+    const exactIdMatches = pairings.flatMap((pairing) =>
+      pairing.players
+        .filter((player) => player.playerId && String(player.playerId) === String(activeQrPlayer.id))
+        .map((player) => ({ pairing, player }))
     );
-  }, [activeQrPairing, activeQrPlayer]);
+    const identityMatches = pairings.flatMap((pairing) =>
+      pairing.players
+        .filter((player) => player.playerName === activeQrPlayer.playerName && player.teamName === activeQrPlayer.team)
+        .map((player) => ({ pairing, player }))
+    );
+    const matches = exactIdMatches.length > 0 ? exactIdMatches : identityMatches;
 
-  const browserMobileScorecardPath = useMemo(() => {
-    return buildMobileScorecardPath({ tournamentId, activeQrPairing, activeQrScoringPlayerId });
-  }, [activeQrPairing, activeQrScoringPlayerId, tournamentId]);
+    if (matches.length !== 1 || !matches[0].player.playerId) {
+      return {
+        pairing: null,
+        playerId: "",
+        error: "Player synchronization is ambiguous. Regenerate scorecards, then try QR access again.",
+      };
+    }
+
+    return { pairing: matches[0].pairing, playerId: String(matches[0].player.playerId), error: "" };
+  }, [activeQrPlayer, pairings]);
+  const activeQrPairing = activeQrSelection.pairing;
+  const activeQrScoringPlayerId = activeQrSelection.playerId;
 
   const qrMobileScorecardPath = useMemo(() => {
     return buildMobileScorecardPath({
       shareToken: activeQrShareToken,
       activeQrPairing,
       activeQrScoringPlayerId,
+      roundNumber: normalizedRoundSetup.roundNumber,
     });
-  }, [activeQrPairing, activeQrScoringPlayerId, activeQrShareToken]);
+  }, [activeQrPairing, activeQrScoringPlayerId, activeQrShareToken, normalizedRoundSetup.roundNumber]);
 
   const resolvedMobileScorecardUrl = useMemo(() => buildAppUrl(qrMobileScorecardPath), [qrMobileScorecardPath]);
-  const browserMobileScorecardUrl = useMemo(() => buildCurrentBrowserUrl(browserMobileScorecardPath), [browserMobileScorecardPath]);
   const isQrMobileScorecardReady = Boolean(activeQrShareToken && activeQrPairing && activeQrScoringPlayerId);
   const printablePairings = useMemo(
     () => buildPrintablePairings({ pairings, scorecardRows, normalizedRoundSetup }),
@@ -179,6 +182,11 @@ export default function TournamentPrintExport({
     setActiveQrShareToken("");
     setActiveQrCodeDataUrl("");
 
+    if (activeQrPlayer && activeQrSelection.error) {
+      setQrIntegrityError(activeQrSelection.error);
+      return;
+    }
+
     if (!activeQrPlayer || !activeQrPairing || !activeQrScoringPlayerId || !sharedTournamentId) {
       return;
     }
@@ -191,12 +199,15 @@ export default function TournamentPrintExport({
       })
       .catch((error) => {
         console.warn("[ShareTokenService] Unable to create mobile scoring share token.", error);
+        if (!isCancelled) {
+          setQrIntegrityError("Unable to create mobile scoring access. Close this window and try again.");
+        }
       });
 
     return () => {
       isCancelled = true;
     };
-  }, [activeQrPairing, activeQrPlayer, activeQrScoringPlayerId, sharedTournamentId]);
+  }, [activeQrPairing, activeQrPlayer, activeQrScoringPlayerId, activeQrSelection.error, sharedTournamentId]);
 
   useQrCodeDataUrl({
     shouldGenerate: Boolean(activeQrPlayer && isQrMobileScorecardReady),
@@ -685,14 +696,18 @@ export default function TournamentPrintExport({
                   )}
                 </div>
                 <p className="mt-4 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  {isQrMobileScorecardReady
+                  {qrIntegrityError
+                    ? qrIntegrityError
+                    : isQrMobileScorecardReady
                     ? `Group ${activeQrPairing?.groupNumber ?? ""} mobile scoring access`
                     : "Preparing mobile scoring access"}
                 </p>
                 <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  {isQrMobileScorecardReady
-                    ? `Scorecard URL: ${resolvedMobileScorecardUrl || mobileScorecardUrl}`
-                    : "Scorecard URL: Preparing shared link"}
+                  {qrIntegrityError
+                    ? "Scorecard URL unavailable"
+                    : isQrMobileScorecardReady
+                      ? `Scorecard URL: ${resolvedMobileScorecardUrl}`
+                      : "Scorecard URL: Preparing shared link"}
                 </div>
               </div>
 
@@ -714,12 +729,18 @@ export default function TournamentPrintExport({
                 >
                   Download QR
                 </button>
-                <Link
-                  href={resolvedMobileScorecardUrl || browserMobileScorecardUrl || mobileScorecardUrl}
-                  className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
-                >
-                  Open Mobile Scorecard
-                </Link>
+                {isQrMobileScorecardReady && resolvedMobileScorecardUrl ? (
+                  <Link
+                    href={resolvedMobileScorecardUrl}
+                    className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                  >
+                    Open Mobile Scorecard
+                  </Link>
+                ) : (
+                  <span className="cursor-not-allowed rounded-full border border-[#E8DCC8] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#51635C]/60">
+                    Open Mobile Scorecard
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handlePrintFromQrModal}

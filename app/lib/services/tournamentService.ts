@@ -442,10 +442,11 @@ export type SharedTournamentScorecardState = {
       playerId: string;
       playerName: string;
       teamName: string;
+      markerPlayerId: string;
     }>;
   }>;
   scorecardRows: Array<{
-    id: number;
+    id: string;
     playerName: string;
     team: string;
     scores: number[];
@@ -1156,10 +1157,15 @@ const dedupeTournamentPlayerRows = (rows: TournamentPlayerRow[]) => {
   return [...rowsByPlayerId.values()];
 };
 
+const haveConflictingPairingData = (left: TournamentPlayerRow, right: TournamentPlayerRow) =>
+  left.group_number !== right.group_number ||
+  left.starting_hole !== right.starting_hole ||
+  left.marker_player_id !== right.marker_player_id;
+
 export const loadSharedTournamentScorecardState = async (
   tournamentId: string,
   roundNumber = 1,
-  holeCount = 18,
+  _holeCount = 18,
   shareToken = ""
 ): Promise<SharedTournamentScorecardState | null> => {
   const [tournamentRow, playerRows, snapshot] = await Promise.all([
@@ -1168,48 +1174,82 @@ export const loadSharedTournamentScorecardState = async (
     getTournamentStateSnapshot(tournamentId, { shareToken }).catch(() => null),
   ]);
 
-  if (!tournamentRow || playerRows.length === 0) {
+  if (!tournamentRow || playerRows.length === 0 || !isTournamentStorageEnvelope(snapshot?.state_snapshot)) {
     return null;
   }
 
+  const rowsByPlayerId = new Map<string, TournamentPlayerRow>();
+  for (const row of playerRows) {
+    const existing = rowsByPlayerId.get(row.player_id);
+    if (existing && haveConflictingPairingData(existing, row)) {
+      return null;
+    }
+    rowsByPlayerId.set(row.player_id, existing && hasPairingData(existing) ? existing : row);
+  }
+
   const sharedPlayerRows = dedupeTournamentPlayerRows(playerRows);
+  if (
+    sharedPlayerRows.some(
+      (row) => row.group_number === null || row.starting_hole === null || !row.marker_player_id || row.marker_player_id === row.player_id
+    )
+  ) {
+    return null;
+  }
+
+  const snapshotEnvelope = snapshot.state_snapshot;
+  const configuredRoundSetup = getRoundSetupMap(snapshotEnvelope.tournament.settings)?.[String(roundNumber)];
+  const uiRoundSetup = snapshotEnvelope.uiState.scorecards.roundSetup;
+  const exactRoundSetup = configuredRoundSetup ??
+    (Number(uiRoundSetup.roundNumber) === roundNumber ? uiRoundSetup : null);
+  const parsedHoleCount = Number(exactRoundSetup?.numberOfHoles);
+  if (!exactRoundSetup || !Number.isInteger(parsedHoleCount) || parsedHoleCount < 1 || parsedHoleCount > 18) {
+    return null;
+  }
+
   const groupedPlayers = new Map<number, TournamentPlayerRow[]>();
-  sharedPlayerRows.forEach((row, index) => {
-    const groupNumber = row.group_number ?? Math.floor(index / 4) + 1;
+  sharedPlayerRows.forEach((row) => {
+    const groupNumber = row.group_number as number;
     groupedPlayers.set(groupNumber, [...(groupedPlayers.get(groupNumber) ?? []), row]);
   });
+
+  for (const rows of groupedPlayers.values()) {
+    const ids = new Set(rows.map((row) => row.player_id));
+    if (rows.length < 2 || rows.some((row) => !ids.has(String(row.marker_player_id)))) {
+      return null;
+    }
+  }
 
   const pairings = Array.from(groupedPlayers.entries())
     .sort(([left], [right]) => left - right)
     .map(([groupNumber, rows]) => ({
       groupNumber,
       teeTime: "",
-      startingHole: String(rows[0]?.starting_hole ?? rows[0]?.tee_number ?? 1),
+      startingHole: String(rows[0].starting_hole),
       players: rows.map((row) => ({
         playerId: row.player_id,
         playerName: row.player_name,
-        teamName: row.team_name || "Unassigned",
+        teamName: row.team_name || "",
+        markerPlayerId: String(row.marker_player_id),
       })),
     }));
 
   return {
     tournament: toStoredTournament(tournamentRow),
     isFinalized: Boolean(
-      isTournamentStorageEnvelope(snapshot?.state_snapshot) &&
-        snapshot.state_snapshot.tournament.settings.finalization &&
-        typeof snapshot.state_snapshot.tournament.settings.finalization === "object" &&
-        (snapshot.state_snapshot.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
+      snapshotEnvelope.tournament.settings.finalization &&
+        typeof snapshotEnvelope.tournament.settings.finalization === "object" &&
+        (snapshotEnvelope.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
     ),
     pairings,
-    scorecardRows: sharedPlayerRows.map((row, index) => ({
-      id: toScorecardRowId(row.player_id, index),
+    scorecardRows: sharedPlayerRows.map((row) => ({
+      id: row.player_id,
       playerName: row.player_name,
-      team: row.team_name || "Unassigned",
-      scores: Array.from({ length: holeCount }, () => 0),
+      team: row.team_name || "",
+      scores: Array.from({ length: parsedHoleCount }, () => 0),
     })),
     roundSetup: {
       roundNumber: String(roundNumber),
-      numberOfHoles: String(holeCount),
+      numberOfHoles: String(parsedHoleCount),
     },
   };
 };

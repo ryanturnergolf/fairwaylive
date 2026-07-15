@@ -50,6 +50,7 @@ type PairingGroup = {
     playerId?: string;
     playerName: string;
     teamName: string;
+    markerPlayerId?: string;
   }>;
 };
 
@@ -265,6 +266,7 @@ export default function PlayerScorecardPage() {
   const requestedTournamentId = searchParams.get("tournamentId") ?? "";
   const requestedPairingId = searchParams.get("pairing") ?? "";
   const requestedShareToken = searchParams.get("shareToken") ?? "";
+  const requestedRound = searchParams.get("round") ?? "";
   const [resolvedShareTournamentId, setResolvedShareTournamentId] = useState("");
   const [qrResolvedScorecard, setQrResolvedScorecard] = useState<PlayerScorecard | { error: string } | null>(null);
   const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
@@ -290,12 +292,24 @@ export default function PlayerScorecardPage() {
         // lookups — without it, a slow or hung server-side Supabase query keeps
         // the loading screen stuck indefinitely.
         const tokenResolution =
-          requestedShareToken && !requestedTournamentId
+          requestedShareToken
             ? await withTimeout(
                 resolveShareToken(requestedShareToken).catch(() => null),
                 SHARED_SCORECARD_LOOKUP_TIMEOUT_MS
               )
             : null;
+        if (requestedShareToken && (!tokenResolution || tokenResolution.purpose !== "mobile_scoring")) {
+          finishResolution({ error: "This secure scoring link is invalid or expired. Please request a new QR code." });
+          return;
+        }
+        if (
+          requestedShareToken &&
+          requestedTournamentId &&
+          tokenResolution?.tournamentId !== requestedTournamentId
+        ) {
+          finishResolution({ error: "This secure scoring link does not match the requested tournament." });
+          return;
+        }
         const effectiveTournamentId = requestedTournamentId || tokenResolution?.tournamentId || "";
 
         if (tokenResolution?.tournamentId && !isCancelled) {
@@ -309,6 +323,12 @@ export default function PlayerScorecardPage() {
 
         if (!effectiveTournamentId || !requestedPairingId) {
           finishResolution({ error: "Missing tournament or pairing information in this QR code." });
+          return;
+        }
+
+        const requestedRoundNumber = Number(requestedRound);
+        if (requestedShareToken && (!Number.isInteger(requestedRoundNumber) || requestedRoundNumber < 1)) {
+          finishResolution({ error: "This QR code is missing its tournament round. Please request a new QR code." });
           return;
         }
 
@@ -330,7 +350,12 @@ export default function PlayerScorecardPage() {
           hasLocalLegacyTournamentState
             ? null
             : await withTimeout(
-                loadSharedTournamentScorecardState(effectiveTournamentId, 1, 18, requestedShareToken).catch((error) => {
+                loadSharedTournamentScorecardState(
+                  effectiveTournamentId,
+                  requestedRoundNumber || 1,
+                  18,
+                  requestedShareToken
+                ).catch((error) => {
                   console.warn("[TournamentService] Unable to load shared tournament scorecard state.", error);
                   return null;
                 }),
@@ -405,18 +430,18 @@ export default function PlayerScorecardPage() {
             candidates.add(String(player.playerId));
           }
 
-          const matchedTournamentPlayer = tournamentPlayers.find(
+          const matchedTournamentPlayers = tournamentPlayers.filter(
             (item) => getTournamentPlayerName(item) === player.playerName && getTournamentPlayerTeam(item) === player.teamName
           );
-          if (matchedTournamentPlayer) {
-            candidates.add(String(matchedTournamentPlayer.id));
+          if (matchedTournamentPlayers.length === 1) {
+            candidates.add(String(matchedTournamentPlayers[0].id));
           }
 
-          const matchedScorecard = scorecardRows.find(
+          const matchedScorecards = scorecardRows.filter(
             (row) => row.playerName === player.playerName && row.team === player.teamName
           );
-          if (matchedScorecard) {
-            candidates.add(String(matchedScorecard.id));
+          if (matchedScorecards.length === 1) {
+            candidates.add(String(matchedScorecards[0].id));
           }
 
           return Array.from(candidates);
@@ -426,7 +451,7 @@ export default function PlayerScorecardPage() {
           (player) => String(player.id) === String(routePlayerId)
         );
         const routeMatchedScorecard = scorecardRows.find((row) => String(row.id) === String(routePlayerId));
-        const routeMatchedPairingPlayer = pairing.players.find((player) => {
+        const routeMatchedPairingPlayers = pairing.players.filter((player) => {
           if (player.playerId && String(player.playerId) === String(routePlayerId)) {
             return true;
           }
@@ -451,11 +476,17 @@ export default function PlayerScorecardPage() {
         });
 
         const selectedPlayer =
-          routePlayerId && routePlayerId.startsWith("group-") ? pairing.players[0] : routeMatchedPairingPlayer;
+          routePlayerId && routePlayerId.startsWith("group-")
+            ? pairing.players.length === 1 ? pairing.players[0] : undefined
+            : routeMatchedPairingPlayers.length === 1 ? routeMatchedPairingPlayers[0] : undefined;
 
         const selectedIndex = selectedPlayer ? pairing.players.indexOf(selectedPlayer) : -1;
-        const markerPlayer =
-          selectedIndex >= 0 ? pairing.players[(selectedIndex + 1) % pairing.players.length] : undefined;
+        const synchronizedMarkerId = selectedPlayer?.markerPlayerId;
+        const markerPlayer = synchronizedMarkerId
+          ? pairing.players.find((player) => player.playerId === synchronizedMarkerId)
+          : selectedIndex >= 0 && pairing.players.length > 1
+            ? pairing.players[(selectedIndex + 1) % pairing.players.length]
+            : undefined;
         const selectedPlayerIds = selectedPlayer ? getIdCandidates(selectedPlayer) : [];
         const markerPlayerIds = markerPlayer ? getIdCandidates(markerPlayer) : [];
         const selectedPlayerId =
@@ -469,6 +500,11 @@ export default function PlayerScorecardPage() {
 
         if (!selectedPlayer) {
           finishResolution({ error: "Invalid scoring link. Please request a new mobile scoring link." });
+          return;
+        }
+
+        if (!markerPlayer || !markerPlayerId || String(markerPlayerId) === String(selectedPlayerId)) {
+          finishResolution({ error: "Marker assignment is incomplete. Ask the coach to regenerate QR access." });
           return;
         }
 
@@ -497,7 +533,7 @@ export default function PlayerScorecardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [requestedTournamentId, requestedPairingId, requestedShareToken, routePlayerId]);
+  }, [requestedTournamentId, requestedPairingId, requestedRound, requestedShareToken, routePlayerId]);
 
   // Extract resolved player IDs for reliable hydration
   const resolvedPlayerIds = useMemo(() => {
@@ -567,7 +603,12 @@ export default function PlayerScorecardPage() {
     }
 
     const sharedState = await withTimeout(
-      loadSharedTournamentScorecardState(sharedScoreTournamentId, 1, 18, requestedShareToken).catch((error) => {
+      loadSharedTournamentScorecardState(
+        sharedScoreTournamentId,
+        Number(scorecard.round),
+        scorecard.holes.length,
+        requestedShareToken
+      ).catch((error) => {
         console.warn("[TournamentService] Unable to verify tournament finalization before score save.", error);
         return null;
       }),
@@ -1122,7 +1163,7 @@ export default function PlayerScorecardPage() {
     });
     setSaveError("");
 
-    if (requestedTournamentId) {
+    if (sharedScoreTournamentId) {
       const roundNumber = String(Number(scorecard.round) || 1);
       const roundId = `round-${roundNumber}`;
       const parsedRoundNumber = Number(roundNumber);
@@ -1154,14 +1195,18 @@ export default function PlayerScorecardPage() {
       }
        
       // Save self score with validated playerId
-      const selfScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, localSelfPlayerId, roundId, nextScores, "self");
+      const selfScoreSaved = requestedTournamentId
+        ? mergeTournamentScoreSubmission(requestedTournamentId, localSelfPlayerId, roundId, nextScores, "self")
+        : true;
       let markerScoreSaved = false;
-      void saveScoreThroughService(stableSelfPlayerId, stableSelfPlayerId, parsedRoundNumber, nextScores, "hole", currentHoleStats);
+      await saveScoreThroughService(stableSelfPlayerId, stableSelfPlayerId, parsedRoundNumber, nextScores, "hole", currentHoleStats);
        
       // Save marker score only if markerPlayerId is valid
       if (stableMarkerPlayerId && hasAnyHoleScore(nextMarkerScores)) {
-        markerScoreSaved = mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, nextMarkerScores, "marker");
-        void saveScoreThroughService(stableMarkerPlayerId, stableSelfPlayerId, parsedRoundNumber, nextMarkerScores, "hole");
+        markerScoreSaved = requestedTournamentId
+          ? mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, nextMarkerScores, "marker")
+          : true;
+        await saveScoreThroughService(stableMarkerPlayerId, stableSelfPlayerId, parsedRoundNumber, nextMarkerScores, "hole");
       }
       if (isDevelopment) {
         setScoreDiagnostics((current) => ({
@@ -1198,7 +1243,7 @@ export default function PlayerScorecardPage() {
       return;
     }
 
-    if (!requestedTournamentId) {
+    if (!sharedScoreTournamentId) {
       setSaveError("Unable to submit. Tournament information is missing.");
       return;
     }
@@ -1214,7 +1259,9 @@ export default function PlayerScorecardPage() {
     const stableMarkerPlayerId = String(scorecard.markerPlayerId);
     const localMarkerPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.markerPlayerIds ?? [stableMarkerPlayerId], stableMarkerPlayerId);
     // Submit marked player's self scores as complete
-    const ok = mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, markedPlayerSelfScores, "self");
+    const ok = requestedTournamentId
+      ? mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, markedPlayerSelfScores, "self")
+      : true;
     if (isDevelopment) {
       setScoreDiagnostics((current) => ({
         ...current,

@@ -617,9 +617,10 @@ const fillSelfScoreAndWaitForSave = async (page: Page, score: number) => {
 };
 
 const waitForSharedScoreHydration = async (
-  sharedStore: Awaited<ReturnType<typeof routeSharedScoreEntriesStore>>
+  sharedStore: Awaited<ReturnType<typeof routeSharedScoreEntriesStore>>,
+  minimumReads = 7
 ) => {
-  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(7);
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(minimumReads);
 };
 
 test.use({
@@ -835,6 +836,12 @@ test("mobile scorecard renders while shared score lookup is pending", async ({ p
 
 test("phone QR resolver loads shared Supabase player-2 by QR player id", async ({ page }) => {
   const consoleErrors: string[] = [];
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: tournamentEnvelope,
+  }]);
   page.on("console", (message) => {
     if (message.type() === "error" && message.text().includes("Unable to load shared score entries")) {
       consoleErrors.push(message.text());
@@ -893,42 +900,6 @@ test("phone QR resolver loads shared Supabase player-2 by QR player id", async (
           tee_number: 1,
           starting_hole: 1,
           marker_player_id: "player-1",
-          is_individual: false,
-          position: 2,
-          status: "active",
-          created_at: null,
-          updated_at: null,
-        },
-        {
-          id: "44444444-4444-4444-8444-444444444444",
-          tournament_id: sharedTournamentId,
-          player_id: "1783206176889",
-          player_name: "Ava Green",
-          team_id: "team-1",
-          team_name: "E2E University",
-          round_number: 1,
-          group_number: null,
-          tee_number: null,
-          starting_hole: null,
-          marker_player_id: null,
-          is_individual: false,
-          position: 1,
-          status: "active",
-          created_at: null,
-          updated_at: null,
-        },
-        {
-          id: "55555555-5555-4555-8555-555555555555",
-          tournament_id: sharedTournamentId,
-          player_id: "1783206161404",
-          player_name: "Ben Marker",
-          team_id: "team-1",
-          team_name: "E2E University",
-          round_number: 1,
-          group_number: null,
-          tee_number: null,
-          starting_hole: null,
-          marker_player_id: null,
           is_individual: false,
           position: 2,
           status: "active",
@@ -1121,7 +1092,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
-  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&shareToken=/)).toBeVisible();
+  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&round=1&shareToken=/)).toBeVisible();
 
   const href = await mobileScorecardLink.getAttribute("href");
   expect(href).toBeTruthy();
@@ -1335,6 +1306,12 @@ test("phone shared score save updates live scoreboard", async ({ page }) => {
 test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) => {
   await routeSharedTournamentRoster(page);
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: tournamentEnvelope,
+  }]);
 
   await gotoApp(page, baseUrl);
   await page.evaluate(
@@ -1378,6 +1355,12 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
 test("shared QR phone without local tournament still saves stable IDs to Supabase", async ({ page }) => {
   await routeSharedTournamentRoster(page);
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: tournamentEnvelope,
+  }]);
 
   await gotoApp(page, baseUrl);
   await page.evaluate(() => window.localStorage.clear());
@@ -1386,7 +1369,7 @@ test("shared QR phone without local tournament still saves stable IDs to Supabas
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
-  await waitForSharedScoreHydration(sharedStore);
+  await waitForSharedScoreHydration(sharedStore, 4);
 
   await page.getByLabel("Ben Marker's Score").fill("4");
   await page.getByLabel("Ava Green's Score").fill("5");

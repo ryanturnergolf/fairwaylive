@@ -381,7 +381,7 @@ test("Ready tournaments can share QR mobile scoring", async ({ page }) => {
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
 
   await expect(page.getByRole("heading", { name: "Ava Green" })).toBeVisible();
-  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&shareToken=/)).toBeVisible();
+  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&round=1&shareToken=/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sharing is blocked" })).toBeHidden();
 });
 

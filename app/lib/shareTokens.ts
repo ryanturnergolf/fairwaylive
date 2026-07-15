@@ -49,7 +49,7 @@ export const hashShareToken = async (token: string) => {
   }
 
   const { createHash } = await import("crypto");
-  return createHash("sha256").update(token).digest("base64url");
+  return bytesToBase64Url(createHash("sha256").update(token).digest());
 };
 
 export const buildShareTokenExpiration = (purpose: ShareTokenPurpose, createdAt = new Date()) => {

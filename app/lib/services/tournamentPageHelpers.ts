@@ -477,19 +477,25 @@ export const buildMobileScorecardPath = ({
   shareToken,
   activeQrPairing,
   activeQrScoringPlayerId,
+  roundNumber,
 }: {
   tournamentId?: string;
   shareToken?: string;
   activeQrPairing: LegacyPairingGroup | null;
   activeQrScoringPlayerId: string;
+  roundNumber?: string | number;
 }) => {
   if ((!tournamentId && !shareToken) || !activeQrPairing || !activeQrScoringPlayerId) {
-    return "/scorecard/test";
+    return "";
   }
 
   const params = new URLSearchParams({
     pairing: String(activeQrPairing.groupNumber),
   });
+
+  if (roundNumber !== undefined && String(roundNumber).trim()) {
+    params.set("round", String(roundNumber));
+  }
 
   if (shareToken) {
     params.set("shareToken", shareToken);
