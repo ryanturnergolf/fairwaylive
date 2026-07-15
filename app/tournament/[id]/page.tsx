@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
 import { getTournamentPlayers } from "../../lib/repositories/tournamentRepository";
@@ -32,7 +32,6 @@ import {
   isValidPairingMutation,
   loadTournamentPageRoundHydration,
   normalizePairings,
-  persistTournamentPageState,
   snapshotPairings,
   type TournamentRoundManagerReadModel,
 } from "../../lib/services/tournamentService";
@@ -441,7 +440,7 @@ export default function TournamentPage() {
     setTournamentMeta,
     setSharedTournamentId,
   });
-  const { hasLoadedFromStorageRef, hydrationPendingRef } = useTournamentPageLoading({
+  const { hasLoadedFromStorageRef, hydrationPendingRef, authenticatedHydrationRef } = useTournamentPageLoading({
     tournamentId,
     storageKey,
     setTournamentMeta,
@@ -456,7 +455,7 @@ export default function TournamentPage() {
     setScoreboardImportState,
     setAutoRepairState,
   });
-  useTournamentPagePersistence({
+  const { flushPendingSaves } = useTournamentPagePersistence({
     tournamentId,
     storageKey,
     sharedTournamentId,
@@ -465,6 +464,7 @@ export default function TournamentPage() {
     setSharedTournamentId,
     hasLoadedFromStorageRef,
     hydrationPendingRef,
+    authenticatedHydrationRef,
     isCoachAuthenticated,
   });
   useTournamentStoragePolling({
@@ -481,6 +481,8 @@ export default function TournamentPage() {
     setClippdExportState,
     setScoreboardImportState,
     setAutoRepairState,
+    hydrationPendingRef,
+    flushPendingSaves,
   });
   useSharedScoreSynchronization({
     isClientMounted,
@@ -807,48 +809,7 @@ export default function TournamentPage() {
     setRoundSetup((current) => ({ ...current, [name]: value }));
   };
 
-  const persistVisibleRoundState = useCallback(() => {
-    if (!tournamentId) {
-      return;
-    }
-
-    persistTournamentPageState({
-      tournamentId,
-      sharedTournamentId,
-      tournament,
-      state: {
-        teams,
-        players,
-        pairings,
-        scorecards: {
-          scorecardsGenerated,
-          scorecardRows,
-          roundSetup,
-        },
-        clippdExportState,
-        scoreboardImportState,
-        autoRepairState,
-      },
-      snapshotSyncTimeout: null,
-      lastSnapshotSignature: "",
-      onSharedTournamentIdChange: setSharedTournamentId,
-      onSnapshotTimeoutChange: () => undefined,
-      onSnapshotSignatureChange: () => undefined,
-    });
-  }, [
-    autoRepairState,
-    clippdExportState,
-    pairings,
-    players,
-    roundSetup,
-    scoreboardImportState,
-    scorecardRows,
-    scorecardsGenerated,
-    sharedTournamentId,
-    teams,
-    tournament,
-    tournamentId,
-  ]);
+  const roundHydrationRequestRef = useRef(0);
 
   const applyRoundHydration = useCallback(
     (roundNumber: number) => {
@@ -875,23 +836,27 @@ export default function TournamentPage() {
     [hydrationPendingRef, tournamentId]
   );
 
-  const handleRoundSelectChange = (event: ChangeEvent<HTMLSelectElement>) => {
+  const handleRoundSelectChange = async (event: ChangeEvent<HTMLSelectElement>) => {
     const nextRoundNumber = Number(event.target.value) || 1;
     if (nextRoundNumber === normalizedRoundSetup.roundNumber) {
       return;
     }
 
-    persistVisibleRoundState();
+    const requestId = ++roundHydrationRequestRef.current;
+    await flushPendingSaves();
+    if (requestId !== roundHydrationRequestRef.current) return;
     applyRoundHydration(nextRoundNumber);
   };
 
-  const handleAddRound = () => {
+  const handleAddRound = async () => {
     if (isTournamentFinalized) {
       return;
     }
 
     const nextRoundNumber = roundManager.roundOptions.length + 1;
-    persistVisibleRoundState();
+    const requestId = ++roundHydrationRequestRef.current;
+    await flushPendingSaves();
+    if (requestId !== roundHydrationRequestRef.current) return;
     setTournamentMeta((current) => ({
       ...current,
       rounds: String(Math.max(Number(current.rounds) || 1, nextRoundNumber)),
@@ -922,6 +887,12 @@ export default function TournamentPage() {
       ],
     }));
   };
+
+  const handleTournamentNavigation = useCallback(async (event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    event.preventDefault();
+    await flushPendingSaves();
+    window.location.assign(href);
+  }, [flushPendingSaves]);
 
   const handleScoreInputChange = (rowId: number, holeIndex: number, value: string) => {
     if (isTournamentFinalized) {
@@ -1174,7 +1145,7 @@ export default function TournamentPage() {
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
-        <Link href="/dashboard" className="flex items-center gap-3">
+        <Link href="/dashboard" onClick={(event) => void handleTournamentNavigation(event, "/dashboard")} className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
           </div>
@@ -1187,10 +1158,10 @@ export default function TournamentPage() {
         </Link>
 
         <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard" onClick={(event) => void handleTournamentNavigation(event, "/dashboard")}>
             Dashboard
           </Link>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/live" onClick={(event) => void handleTournamentNavigation(event, "/live")}>
             Live Scores
           </Link>
         </nav>

@@ -533,17 +533,15 @@ const completeTournamentFromSources = (
   };
 };
 
-export const loadTournamentStorageEnvelope = (tournamentId: string): TournamentStorageEnvelope | null => {
-  if (typeof window === "undefined" || !tournamentId) {
+export const parseTournamentStorageEnvelope = (
+  tournamentId: string,
+  rawValue: string | null
+): TournamentStorageEnvelope | null => {
+  if (!tournamentId || !rawValue) {
     return null;
   }
 
   try {
-    const rawValue = window.localStorage.getItem(getTournamentStateStorageKey(tournamentId));
-    if (!rawValue) {
-      return null;
-    }
-
     const parsedValue = JSON.parse(rawValue) as unknown;
     if (parsedValue && typeof parsedValue === "object" && "version" in parsedValue && (parsedValue as TournamentStorageEnvelope).version === 2) {
       const tournamentMeta = loadTournamentsFromStorage().find((tournament) => tournament.id === tournamentId);
@@ -579,7 +577,19 @@ export const loadTournamentStorageEnvelope = (tournamentId: string): TournamentS
   return null;
 };
 
-export const saveTournamentStorageEnvelope = (tournamentId: string, envelope: TournamentStorageEnvelope) => {
+export const loadTournamentStorageEnvelope = (tournamentId: string): TournamentStorageEnvelope | null => {
+  if (typeof window === "undefined" || !tournamentId) return null;
+  return parseTournamentStorageEnvelope(
+    tournamentId,
+    window.localStorage.getItem(getTournamentStateStorageKey(tournamentId))
+  );
+};
+
+export const saveTournamentStorageEnvelope = (
+  tournamentId: string,
+  envelope: TournamentStorageEnvelope,
+  options: { allowEmptyOverwrite?: boolean } = {}
+) => {
   if (typeof window === "undefined" || !tournamentId) {
     return;
   }
@@ -587,6 +597,7 @@ export const saveTournamentStorageEnvelope = (tournamentId: string, envelope: To
   const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
 
   if (
+    !options.allowEmptyOverwrite &&
     currentEnvelope &&
     (currentEnvelope.tournament.teams.length > 0 || currentEnvelope.tournament.players.length > 0) &&
     (envelope.tournament.teams.length === 0 || envelope.tournament.players.length === 0)
@@ -615,13 +626,10 @@ export const loadTournamentStateFromStorage = <T,>(tournamentId: string): T | nu
       return null;
     }
 
-    const parsedValue = JSON.parse(rawValue) as unknown;
+    const envelope = parseTournamentStorageEnvelope(tournamentId, rawValue);
+    if (envelope) return envelope.uiState as T;
 
-    if (parsedValue && typeof parsedValue === "object" && "version" in parsedValue && (parsedValue as TournamentStorageEnvelope).version === 2) {
-      return normalizeLegacyUiState((parsedValue as TournamentStorageEnvelope).uiState) as T;
-    }
-
-    return parsedValue as T;
+    return JSON.parse(rawValue) as T;
   } catch {
     return null;
   }

@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import { toDataURL } from "qrcode";
 import { loadComparisonScores } from "../services/scoreService";
 import {
   hydratePairingsWithPlayerIds,
+  loadTournamentPageRoundHydration,
   loadTournamentPageState,
   persistTournamentPageState,
   type TournamentPageLoadResult,
 } from "../services/tournamentService";
+import { createTournamentSaveCoordinator } from "../services/tournamentSaveCoordinator";
 import {
   loadSharedTournamentIdFromStorage,
   loadTournamentsFromStorage,
@@ -120,6 +122,7 @@ export const useTournamentPageLoading = ({
 }) => {
   const hasLoadedFromStorageRef = useRef(false);
   const hydrationPendingRef = useRef(false);
+  const authenticatedHydrationRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
@@ -129,14 +132,11 @@ export const useTournamentPageLoading = ({
     let isCancelled = false;
     hasLoadedFromStorageRef.current = false;
     hydrationPendingRef.current = false;
+    authenticatedHydrationRef.current = false;
 
     const loadStoredOrRemoteSnapshot = async () => {
       try {
-        const loadResultOrPromise = loadTournamentPageState(tournamentId);
-        const loadResult: TournamentPageLoadResult =
-          typeof (loadResultOrPromise as Promise<unknown>).then === "function"
-            ? await (loadResultOrPromise as Promise<TournamentPageLoadResult>)
-            : (loadResultOrPromise as TournamentPageLoadResult);
+        const loadResult: TournamentPageLoadResult = await loadTournamentPageState(tournamentId);
         if (isCancelled) {
           return;
         }
@@ -159,6 +159,9 @@ export const useTournamentPageLoading = ({
         if (loadResult.sharedTournamentId) {
           setSharedTournamentId(loadResult.sharedTournamentId);
         }
+        hasLoadedFromStorageRef.current = true;
+        hydrationPendingRef.current = loadResult.hydrationPending;
+        authenticatedHydrationRef.current = Boolean(loadResult.authenticated);
         const hydratedPairings = hydratePairingsWithPlayerIds(
           loadResult.hydration.pairings,
           loadResult.hydration.players
@@ -173,8 +176,6 @@ export const useTournamentPageLoading = ({
         setClippdExportState(loadResult.hydration.clippdExportState);
         setScoreboardImportState(loadResult.hydration.scoreboardImportState);
         setAutoRepairState(loadResult.hydration.autoRepairState);
-        hasLoadedFromStorageRef.current = true;
-        hydrationPendingRef.current = loadResult.hydrationPending;
       } catch (error) {
         if (!isCancelled) {
           hasLoadedFromStorageRef.current = true;
@@ -204,7 +205,7 @@ export const useTournamentPageLoading = ({
     tournamentId,
   ]);
 
-  return { hasLoadedFromStorageRef, hydrationPendingRef };
+  return { hasLoadedFromStorageRef, hydrationPendingRef, authenticatedHydrationRef };
 };
 
 export const useTournamentPagePersistence = ({
@@ -216,6 +217,7 @@ export const useTournamentPagePersistence = ({
   setSharedTournamentId,
   hasLoadedFromStorageRef,
   hydrationPendingRef,
+  authenticatedHydrationRef,
   isCoachAuthenticated,
 }: {
   tournamentId: string;
@@ -226,18 +228,12 @@ export const useTournamentPagePersistence = ({
   setSharedTournamentId: SetState<string>;
   hasLoadedFromStorageRef: MutableRefObject<boolean>;
   hydrationPendingRef: MutableRefObject<boolean>;
+  authenticatedHydrationRef: MutableRefObject<boolean>;
   isCoachAuthenticated: boolean;
 }) => {
   const snapshotSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSnapshotSignatureRef = useRef("");
-
-  useEffect(() => {
-    return () => {
-      if (snapshotSyncTimeoutRef.current) {
-        clearTimeout(snapshotSyncTimeoutRef.current);
-      }
-    };
-  }, []);
+  const saveCoordinatorRef = useRef(createTournamentSaveCoordinator());
 
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
@@ -248,28 +244,31 @@ export const useTournamentPagePersistence = ({
       return;
     }
 
-    if (hydrationPendingRef.current) {
-      hydrationPendingRef.current = false;
-      return;
-    }
+    hydrationPendingRef.current = false;
 
-    persistTournamentPageState({
-      tournamentId,
-      sharedTournamentId,
-      tournament,
-      state: toLegacyUiState(state),
-      snapshotSyncTimeout: snapshotSyncTimeoutRef.current,
-      lastSnapshotSignature: lastSnapshotSignatureRef.current,
-      onSharedTournamentIdChange: setSharedTournamentId,
-      onSnapshotTimeoutChange: (timeout) => {
-        snapshotSyncTimeoutRef.current = timeout;
-      },
-      onSnapshotSignatureChange: (signature) => {
-        lastSnapshotSignatureRef.current = signature;
-      },
-    });
+    const stateSnapshot = toLegacyUiState(state);
+    saveCoordinatorRef.current.enqueue((isObsolete) =>
+      persistTournamentPageState({
+        tournamentId,
+        sharedTournamentId,
+        tournament,
+        state: stateSnapshot,
+        snapshotSyncTimeout: snapshotSyncTimeoutRef.current,
+        lastSnapshotSignature: lastSnapshotSignatureRef.current,
+        onSharedTournamentIdChange: setSharedTournamentId,
+        onSnapshotTimeoutChange: (timeout) => {
+          snapshotSyncTimeoutRef.current = timeout;
+        },
+        onSnapshotSignatureChange: (signature) => {
+          if (!isObsolete()) lastSnapshotSignatureRef.current = signature;
+        },
+        isObsolete,
+        skipRemoteSync: !(isCoachAuthenticated || authenticatedHydrationRef.current),
+      })
+    );
   }, [
     hasLoadedFromStorageRef,
+    authenticatedHydrationRef,
     hydrationPendingRef,
     isCoachAuthenticated,
     setSharedTournamentId,
@@ -279,6 +278,9 @@ export const useTournamentPagePersistence = ({
     tournament,
     tournamentId,
   ]);
+
+  const flushPendingSaves = useCallback(() => saveCoordinatorRef.current.flush(), []);
+  return { flushPendingSaves };
 };
 
 export const useTournamentStoragePolling = ({
@@ -295,6 +297,8 @@ export const useTournamentStoragePolling = ({
   setClippdExportState,
   setScoreboardImportState,
   setAutoRepairState,
+  hydrationPendingRef,
+  flushPendingSaves,
 }: {
   tournamentId: string;
   storageKey: string;
@@ -309,27 +313,33 @@ export const useTournamentStoragePolling = ({
   setClippdExportState: SetState<LegacyTournamentUiState["clippdExportState"]>;
   setScoreboardImportState: SetState<LegacyTournamentUiState["scoreboardImportState"]>;
   setAutoRepairState: SetState<LegacyTournamentUiState["autoRepairState"]>;
+  hydrationPendingRef: MutableRefObject<boolean>;
+  flushPendingSaves: () => Promise<void>;
 }) => {
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
       return;
     }
 
-    const syncFromStorage = () => {
+    let isCancelled = false;
+    const syncFromStorage = async () => {
       try {
-        const storedValue = window.localStorage.getItem(storageKey);
-        if (!storedValue) {
-          return;
-        }
-
-        const parsedValue = JSON.parse(storedValue) as Partial<PersistedTournamentPageState>;
+        await flushPendingSaves();
+        if (isCancelled) return;
         const latestState = latestStateRef.current;
+        const requestedRoundNumber = Number(latestState.roundSetup.roundNumber) || 1;
+        const storedRound = loadTournamentPageRoundHydration(tournamentId, requestedRoundNumber);
+        if (!storedRound || isCancelled || (Number(latestStateRef.current.roundSetup.roundNumber) || 1) !== requestedRoundNumber) return;
+        const parsedValue = storedRound.hydration;
+        let didChange = false;
 
         if (parsedValue.teams && JSON.stringify(parsedValue.teams) !== JSON.stringify(latestState.teams)) {
+          didChange = true;
           setTeams(parsedValue.teams);
         }
 
         if (parsedValue.players && JSON.stringify(parsedValue.players) !== JSON.stringify(latestState.players)) {
+          didChange = true;
           setPlayers(parsedValue.players);
         }
 
@@ -353,6 +363,7 @@ export const useTournamentStoragePolling = ({
           storedPairingsAreValid = pairingsAreValid;
 
           if (JSON.stringify(pairingsAreValid ? storedPairings : []) !== JSON.stringify(latestState.pairings)) {
+            didChange = true;
             setPairings(pairingsAreValid ? storedPairings : []);
           }
           if (!pairingsAreValid) {
@@ -361,46 +372,61 @@ export const useTournamentStoragePolling = ({
           }
         }
 
-        if (parsedValue.scorecards) {
-          const nextScorecardsGenerated = storedPairingsAreValid && Boolean(parsedValue.scorecards.scorecardsGenerated);
+        {
+          const nextScorecardsGenerated = storedPairingsAreValid && Boolean(parsedValue.scorecardsGenerated);
 
           if (nextScorecardsGenerated !== latestState.scorecardsGenerated) {
+            didChange = true;
             setScorecardsGenerated(nextScorecardsGenerated);
           }
 
-          const nextScorecardRows = storedPairingsAreValid ? parsedValue.scorecards.scorecardRows || [] : [];
+          const nextScorecardRows = storedPairingsAreValid ? parsedValue.scorecardRows || [] : [];
           if (JSON.stringify(nextScorecardRows) !== JSON.stringify(latestState.scorecardRows)) {
+            didChange = true;
             setScorecardRows(nextScorecardRows);
           }
 
-          if (JSON.stringify(parsedValue.scorecards.roundSetup || defaultRoundSetupState) !== JSON.stringify(latestState.roundSetup)) {
-            setRoundSetup(parsedValue.scorecards.roundSetup || defaultRoundSetupState);
+          if (JSON.stringify(parsedValue.roundSetup || defaultRoundSetupState) !== JSON.stringify(latestState.roundSetup)) {
+            didChange = true;
+            setRoundSetup(parsedValue.roundSetup || defaultRoundSetupState);
           }
         }
 
         if (parsedValue.clippdExportState && JSON.stringify(parsedValue.clippdExportState) !== JSON.stringify(latestState.clippdExportState)) {
+          didChange = true;
           setClippdExportState(parsedValue.clippdExportState);
         }
 
         if (parsedValue.scoreboardImportState && JSON.stringify(parsedValue.scoreboardImportState) !== JSON.stringify(latestState.scoreboardImportState)) {
+          didChange = true;
           setScoreboardImportState(parsedValue.scoreboardImportState);
         }
 
         if (parsedValue.autoRepairState && JSON.stringify(parsedValue.autoRepairState) !== JSON.stringify(latestState.autoRepairState)) {
+          didChange = true;
           setAutoRepairState(parsedValue.autoRepairState);
         }
+        if (didChange) hydrationPendingRef.current = true;
       } catch {
         // Ignore polling errors so the page remains responsive.
       }
     };
 
-    const intervalId = window.setInterval(syncFromStorage, 5000);
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === storageKey) void syncFromStorage();
+    };
+    window.addEventListener("storage", handleStorage);
+    const intervalId = window.setInterval(() => void syncFromStorage(), 5000);
 
     return () => {
+      isCancelled = true;
+      window.removeEventListener("storage", handleStorage);
       window.clearInterval(intervalId);
     };
   }, [
     defaultRoundSetupState,
+    flushPendingSaves,
+    hydrationPendingRef,
     latestStateRef,
     setAutoRepairState,
     setClippdExportState,

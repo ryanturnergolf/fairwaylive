@@ -100,12 +100,14 @@ export type TournamentPageLoadResult =
   | {
       status: "empty";
       hydrationPending: false;
+      authenticated?: boolean;
     }
   | {
       status: "metadata";
       tournament: StoredTournament;
       sharedTournamentId: string;
       hydrationPending: false;
+      authenticated?: boolean;
     }
   | {
       status: "hydrated";
@@ -114,6 +116,7 @@ export type TournamentPageLoadResult =
       tournament: StoredTournament | null;
       sharedTournamentId: string;
       hydrationPending: true;
+      authenticated?: boolean;
     };
 
 export type TournamentPagePersistenceInput = {
@@ -127,6 +130,8 @@ export type TournamentPagePersistenceInput = {
   onSharedTournamentIdChange: (sharedTournamentId: string) => void;
   onSnapshotTimeoutChange: (timeout: ReturnType<typeof setTimeout> | null) => void;
   onSnapshotSignatureChange: (signature: string) => void;
+  isObsolete?: () => boolean;
+  skipRemoteSync?: boolean;
 };
 
 export type TournamentRoundOptionReadModel = {
@@ -710,10 +715,10 @@ const loadTournamentAggregate = async (
     return null;
   }
 
-  const [tournamentRow, snapshot] = await Promise.all([
-    getTournamentRow(sharedTournamentUuidOrId).catch(() => null),
-    loadTournamentStateSnapshot(sharedTournamentUuidOrId).catch(() => null),
-  ]);
+  const snapshot = await loadTournamentStateSnapshot(sharedTournamentUuidOrId).catch(() => null);
+  const tournamentRow = snapshot
+    ? null
+    : await getTournamentRow(sharedTournamentUuidOrId).catch(() => null);
 
   if (!tournamentRow && !snapshot) {
     return null;
@@ -839,38 +844,64 @@ export const loadTournamentPageRoundHydration = (
   };
 };
 
-export const loadTournamentPageState = (tournamentId: string): TournamentPageLoadResult | Promise<TournamentPageLoadResult> => {
+const loadLocalTournamentPageState = (tournamentId: string): TournamentPageLoadResult | null => {
+  const storedEnvelope = loadTournamentStorageEnvelope(tournamentId);
+  if (!storedEnvelope) return null;
+  return {
+    status: "hydrated",
+    envelope: storedEnvelope,
+    hydration: hydrateTournamentPageEnvelope(storedEnvelope),
+    tournament: null,
+    sharedTournamentId: loadSharedTournamentIdFromStorage(tournamentId),
+    hydrationPending: true,
+  };
+};
+
+export const loadTournamentPageState = async (tournamentId: string): Promise<TournamentPageLoadResult> => {
   if (typeof window === "undefined" || !tournamentId) {
     return { status: "empty", hydrationPending: false };
   }
 
-  const storedEnvelope = loadTournamentStorageEnvelope(tournamentId);
-  if (storedEnvelope) {
+  const localResult = loadLocalTournamentPageState(tournamentId);
+  if (!localResult) {
+    const aggregate = await loadTournamentAggregate(tournamentId).catch(() => null);
+    if (!aggregate?.envelope) {
+      return aggregate
+        ? { status: "metadata", tournament: aggregate.tournament, sharedTournamentId: aggregate.sharedTournamentId, hydrationPending: false }
+        : { status: "empty", hydrationPending: false };
+    }
+    saveTournamentStorageEnvelope(tournamentId, aggregate.envelope, { allowEmptyOverwrite: true });
+    saveSharedTournamentIdToStorage(tournamentId, aggregate.sharedTournamentId);
     return {
       status: "hydrated",
-      envelope: storedEnvelope,
-      hydration: hydrateTournamentPageEnvelope(storedEnvelope),
-      tournament: null,
-      sharedTournamentId: "",
+      envelope: aggregate.envelope,
+      hydration: hydrateTournamentPageEnvelope(aggregate.envelope),
+      tournament: tournamentPageMetaFromSnapshotEnvelope(tournamentId, aggregate.envelope),
+      sharedTournamentId: aggregate.sharedTournamentId,
       hydrationPending: true,
     };
   }
 
-  return loadTournamentAggregate(tournamentId).then((aggregate): TournamentPageLoadResult => {
+  const accessToken = await getSupabaseAuthAccessToken().catch(() => "");
+  if (!accessToken) return localResult;
+
+  const remoteTournamentId = loadSharedTournamentIdFromStorage(tournamentId) || tournamentId;
+  const aggregate = await loadTournamentAggregate(remoteTournamentId).catch(() => null);
+  if (!aggregate?.envelope) {
+    if (localResult) return { ...localResult, authenticated: true };
     if (!aggregate) {
       return { status: "empty", hydrationPending: false };
     }
 
-    if (!aggregate.envelope) {
-      return {
-        status: "metadata",
-        tournament: aggregate.tournament,
-        sharedTournamentId: aggregate.sharedTournamentId,
-        hydrationPending: false,
-      };
-    }
+    return {
+      status: "metadata",
+      tournament: aggregate.tournament,
+      sharedTournamentId: aggregate.sharedTournamentId,
+      hydrationPending: false,
+    };
+  }
 
-    saveTournamentStorageEnvelope(tournamentId, aggregate.envelope);
+    saveTournamentStorageEnvelope(tournamentId, aggregate.envelope, { allowEmptyOverwrite: true });
     if (aggregate.localTournamentId) {
       saveSharedTournamentIdToStorage(aggregate.localTournamentId, aggregate.sharedTournamentId);
     }
@@ -883,8 +914,8 @@ export const loadTournamentPageState = (tournamentId: string): TournamentPageLoa
       tournament: tournamentPageMetaFromSnapshotEnvelope(tournamentId, aggregate.envelope),
       sharedTournamentId: aggregate.sharedTournamentId,
       hydrationPending: true,
+      authenticated: true,
     };
-  });
 };
 
 export const buildStableRosterPlayerIdMap = (roster: LegacyPlayer[]) =>
@@ -970,7 +1001,9 @@ export const persistTournamentPageState = ({
   onSharedTournamentIdChange,
   onSnapshotTimeoutChange,
   onSnapshotSignatureChange,
-}: TournamentPagePersistenceInput) => {
+  isObsolete = () => false,
+  skipRemoteSync = false,
+}: TournamentPagePersistenceInput): Promise<void> => (async () => {
   const hasInvalidPairings = state.pairings.length > 0 && !validatePairingIntegrity(state.pairings, state.players);
   const safeState = hasInvalidPairings
     ? {
@@ -1034,13 +1067,7 @@ export const persistTournamentPageState = ({
     return;
   }
 
-  void (async () => {
-    // Guard all remote mutations against unauthenticated state. The local
-    // envelope save above has already completed; skip remote sync silently.
-    const accessToken = typeof window === "undefined" ? "" : await getSupabaseAuthAccessToken().catch(() => "");
-    if (!accessToken) {
-      return;
-    }
+    if (skipRemoteSync) return;
 
     const nextSharedTournamentId = await ensureSharedTournament({
       fallbackId: tournamentId,
@@ -1056,7 +1083,7 @@ export const persistTournamentPageState = ({
       settings: tournament.settings,
     });
 
-    if (nextSharedTournamentId !== sharedTournamentId) {
+    if (!isObsolete() && nextSharedTournamentId !== sharedTournamentId) {
       saveSharedTournamentIdToStorage(tournamentId, nextSharedTournamentId);
       onSharedTournamentIdChange(nextSharedTournamentId);
     }
@@ -1074,11 +1101,19 @@ export const persistTournamentPageState = ({
       asPositiveInteger(safeState.scorecards.roundSetup.roundNumber) ?? 1
     );
 
+    if (isObsolete()) return;
+
     if (snapshotSyncTimeout) {
       clearTimeout(snapshotSyncTimeout);
     }
 
-    const nextSnapshotTimeout = setTimeout(() => {
+    await new Promise<void>((resolve) => {
+      const nextSnapshotTimeout = setTimeout(resolve, snapshotDelayMs);
+      onSnapshotTimeoutChange(nextSnapshotTimeout);
+    });
+    onSnapshotTimeoutChange(null);
+    if (isObsolete()) return;
+
       const latestEnvelope = loadTournamentStorageEnvelope(tournamentId) ?? envelope;
       if (!latestEnvelope || latestEnvelope.version !== 2) {
         return;
@@ -1095,22 +1130,15 @@ export const persistTournamentPageState = ({
       }
 
       onSnapshotSignatureChange(snapshotSignature);
-      void syncTournamentStateSnapshot({
+      const synced = await syncTournamentStateSnapshot({
         tournamentId: nextSharedTournamentId,
         localTournamentId: tournamentId,
         envelope: latestEnvelope,
-      }).then((synced) => {
-        if (!synced) {
-          onSnapshotSignatureChange("");
-        }
       });
-    }, snapshotDelayMs);
-
-    onSnapshotTimeoutChange(nextSnapshotTimeout);
-  })().catch((error) => {
-    console.warn("[TournamentService] Supabase tournament player sync failed; local storage remains saved.", error);
-  });
-};
+      if (!synced && !isObsolete()) onSnapshotSignatureChange("");
+})().catch((error) => {
+  console.warn("[TournamentService] Supabase tournament sync failed; local storage remains saved.", error);
+});
 
 const hasPairingData = (row: TournamentPlayerRow) =>
   row.group_number !== null || row.tee_number !== null || row.starting_hole !== null || row.marker_player_id !== null;
