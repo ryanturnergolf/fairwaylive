@@ -10,7 +10,7 @@ import {
   loadTournamentStorageEnvelope,
   mergeTournamentScoreSubmission,
 } from "../../lib/tournamentStorage";
-import { loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
+import { completeReview, loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
 import {
   buildScoreHoleEntryInput,
   type HoleStatisticsInput,
@@ -569,16 +569,22 @@ export default function PlayerScorecardPage() {
 
   const [scores, setScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
+  const scoresRef = useRef(scores);
+  const markerScoresRef = useRef(markerScores);
   const [markedPlayerSelfScores, setMarkedPlayerSelfScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [holeStats, setHoleStats] = useState<HoleStatCapture[]>(createEmptyHoleStats(scorecard.holes.length));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
+  const currentHoleIndexRef = useRef(0);
   const [savedHoles, setSavedHoles] = useState<number[]>([]);
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
+  const [scoreControlsReady, setScoreControlsReady] = useState(false);
+  const [submissionComplete, setSubmissionComplete] = useState(false);
   const [, setScoreDiagnostics] = useState<ScoreDiagnostics>(initialScoreDiagnostics);
   const finalizationVerifiedAtRef = useRef(0);
+  const scoreSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const refreshCurrentFinalizedStateForSave = async () => {
     const effectiveTournamentId = requestedTournamentId || resolvedShareTournamentId;
@@ -656,6 +662,7 @@ export default function PlayerScorecardPage() {
       let loadedSelfScores: number[] | null = null;
       let loadedMarkerScores: number[] | null = null;
       let loadedMarkedPlayerSelfScores: number[] | null = null;
+      let loadedSubmissionComplete = false;
       let localStorageLoadedCount = 0;
       let supabaseLoadedCount = 0;
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
@@ -708,6 +715,22 @@ export default function PlayerScorecardPage() {
           loadedMarkedPlayerSelfScores = hasAnyHoleScore(markedPlayerSelf?.holeScores)
             ? normalizeHoleScores(markedPlayerSelf?.holeScores, holeCount)
             : null;
+        }
+
+        if (!isCancelled) {
+          const localSelfScores = loadedSelfScores ?? normalizeHoleScores(undefined, holeCount);
+          const localMarkerScores = loadedMarkerScores ?? normalizeHoleScores(undefined, holeCount);
+          scoresRef.current = localSelfScores;
+          markerScoresRef.current = localMarkerScores;
+          setScores(localSelfScores);
+          setMarkerScores(localMarkerScores);
+          setSavedHoles(getScoredHoleNumbers(scorecard.holes, localSelfScores, localMarkerScores));
+          const firstLocalIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, localSelfScores);
+          if (firstLocalIncompleteIndex >= 0) {
+            currentHoleIndexRef.current = firstLocalIncompleteIndex;
+            setCurrentHoleIndex(firstLocalIncompleteIndex);
+          }
+          setScoreControlsReady(true);
         }
       }
 
@@ -767,6 +790,25 @@ export default function PlayerScorecardPage() {
           roundNumber,
           shareToken: requestedShareToken || undefined,
         });
+        const selectedSelfSubmitted = sharedScores.some(
+          (entry) =>
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
+            entry.entry_status === "submitted"
+        );
+        const markerEntrySubmitted = resolvedPlayerIds.markerPlayerId
+          ? sharedScores.some(
+              (entry) =>
+                resolvedPlayerIds.markerPlayerIds.includes(String(entry.player_id)) &&
+                resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
+                entry.entry_status === "submitted"
+            )
+          : false;
+        if (!isCancelled && selectedSelfSubmitted && markerEntrySubmitted) {
+          loadedSubmissionComplete = true;
+          setSubmissionComplete(true);
+          setView("submitted");
+        }
         supabaseLoadedCount = Math.max(
           supabaseLoadedCount,
           sharedScores.filter((entry) => hasAnyHoleScore(entry.hole_scores)).length
@@ -783,7 +825,10 @@ export default function PlayerScorecardPage() {
         };
 
         if (!hasAnyHoleScore(loadedSelfScores)) {
-          const sharedScoreboardSelfScores = getSharedScore(resolvedPlayerIds.selectedPlayerIds, undefined, true);
+          const sharedScoreboardSelfScores = getSharedScore(
+            resolvedPlayerIds.selectedPlayerIds,
+            resolvedPlayerIds.selectedPlayerIds
+          );
           if (hasAnyHoleScore(sharedScoreboardSelfScores)) {
             loadedSelfScores = sharedScoreboardSelfScores;
           }
@@ -821,6 +866,8 @@ export default function PlayerScorecardPage() {
           const nextScores = loadedSelfScores ?? normalizeHoleScores(undefined, holeCount);
           const nextMarkerScores = loadedMarkerScores ?? normalizeHoleScores(undefined, holeCount);
 
+          scoresRef.current = nextScores;
+          markerScoresRef.current = nextMarkerScores;
           setScores(nextScores);
           setMarkerScores(nextMarkerScores);
           if (loadedMarkedPlayerSelfScores) {
@@ -829,13 +876,17 @@ export default function PlayerScorecardPage() {
           setSavedHoles(getScoredHoleNumbers(scorecard.holes, nextScores, nextMarkerScores));
 
           const firstIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, nextScores);
-          if (firstIncompleteIndex >= 0) {
+          if (loadedSubmissionComplete) {
+            setView("submitted");
+          } else if (firstIncompleteIndex >= 0) {
+            currentHoleIndexRef.current = firstIncompleteIndex;
             setCurrentHoleIndex(firstIncompleteIndex);
           } else {
             setView("review");
           }
 
           setScoresLoaded(true);
+          setScoreControlsReady(true);
           if (isDevelopment) {
             setScoreDiagnostics((current) => ({
               ...current,
@@ -982,24 +1033,6 @@ export default function PlayerScorecardPage() {
     );
   }
 
-  const updateScore = (value: string) => {
-    const parsed = Number(value);
-    const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-
-    setScores((current) =>
-      current.map((score, index) => (index === currentHoleIndex ? safeValue : score))
-    );
-  };
-
-  const updateMarkerScore = (value: string) => {
-    const parsed = Number(value);
-    const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-
-    setMarkerScores((current) =>
-      current.map((score, index) => (index === currentHoleIndex ? safeValue : score))
-    );
-  };
-
   const updateCurrentHoleStats = (patch: Partial<HoleStatCapture>) => {
     setHoleStats((current) => {
       const normalizedStats =
@@ -1049,11 +1082,12 @@ export default function PlayerScorecardPage() {
     roundNumber: number,
     holeScores: number[],
     scope: "hole" | "round",
-    stats?: HoleStatisticsInput
+    stats?: HoleStatisticsInput,
+    saveStatistics = true
   ) => {
     const wasJustVerified = Date.now() - finalizationVerifiedAtRef.current < 1000;
     if (isTournamentFinalized || (!wasJustVerified && (await refreshCurrentFinalizedStateForSave()))) {
-      return;
+      return false;
     }
 
     const serviceSave = scope === "round" ? saveRound : saveHole;
@@ -1069,6 +1103,7 @@ export default function PlayerScorecardPage() {
       }));
     }
 
+    let saved = false;
     await serviceSave({
       tournamentId: sharedScoreTournamentId,
       roundNumber,
@@ -1081,6 +1116,7 @@ export default function PlayerScorecardPage() {
       shareToken: requestedShareToken || undefined,
     })
       .then((result) => {
+        saved = true;
         if (isDevelopment) {
           setScoreDiagnostics((current) => ({
             ...current,
@@ -1093,6 +1129,9 @@ export default function PlayerScorecardPage() {
       .then((result) => {
         void (async () => {
           try {
+            if (!saveStatistics) {
+              return;
+            }
             if (scope === "hole") {
               const strokes = Number(holeScores[currentHoleIndex]) || 0;
               if (strokes > 0) {
@@ -1141,6 +1180,80 @@ export default function PlayerScorecardPage() {
         }));
       }
     });
+    return saved;
+  };
+
+  const queueImmediateScoreSave = (kind: "self" | "marker", nextScores: number[]) => {
+    if (submissionComplete || !sharedScoreTournamentId || !resolvedPlayerIds) {
+      return scoreSaveQueueRef.current;
+    }
+
+    const playerId = kind === "self" ? resolvedPlayerIds.selectedPlayerId : resolvedPlayerIds.markerPlayerId;
+    if (!playerId || playerId === resolvedPlayerIds.selectedPlayerId && kind === "marker") {
+      setSaveError("Unable to save score. Marker assignment is invalid.");
+      return scoreSaveQueueRef.current;
+    }
+
+    const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", ""));
+    const enteredByPlayerId = resolvedPlayerIds.selectedPlayerId;
+    const normalizedScores = normalizeHoleScores(nextScores, scorecard.holes.length);
+    const localPlayerId = getLocalStoragePlayerId(
+      kind === "self" ? resolvedPlayerIds.selectedPlayerIds : resolvedPlayerIds.markerPlayerIds,
+      playerId
+    );
+
+    const queuedSave = scoreSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await saveScoreThroughService(
+          playerId,
+          enteredByPlayerId,
+          roundNumber,
+          normalizedScores,
+          "hole",
+          undefined,
+          false
+        );
+        if (saved && requestedTournamentId) {
+          mergeTournamentScoreSubmission(
+            requestedTournamentId,
+            localPlayerId,
+            resolvedPlayerIds.roundId,
+            normalizedScores,
+            kind
+          );
+        }
+      });
+    scoreSaveQueueRef.current = queuedSave;
+    return queuedSave;
+  };
+
+  const updateScore = (value: string) => {
+    const targetHoleIndex = currentHoleIndexRef.current;
+    const parsed = Number(value);
+    const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    const nextScores = scoresRef.current.map((score, index) => (index === targetHoleIndex ? safeValue : score));
+    scoresRef.current = nextScores;
+    setScores(nextScores);
+    if (safeValue > 0 && markerScoresRef.current[targetHoleIndex] > 0) {
+      const holeNumber = scorecard.holes[targetHoleIndex].holeNumber;
+      setSavedHoles((current) => current.includes(holeNumber) ? current : [...current, holeNumber]);
+    }
+    void queueImmediateScoreSave("self", nextScores);
+  };
+
+  const updateMarkerScore = (value: string) => {
+    const targetHoleIndex = currentHoleIndexRef.current;
+    const parsed = Number(value);
+    const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    const nextScores = markerScoresRef.current.map((score, index) => (index === targetHoleIndex ? safeValue : score));
+    markerScoresRef.current = nextScores;
+    setMarkerScores(nextScores);
+    if (safeValue > 0 && scoresRef.current[targetHoleIndex] > 0) {
+      const holeNumber = scorecard.holes[targetHoleIndex].holeNumber;
+      setSavedHoles((current) => current.includes(holeNumber) ? current : [...current, holeNumber]);
+    }
+    void queueImmediateScoreSave("marker", nextScores);
   };
 
   const handleSaveHole = async () => {
@@ -1219,25 +1332,40 @@ export default function PlayerScorecardPage() {
     }
 
     if (currentHoleIndex < scorecard.holes.length - 1) {
-      setCurrentHoleIndex((current) => current + 1);
+      const next = Math.min(currentHoleIndexRef.current + 1, scorecard.holes.length - 1);
+      currentHoleIndexRef.current = next;
+      setCurrentHoleIndex(next);
     }
   };
 
-  const handlePreviousHole = () => {
-    setCurrentHoleIndex((current) => Math.max(current - 1, 0));
+  const handlePreviousHole = async () => {
+    await scoreSaveQueueRef.current;
+    const next = Math.max(currentHoleIndexRef.current - 1, 0);
+    currentHoleIndexRef.current = next;
+    setCurrentHoleIndex(next);
   };
 
-  const handleNextHole = () => {
-    setCurrentHoleIndex((current) => Math.min(current + 1, scorecard.holes.length - 1));
+  const handleNextHole = async () => {
+    await scoreSaveQueueRef.current;
+    const next = Math.min(currentHoleIndexRef.current + 1, scorecard.holes.length - 1);
+    currentHoleIndexRef.current = next;
+    setCurrentHoleIndex(next);
   };
 
-  const handleReviewRound = () => {
+  const handleReviewRound = async () => {
+    await scoreSaveQueueRef.current;
     setView("review");
     setShowConfirm(false);
     setSaveError("");
   };
 
   const handleConfirmSubmit = async () => {
+    if (submissionComplete) {
+      setView("submitted");
+      setShowConfirm(false);
+      return;
+    }
+    await scoreSaveQueueRef.current;
     if (isTournamentFinalized || (await refreshCurrentFinalizedStateForSave())) {
       setSaveError(finalizedReadOnlyMessage);
       return;
@@ -1248,36 +1376,90 @@ export default function PlayerScorecardPage() {
       return;
     }
 
+    const persistedEntries = await loadComparisonScores({
+      tournamentId: sharedScoreTournamentId,
+      roundNumber: Number(scorecard.round),
+      shareToken: requestedShareToken || undefined,
+    });
+    const scorerAlreadySubmitted = persistedEntries.some(
+      (entry) =>
+        resolvedPlayerIds?.selectedPlayerIds.includes(String(entry.player_id)) &&
+        resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
+        entry.entry_status === "submitted"
+    );
+    const markerAlreadySubmitted = persistedEntries.some(
+      (entry) =>
+        resolvedPlayerIds?.markerPlayerIds.includes(String(entry.player_id)) &&
+        resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
+        entry.entry_status === "submitted"
+    );
+    if (scorerAlreadySubmitted && markerAlreadySubmitted) {
+      setSubmissionComplete(true);
+      setView("submitted");
+      return;
+    }
+
     // Validate markerPlayerId before submitting
     if (!isValidPlayerId(scorecard.markerPlayerId)) {
       setSaveError("Unable to submit. Marker player information is invalid.");
       return;
     }
 
-    const roundNumber = String(Number(scorecard.round) || 1);
-    const roundId = `round-${roundNumber}`;
-    const stableMarkerPlayerId = String(scorecard.markerPlayerId);
-    const localMarkerPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.markerPlayerIds ?? [stableMarkerPlayerId], stableMarkerPlayerId);
-    // Submit marked player's self scores as complete
-    const ok = requestedTournamentId
-      ? mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, markedPlayerSelfScores, "self")
-      : true;
-    if (isDevelopment) {
-      setScoreDiagnostics((current) => ({
-        ...current,
-        localStorageSaveAttempted: "yes",
-        localStorageSaveResult: ok ? "submit ok" : "submit failed",
-        supabaseSaveTournamentId: sharedScoreTournamentId,
-        savePlayerId: stableMarkerPlayerId,
-        saveMarkerPlayerId: stableMarkerPlayerId,
-      }));
-    }
-    if (!ok && !sharedScoreTournamentId) {
-      setSaveError("Unable to submit. Please try again.");
+    const roundNumber = Number(scorecard.round);
+    if (!Number.isInteger(roundNumber) || roundNumber < 1 || scores.some((score) => score <= 0) || markerScores.some((score) => score <= 0)) {
+      setSaveError("Complete every scorer and marker score before submitting.");
       return;
     }
-    void saveScoreThroughService(stableMarkerPlayerId, stableMarkerPlayerId, Number(roundNumber), markedPlayerSelfScores, "round");
-    setView("submitted");
+    if (scores.some((score, index) => score !== markerScores[index])) {
+      setSaveError("Resolve every scorer and marker mismatch before submitting.");
+      return;
+    }
+    const stableMarkerPlayerId = String(scorecard.markerPlayerId);
+    const submittedAt = new Date().toISOString();
+    try {
+      await saveRound({
+        tournamentId: sharedScoreTournamentId,
+        roundNumber,
+        playerId: scorecard.playerId,
+        enteredByPlayerId: scorecard.playerId,
+        holeScores: [...scores],
+        total: scores.reduce((sum, score) => sum + score, 0),
+        entryStatus: "submitted",
+        submittedAt,
+        shareToken: requestedShareToken || undefined,
+      });
+      await saveRound({
+        tournamentId: sharedScoreTournamentId,
+        roundNumber,
+        playerId: stableMarkerPlayerId,
+        enteredByPlayerId: scorecard.playerId,
+        holeScores: [...markerScores],
+        total: markerScores.reduce((sum, score) => sum + score, 0),
+        entryStatus: "submitted",
+        submittedAt,
+        shareToken: requestedShareToken || undefined,
+      });
+      await Promise.all([
+        completeReview({
+          tournamentId: sharedScoreTournamentId,
+          roundNumber,
+          playerId: scorecard.playerId,
+          selfReviewComplete: true,
+          shareToken: requestedShareToken || undefined,
+        }),
+        completeReview({
+          tournamentId: sharedScoreTournamentId,
+          roundNumber,
+          playerId: stableMarkerPlayerId,
+          markerReviewComplete: true,
+          shareToken: requestedShareToken || undefined,
+        }),
+      ]);
+      setSubmissionComplete(true);
+      setView("submitted");
+    } catch (error) {
+      setSaveError(`Unable to submit scores. ${getErrorMessage(error)}`);
+    }
   };
 
   const isHoleSaved = savedHoles.includes(currentHole.holeNumber);
@@ -1585,8 +1767,7 @@ export default function PlayerScorecardPage() {
               max="12"
               value={scores[currentHoleIndex] === 0 ? "" : scores[currentHoleIndex]}
               onChange={(event) => updateScore(event.target.value)}
-              onInput={(event) => updateScore(event.currentTarget.value)}
-              disabled={isTournamentFinalized}
+              disabled={!scoreControlsReady || isTournamentFinalized || submissionComplete}
               placeholder="Enter score"
               className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
             />
@@ -1601,8 +1782,7 @@ export default function PlayerScorecardPage() {
                 max="12"
                 value={markerScores[currentHoleIndex] === 0 ? "" : markerScores[currentHoleIndex]}
                 onChange={(event) => updateMarkerScore(event.target.value)}
-                onInput={(event) => updateMarkerScore(event.currentTarget.value)}
-                disabled={isTournamentFinalized}
+                disabled={!scoreControlsReady || isTournamentFinalized || submissionComplete}
                 placeholder="Enter score"
                 className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-4 text-center text-2xl font-black tracking-[-0.02em] text-[#0B3D2E] outline-none"
               />
@@ -1622,7 +1802,7 @@ export default function PlayerScorecardPage() {
                       type="button"
                       aria-pressed={currentStatCapture.fairwayHit === value}
                       onClick={() => toggleBooleanStat("fairwayHit", value)}
-                      disabled={isTournamentFinalized}
+                      disabled={!scoreControlsReady || isTournamentFinalized}
                       className={statButtonClass(currentStatCapture.fairwayHit === value)}
                     >
                       {value ? "Yes" : "No"}
@@ -1643,7 +1823,7 @@ export default function PlayerScorecardPage() {
                     type="button"
                     aria-pressed={currentStatCapture.greenInRegulation === value}
                     onClick={() => toggleBooleanStat("greenInRegulation", value)}
-                    disabled={isTournamentFinalized}
+                    disabled={!scoreControlsReady || isTournamentFinalized}
                     className={statButtonClass(currentStatCapture.greenInRegulation === value)}
                   >
                     {value ? "Yes" : "No"}
@@ -1663,7 +1843,7 @@ export default function PlayerScorecardPage() {
                     type="button"
                     aria-pressed={currentStatCapture.putts === value}
                     onClick={() => toggleNumberStat("putts", value)}
-                    disabled={isTournamentFinalized}
+                    disabled={!scoreControlsReady || isTournamentFinalized}
                     className={statButtonClass(currentStatCapture.putts === value)}
                   >
                     {value}
@@ -1683,7 +1863,7 @@ export default function PlayerScorecardPage() {
                     type="button"
                     aria-pressed={currentStatCapture.penaltyStrokes === value}
                     onClick={() => toggleNumberStat("penaltyStrokes", value)}
-                    disabled={isTournamentFinalized}
+                    disabled={!scoreControlsReady || isTournamentFinalized}
                     className={statButtonClass(currentStatCapture.penaltyStrokes === value)}
                   >
                     {value}
@@ -1696,7 +1876,7 @@ export default function PlayerScorecardPage() {
           <button
             type="button"
             onClick={handleSaveHole}
-            disabled={isTournamentFinalized || scores[currentHoleIndex] === 0}
+            disabled={!scoreControlsReady || isTournamentFinalized || scores[currentHoleIndex] === 0}
             className="mt-4 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Save Hole
@@ -1709,7 +1889,7 @@ export default function PlayerScorecardPage() {
             <button
               type="button"
               onClick={handlePreviousHole}
-              disabled={currentHoleIndex === 0}
+              disabled={!scoreControlsReady || currentHoleIndex === 0}
               className="rounded-full border border-[#B8892D] px-4 py-3 text-xs font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous Hole
@@ -1717,7 +1897,7 @@ export default function PlayerScorecardPage() {
             <button
               type="button"
               onClick={handleNextHole}
-              disabled={currentHoleIndex === scorecard.holes.length - 1}
+              disabled={!scoreControlsReady || currentHoleIndex === scorecard.holes.length - 1}
               className="rounded-full border border-[#B8892D] px-4 py-3 text-xs font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next Hole
@@ -1728,7 +1908,7 @@ export default function PlayerScorecardPage() {
         <button
           type="button"
           onClick={handleReviewRound}
-          disabled={isTournamentFinalized || !allHolesScored}
+          disabled={!scoreControlsReady || isTournamentFinalized || !allHolesScored}
           className="mt-5 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isTournamentFinalized ? "Tournament Finalized" : "Review & Submit Round"}

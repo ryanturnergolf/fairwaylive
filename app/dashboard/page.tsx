@@ -799,6 +799,22 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
+                      <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-[#F8FBF8] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#2E6F76]">
+                          Score Verification
+                        </p>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {summary.scoreVerification.map((score) => (
+                            <div key={score.playerId} className="rounded-[16px] border border-[#D6E0D8] bg-white p-3">
+                              <p className="font-black text-[#0B3D2E]">{score.playerName}</p>
+                              <p className="mt-1 text-sm font-semibold text-[#51635C]">
+                                Scorer {score.scorerTotal ?? "--"} · Marker {score.markerTotal ?? "--"} · {score.matchStatus}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="mt-6 rounded-[20px] border border-[#E3D4B7] bg-[#FCFAF5] p-4">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                           <div>
@@ -827,6 +843,7 @@ export default function DashboardPage() {
                                   <th className="px-3 py-2">Players</th>
                                   <th className="px-3 py-2">Current Hole</th>
                                   <th className="px-3 py-2">Reasons</th>
+                                  <th className="px-3 py-2">Score Verification</th>
                                   <th className="px-3 py-2">Severity</th>
                                 </tr>
                               </thead>
@@ -858,6 +875,18 @@ export default function DashboardPage() {
                                     </td>
                                     <td className="border-y border-[#E8DCC8] px-3 py-3 text-[#51635C]">
                                       {item.reasons.join(", ")}
+                                    </td>
+                                    <td className="border-y border-[#E8DCC8] px-3 py-3 text-[#51635C]">
+                                      <div className="space-y-2">
+                                        {item.scoreVerification.map((score) => (
+                                          <div key={score.playerId}>
+                                            <p className="font-black text-[#0B3D2E]">{score.playerName}</p>
+                                            <p className="text-xs">
+                                              Scorer {score.scorerTotal ?? "--"} · Marker {score.markerTotal ?? "--"} · {score.matchStatus}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </td>
                                     <td className="rounded-r-[16px] border-y border-r border-[#E8DCC8] px-3 py-3">
                                       <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${directorReviewSeverityStyles[item.severity]}`}>

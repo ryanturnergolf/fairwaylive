@@ -34,6 +34,7 @@ export type DirectorTournamentSummary = {
   groupsInProgress: number;
   groups: DirectorGroupStatus[];
   reviewQueue: DirectorReviewQueueItem[];
+  scoreVerification: DirectorReviewPlayerScore[];
   lastScoreReceivedAt: string | null;
   lastSnapshotAt: string | null;
   lastPlayerSyncAt: string | null;
@@ -76,7 +77,16 @@ export type DirectorReviewQueueItem = {
   currentHole: number;
   reasons: DirectorReviewReason[];
   severity: DirectorReviewSeverity;
+  scoreVerification: DirectorReviewPlayerScore[];
   reviewHref: string;
+};
+
+export type DirectorReviewPlayerScore = {
+  playerId: string;
+  playerName: string;
+  scorerTotal: number | null;
+  markerTotal: number | null;
+  matchStatus: "Match" | "Mismatch" | "Missing scorer" | "Missing marker" | "Incomplete";
 };
 
 export type DirectorCompletionState = "On Pace" | "Nearly Complete" | "Ready to Close" | "Complete";
@@ -229,16 +239,6 @@ const scoreEntryToScoreLike = (entry: ScoreEntryRow): ScoreLike => ({
   receivedAt: entry.submitted_at ?? entry.updated_at ?? entry.created_at,
 });
 
-const getAggregateScores = (aggregate: TournamentAggregate | null): ScoreLike[] =>
-  (aggregate?.scores ?? []).map((score) => ({
-    playerId: String(score.playerId),
-    enteredByPlayerId: score.enteredBy,
-    entryKind: score.enteredBy,
-    holeScores: Array.isArray(score.holeScores) ? score.holeScores.map((value) => Number(value) || 0) : [],
-    status: score.status,
-    receivedAt: null,
-  }));
-
 const hasStartedScore = (score: ScoreLike) =>
   score.status === "live" ||
   score.status === "complete" ||
@@ -337,6 +337,36 @@ const getTournamentReviewHref = (tournamentId: string, groupNumber: number) => {
   return `/tournament/${encodeURIComponent(tournamentId)}?${params.toString()}`;
 };
 
+const buildScoreVerification = (
+  groups: DirectorGroupStatus[],
+  scores: ScoreLike[],
+  holeCount: number
+): DirectorReviewPlayerScore[] => {
+  const scoresByPlayerId = new Map<string, ScoreLike[]>();
+  scores.forEach((score) => scoresByPlayerId.set(score.playerId, [...(scoresByPlayerId.get(score.playerId) ?? []), score]));
+
+  return groups.flatMap((group) => group.players).map((player) => {
+    const persistedScores = scoresByPlayerId.get(player.playerId) ?? [];
+    const scorerScore = getBestScore(getScoresByKind(persistedScores, "self"));
+    const markerScore = getBestScore(getScoresByKind(persistedScores, "marker"));
+    const scorerComplete = Boolean(scorerScore && hasFinishedScore(scorerScore, holeCount));
+    const markerComplete = Boolean(markerScore && hasFinishedScore(markerScore, holeCount));
+    const scorerTotal = scorerScore ? scorerScore.holeScores.slice(0, holeCount).reduce((sum, score) => sum + score, 0) : null;
+    const markerTotal = markerScore ? markerScore.holeScores.slice(0, holeCount).reduce((sum, score) => sum + score, 0) : null;
+    const matchStatus: DirectorReviewPlayerScore["matchStatus"] = !scorerScore
+      ? "Missing scorer"
+      : !markerScore
+        ? "Missing marker"
+        : scorerTotal !== markerTotal || scoreArraysConflict(scorerScore.holeScores, markerScore.holeScores)
+          ? "Mismatch"
+          : !scorerComplete || !markerComplete
+            ? "Incomplete"
+            : "Match";
+
+    return { playerId: player.playerId, playerName: player.playerName, scorerTotal, markerTotal, matchStatus };
+  });
+};
+
 const buildReviewQueue = (
   groups: DirectorGroupStatus[],
   scores: ScoreLike[],
@@ -409,6 +439,8 @@ const buildReviewQueue = (
         return null;
       }
 
+      const scoreVerification = buildScoreVerification([group], scores, holeCount);
+
       return {
         id: `${tournamentId || sharedTournamentId}-group-${group.groupNumber}`,
         tournamentId,
@@ -419,6 +451,7 @@ const buildReviewQueue = (
         currentHole: group.currentHole,
         reasons: [...reasons],
         severity: getReviewSeverity(reasons),
+        scoreVerification,
         reviewHref: getTournamentReviewHref(tournamentId || sharedTournamentId, group.groupNumber),
       };
     })
@@ -633,7 +666,7 @@ export const buildDirectorTournamentSummary = async ({
     `Round ${roundNumber}`;
   const scoreEntries = await loadScoreEntries(sharedTournamentId, roundNumber);
   const officialHoleSet = buildOfficialHoleSet(await loadOfficialHoleEntries(sharedTournamentId, roundNumber));
-  const scores = [...scoreEntries.map(scoreEntryToScoreLike), ...getAggregateScores(aggregate)];
+  const scores = scoreEntries.map(scoreEntryToScoreLike);
   const holeCount = getHoleCount(aggregate, localEnvelope);
   const groupSummary = summarizeGroups(
     buildGroups(aggregate, localEnvelope),
@@ -663,6 +696,7 @@ export const buildDirectorTournamentSummary = async ({
     completion: buildCompletion(groupSummary.groups, scores, holeCount, reviewQueue),
     ...groupSummary,
     reviewQueue,
+    scoreVerification: buildScoreVerification(groupSummary.groups, scores, holeCount),
     lastScoreReceivedAt: getLatestTimestamp(scores.map((score) => score.receivedAt)),
     lastSnapshotAt: aggregate?.snapshotUpdatedAt ?? null,
     lastPlayerSyncAt: getLatestTimestamp(

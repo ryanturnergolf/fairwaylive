@@ -487,6 +487,12 @@ test("already-open phone scorecard rejects saves after remote finalization", asy
     await phonePage.getByRole("button", { name: "Edit Scores" }).click();
     await phonePage.getByLabel("Ava Green's Score").fill("4");
     await expect(phonePage.getByRole("button", { name: "Save Hole" })).toBeEnabled();
+    await phonePage.waitForTimeout(250);
+    const scoreSavesBeforeFinalization = scoreSaveRequests;
+    const localScoreCountBeforeFinalization = await phonePage.evaluate((key) => {
+      const envelope = JSON.parse(window.localStorage.getItem(key) || "{}");
+      return envelope.tournament.scores.length;
+    }, tournamentStorageKey);
 
     currentSnapshot = finalizedSnapshot;
     await phonePage.getByRole("button", { name: "Save Hole" }).click();
@@ -495,13 +501,13 @@ test("already-open phone scorecard rejects saves after remote finalization", asy
       phonePage.getByText("This tournament has been finalized and is read-only. Score submissions are locked for historical viewing.")
     ).toBeVisible();
     await expect(phonePage.getByRole("button", { name: "Save Hole" })).toBeDisabled();
-    expect(scoreSaveRequests).toBe(0);
+    expect(scoreSaveRequests).toBe(scoreSavesBeforeFinalization);
 
     const localScoreCount = await phonePage.evaluate((key) => {
       const envelope = JSON.parse(window.localStorage.getItem(key) || "{}");
       return envelope.tournament.scores.length;
     }, tournamentStorageKey);
-    expect(localScoreCount).toBe(0);
+    expect(localScoreCount).toBe(localScoreCountBeforeFinalization);
   } finally {
     await phoneContext.close();
   }

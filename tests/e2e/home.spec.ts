@@ -229,6 +229,7 @@ test("director dashboard review queue links groups needing review to live scorin
   await expect(page.getByText("Review Queue", { exact: true })).toBeVisible();
   await expect(page.getByText("Self score ≠ Marker score")).toBeVisible();
   await expect(page.getByText("Critical")).toBeVisible();
+  await expect(page.getByText(/Scorer 4 · Marker 5 · (Mismatch|Incomplete)/).first()).toBeVisible();
 
   await page.getByText("Self score ≠ Marker score").click();
 
