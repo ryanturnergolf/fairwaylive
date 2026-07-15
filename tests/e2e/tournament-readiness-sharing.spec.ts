@@ -339,6 +339,15 @@ const routeShareTokenApi = async (page: Page, token = "readiness-mobile-scoring-
     expect(route.request().headers().authorization).toBe(`Bearer ${e2eCoachAccessToken}`);
     const postData = route.request().postDataJSON() as Record<string, unknown>;
 
+    if (postData.action === "reconcileTournamentPlayers") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+      return;
+    }
+
     if (postData.action !== "createShareToken") {
       await route.fallback();
       return;

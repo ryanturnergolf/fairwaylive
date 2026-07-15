@@ -15,6 +15,7 @@ import {
 } from "../tournamentStorage";
 import type { LegacyPairingGroup, LegacyScorecardRow, LegacyTournamentUiState } from "../tournamentModel";
 import type { StoredTournament } from "../tournamentStorage";
+import { validatePairingIntegrity } from "../services/tournamentPageHelpers";
 
 type SetState<T> = (value: T | ((current: T) => T)) => void;
 
@@ -158,11 +159,16 @@ export const useTournamentPageLoading = ({
         if (loadResult.sharedTournamentId) {
           setSharedTournamentId(loadResult.sharedTournamentId);
         }
+        const hydratedPairings = hydratePairingsWithPlayerIds(
+          loadResult.hydration.pairings,
+          loadResult.hydration.players
+        );
+        const pairingsAreValid = validatePairingIntegrity(hydratedPairings, loadResult.hydration.players);
         setTeams(loadResult.hydration.teams);
         setPlayers(loadResult.hydration.players);
-        setPairings(hydratePairingsWithPlayerIds(loadResult.hydration.pairings, loadResult.hydration.players));
-        setScorecardsGenerated(loadResult.hydration.scorecardsGenerated);
-        setScorecardRows(loadResult.hydration.scorecardRows);
+        setPairings(pairingsAreValid ? hydratedPairings : []);
+        setScorecardsGenerated(pairingsAreValid ? loadResult.hydration.scorecardsGenerated : false);
+        setScorecardRows(pairingsAreValid ? loadResult.hydration.scorecardRows : []);
         setRoundSetup(loadResult.hydration.roundSetup);
         setClippdExportState(loadResult.hydration.clippdExportState);
         setScoreboardImportState(loadResult.hydration.scoreboardImportState);
@@ -327,6 +333,7 @@ export const useTournamentStoragePolling = ({
           setPlayers(parsedValue.players);
         }
 
+        let storedPairingsAreValid = true;
         if (parsedValue.pairings) {
           const storedPairings = hydratePairingsWithPlayerIds(
             parsedValue.pairings.filter(
@@ -341,20 +348,29 @@ export const useTournamentStoragePolling = ({
             parsedValue.players ?? latestState.players
           );
 
-          if (JSON.stringify(storedPairings) !== JSON.stringify(latestState.pairings)) {
-            setPairings(storedPairings);
+          const pairingRoster = parsedValue.players ?? latestState.players;
+          const pairingsAreValid = validatePairingIntegrity(storedPairings, pairingRoster);
+          storedPairingsAreValid = pairingsAreValid;
+
+          if (JSON.stringify(pairingsAreValid ? storedPairings : []) !== JSON.stringify(latestState.pairings)) {
+            setPairings(pairingsAreValid ? storedPairings : []);
+          }
+          if (!pairingsAreValid) {
+            setScorecardsGenerated(false);
+            setScorecardRows([]);
           }
         }
 
         if (parsedValue.scorecards) {
-          const nextScorecardsGenerated = Boolean(parsedValue.scorecards.scorecardsGenerated);
+          const nextScorecardsGenerated = storedPairingsAreValid && Boolean(parsedValue.scorecards.scorecardsGenerated);
 
           if (nextScorecardsGenerated !== latestState.scorecardsGenerated) {
             setScorecardsGenerated(nextScorecardsGenerated);
           }
 
-          if (JSON.stringify(parsedValue.scorecards.scorecardRows || []) !== JSON.stringify(latestState.scorecardRows)) {
-            setScorecardRows(parsedValue.scorecards.scorecardRows || []);
+          const nextScorecardRows = storedPairingsAreValid ? parsedValue.scorecards.scorecardRows || [] : [];
+          if (JSON.stringify(nextScorecardRows) !== JSON.stringify(latestState.scorecardRows)) {
+            setScorecardRows(nextScorecardRows);
           }
 
           if (JSON.stringify(parsedValue.scorecards.roundSetup || defaultRoundSetupState) !== JSON.stringify(latestState.roundSetup)) {

@@ -83,6 +83,7 @@ type TournamentPrintExportProps = {
   readinessCheckEntries: [keyof TournamentReadinessChecks, string][];
   readinessBlockingReasons: TournamentReadinessReason[];
   onRefreshReadiness: () => Promise<TournamentReadiness | null>;
+  onValidateQrReadiness: () => Promise<string | null>;
   isReadinessRefreshing: boolean;
   children: (controls: PrintExportControls) => ReactNode;
 };
@@ -115,6 +116,7 @@ export default function TournamentPrintExport({
   readinessCheckEntries,
   readinessBlockingReasons,
   onRefreshReadiness,
+  onValidateQrReadiness,
   isReadinessRefreshing,
   children,
 }: TournamentPrintExportProps) {
@@ -124,6 +126,7 @@ export default function TournamentPrintExport({
   const [activePrintPlayer, setActivePrintPlayer] = useState<ScorecardRow | null>(null);
   const [activeQrCodeDataUrl, setActiveQrCodeDataUrl] = useState("");
   const [activeQrShareToken, setActiveQrShareToken] = useState("");
+  const [qrIntegrityError, setQrIntegrityError] = useState("");
 
   const activeQrPairing = useMemo(() => {
     if (!activeQrPlayer) {
@@ -241,16 +244,27 @@ export default function TournamentPrintExport({
   };
 
   const openQrModal = async (player: ScorecardRow) => {
-    const readiness = tournamentReadiness?.isSafeToShare ? tournamentReadiness : await onRefreshReadiness();
-
-    if (!readiness?.isSafeToShare) {
+    const integrityError = await onValidateQrReadiness();
+    if (integrityError) {
+      setQrIntegrityError(integrityError);
       setActiveQrCodeDataUrl("");
       setActiveQrPlayer(null);
       setBlockedQrPlayer(player);
       return;
     }
 
+    const readiness = tournamentReadiness?.isSafeToShare ? tournamentReadiness : await onRefreshReadiness();
+
+    if (!readiness?.isSafeToShare) {
+      setActiveQrCodeDataUrl("");
+      setActiveQrPlayer(null);
+      setQrIntegrityError("Tournament setup is not ready for QR access.");
+      setBlockedQrPlayer(player);
+      return;
+    }
+
     setActiveQrCodeDataUrl("");
+    setQrIntegrityError("");
     setBlockedQrPlayer(null);
     setActiveQrPlayer(player);
   };
@@ -534,7 +548,7 @@ export default function TournamentPrintExport({
                       {blockedQrPlayer.playerName}
                     </p>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-[#51635C]">
-                      This tournament is not Ready yet, so QR and mobile scorecard sharing are paused until the checklist passes.
+                      {qrIntegrityError || "Tournament setup must be completed before QR and mobile scorecard sharing."}
                     </p>
                   </div>
                   <span className="w-fit rounded-full border border-[#E0B14F] bg-[#FFF7E3] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#7A5610]">

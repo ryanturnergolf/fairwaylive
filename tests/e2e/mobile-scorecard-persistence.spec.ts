@@ -557,7 +557,15 @@ const routeAuthenticatedTournamentSyncApi = async (
       return;
     }
 
-    if (postData.action === "upsertTournamentPlayers") {
+    if (postData.action === "reconcileTournamentPlayers") {
+      for (const scope of postData.scopes ?? []) {
+        for (let index = syncedPlayerRows.length - 1; index >= 0; index -= 1) {
+          const row = syncedPlayerRows[index];
+          if (row.tournament_id === scope.tournamentId && row.round_number === scope.roundNumber) {
+            syncedPlayerRows.splice(index, 1);
+          }
+        }
+      }
       syncedPlayerRows.push(...(postData.rows ?? []));
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
       return;

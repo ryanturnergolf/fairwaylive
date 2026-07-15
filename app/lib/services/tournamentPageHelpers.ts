@@ -27,6 +27,116 @@ export type ImportedPlayerPreview = {
   handicap: string;
 };
 
+export const normalizePlayerIdentityPart = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
+
+export const buildPlayerIdentity = (playerName: string, teamName: string) =>
+  `${normalizePlayerIdentityPart(playerName)}::${normalizePlayerIdentityPart(teamName)}`;
+
+export const getRosterPlayerIdentity = (player: LegacyPlayer) =>
+  buildPlayerIdentity(`${player.firstName} ${player.lastName}`, player.teamName || "Unassigned");
+
+export const hasDuplicateRosterIdentity = (players: LegacyPlayer[]) => {
+  const identities = new Set<string>();
+
+  return players.some((player) => {
+    const identity = getRosterPlayerIdentity(player);
+    if (identities.has(identity)) return true;
+    identities.add(identity);
+    return false;
+  });
+};
+
+export const isDuplicatePlayerFormIdentity = ({
+  players,
+  teams,
+  playerFormState,
+  editingPlayerId,
+}: {
+  players: LegacyPlayer[];
+  teams: LegacyTeam[];
+  playerFormState: PlayerFormValues;
+  editingPlayerId: number | null;
+}) => {
+  const selectedTeam = teams.find((team) => String(team.id) === playerFormState.teamId);
+  const candidateIdentity = buildPlayerIdentity(
+    `${playerFormState.firstName} ${playerFormState.lastName}`,
+    selectedTeam?.schoolName || "Unassigned"
+  );
+
+  return players.some(
+    (player) => player.id !== editingPlayerId && getRosterPlayerIdentity(player) === candidateIdentity
+  );
+};
+
+export const validatePairingIntegrity = (pairings: LegacyPairingGroup[], players: LegacyPlayer[]) => {
+  if (players.length === 0 || pairings.length === 0 || hasDuplicateRosterIdentity(players)) {
+    return false;
+  }
+
+  const rosterIdentities = new Set(players.map(getRosterPlayerIdentity));
+  const pairedIdentities = new Set<string>();
+
+  for (const pairing of pairings) {
+    const groupIdentities = new Set<string>();
+    for (const player of pairing.players) {
+      const identity = buildPlayerIdentity(player.playerName, player.teamName || "Unassigned");
+      if (!rosterIdentities.has(identity) || groupIdentities.has(identity) || pairedIdentities.has(identity)) {
+        return false;
+      }
+      groupIdentities.add(identity);
+      pairedIdentities.add(identity);
+    }
+  }
+
+  return pairedIdentities.size === rosterIdentities.size;
+};
+
+export const validateScorecardIntegrity = (
+  scorecardRows: LegacyScorecardRow[],
+  pairings: LegacyPairingGroup[],
+  players: LegacyPlayer[]
+) => {
+  if (!validatePairingIntegrity(pairings, players) || scorecardRows.length !== players.length) return false;
+
+  const rosterByIdentity = new Map(players.map((player) => [getRosterPlayerIdentity(player), player]));
+  const scorecardIdentities = new Set<string>();
+  for (const row of scorecardRows) {
+    const identity = buildPlayerIdentity(row.playerName, row.team);
+    const rosterPlayer = rosterByIdentity.get(identity);
+    if (!rosterPlayer || scorecardIdentities.has(identity) || row.id !== rosterPlayer.id) return false;
+    scorecardIdentities.add(identity);
+  }
+
+  return scorecardIdentities.size === rosterByIdentity.size;
+};
+
+export const generateScorecardRowsFromPairings = (
+  pairings: LegacyPairingGroup[],
+  players: LegacyPlayer[],
+  holeCount: number
+): LegacyScorecardRow[] => {
+  if (!validatePairingIntegrity(pairings, players)) return [];
+
+  const rosterByIdentity = new Map(players.map((player) => [getRosterPlayerIdentity(player), player]));
+  return pairings.flatMap((pairing) =>
+    pairing.players.map((pairedPlayer) => {
+      const player = rosterByIdentity.get(buildPlayerIdentity(pairedPlayer.playerName, pairedPlayer.teamName));
+      return {
+        id: player!.id,
+        playerName: pairedPlayer.playerName,
+        team: pairedPlayer.teamName || "Unassigned",
+        scores: Array.from({ length: holeCount }, () => 0),
+      };
+    })
+  );
+};
+
+export const createInvalidatedRosterDependentState = () => ({
+  pairings: [] as LegacyPairingGroup[],
+  scorecardRows: [] as LegacyScorecardRow[],
+  scorecardsGenerated: false,
+});
+
 export const buildTeamShortName = (schoolName: string) => {
   const words = schoolName
     .trim()
@@ -272,6 +382,10 @@ export const formatMinutesToTime = (minutesSinceMidnight: number) => {
 };
 
 export const generatePairings = (players: LegacyPlayer[]): LegacyPairingGroup[] => {
+  if (hasDuplicateRosterIdentity(players)) {
+    return [];
+  }
+
   const shuffledPlayers = [...players];
   const stablePlayerIdsByRosterId = new Map(players.map((player, index) => [player.id, `player-${index + 1}`]));
 

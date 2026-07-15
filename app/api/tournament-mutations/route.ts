@@ -16,7 +16,8 @@ type MutationBody =
       };
     }
   | {
-      action: "upsertTournamentPlayers";
+      action: "reconcileTournamentPlayers";
+      scopes: Array<{ tournamentId: string; roundNumber: number }>;
       rows: Array<Record<string, unknown>>;
     }
   | {
@@ -161,7 +162,42 @@ export async function POST(request: Request) {
       return NextResponse.json(inserted, { status: 201 });
     }
 
-    if (body.action === "upsertTournamentPlayers") {
+    if (body.action === "reconcileTournamentPlayers") {
+      for (const scope of body.scopes) {
+        if (!scope.tournamentId || !Number.isInteger(scope.roundNumber) || scope.roundNumber < 1) {
+          throw new Error("Invalid tournament-player reconciliation scope.");
+        }
+        const authoritativeIds = new Set(
+          body.rows
+            .filter(
+              (row) => row.tournament_id === scope.tournamentId && row.round_number === scope.roundNumber
+            )
+            .map((row) => String(row.player_id))
+        );
+        const { data: existingRows, error: readError } = await supabase
+          .from("tournament_players")
+          .select("player_id")
+          .eq("tournament_id", scope.tournamentId)
+          .eq("round_number", scope.roundNumber);
+        if (readError) throw readError;
+
+        const staleIds = (existingRows ?? [])
+          .map((row) => String(row.player_id))
+          .filter((playerId) => !authoritativeIds.has(playerId));
+        if (staleIds.length > 0) {
+          const { error: deleteError } = await supabase
+            .from("tournament_players")
+            .delete()
+            .eq("tournament_id", scope.tournamentId)
+            .eq("round_number", scope.roundNumber)
+            .in("player_id", staleIds);
+          if (deleteError) throw deleteError;
+        }
+      }
+
+      if (body.rows.length === 0) {
+        return NextResponse.json({ ok: true });
+      }
       const { error } = await supabase
         .from("tournament_players")
         .upsert(body.rows, { onConflict: "tournament_id,round_number,player_id" });

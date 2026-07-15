@@ -5,12 +5,13 @@ import {
   getTournamentStateSnapshot,
   listTournamentRows,
   upsertTournamentStateSnapshot,
-  upsertTournamentPlayers,
+  reconcileTournamentPlayers,
   type CreateTournamentRowInput,
   type TournamentPlayerRow,
   type TournamentRow,
   type TournamentPlayerUpsertRow,
 } from "../repositories/tournamentRepository";
+import { buildPlayerIdentity, validatePairingIntegrity } from "./tournamentPageHelpers";
 import { getSupabaseAuthAccessToken } from "../supabaseClient";
 import {
   buildTournamentStorageEnvelope,
@@ -530,7 +531,7 @@ const asPositiveInteger = (value: unknown): number | null => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): TournamentPlayerUpsertRow[] => {
+export const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): TournamentPlayerUpsertRow[] => {
   const { tournament } = envelope;
   const teamsById = new Map(tournament.teams.map((team) => [team.id, team]));
   const teamsByName = new Map(tournament.teams.map((team) => [team.name, team]));
@@ -539,11 +540,19 @@ const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): Tournam
     tournament.rounds.map((round, index) => [round.id, round.roundNumber || index + 1])
   );
   const rowsByKey = new Map<string, TournamentPlayerUpsertRow>();
+  const pairedRoundOneIdentities = new Set(
+    tournament.pairings
+      .filter((pairing) => (roundNumbersById.get(pairing.roundId) ?? 1) === 1)
+      .flatMap((pairing) => pairing.players.map((player) => buildPlayerIdentity(player.playerName, player.teamName)))
+  );
   const addRow = (row: TournamentPlayerUpsertRow) => {
     rowsByKey.set(`${row.round_number}:${row.player_id}`, row);
   };
 
   tournament.players.forEach((player, index) => {
+    if (pairedRoundOneIdentities.has(buildPlayerIdentity(getPlayerName(player), getTeamName(player, teamsById) || "Unassigned"))) {
+      return;
+    }
     addRow({
       tournament_id: tournament.id,
       player_id: player.id,
@@ -591,8 +600,12 @@ const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): Tournam
   return [...rowsByKey.values()];
 };
 
-export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope) => {
-  await upsertTournamentPlayers(buildTournamentPlayerRows(envelope));
+export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope, roundNumber: number) => {
+  const rows = buildTournamentPlayerRows(envelope).filter((row) => row.round_number === roundNumber);
+  await reconcileTournamentPlayers(
+    [{ tournamentId: envelope.tournament.id, roundNumber }],
+    rows
+  );
 };
 
 export const syncTournamentStateSnapshot = async ({
@@ -958,11 +971,23 @@ export const persistTournamentPageState = ({
   onSnapshotTimeoutChange,
   onSnapshotSignatureChange,
 }: TournamentPagePersistenceInput) => {
+  const hasInvalidPairings = state.pairings.length > 0 && !validatePairingIntegrity(state.pairings, state.players);
+  const safeState = hasInvalidPairings
+    ? {
+        ...state,
+        pairings: [],
+        scorecards: {
+          ...state.scorecards,
+          scorecardsGenerated: false,
+          scorecardRows: [],
+        },
+      }
+    : state;
   const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
   const hasPopulatedStoredTournament =
     Boolean(currentEnvelope) &&
     ((currentEnvelope?.tournament.teams.length ?? 0) > 0 || (currentEnvelope?.tournament.players.length ?? 0) > 0);
-  if (hasPopulatedStoredTournament && (state.teams.length === 0 || state.players.length === 0)) {
+  if (hasPopulatedStoredTournament && (safeState.teams.length === 0 || safeState.players.length === 0)) {
     return;
   }
 
@@ -982,14 +1007,14 @@ export const persistTournamentPageState = ({
       };
   const roundCount = Math.max(
     Number(tournament.rounds) || 1,
-    asPositiveInteger(state.scorecards.roundSetup.roundNumber) ?? 1,
+    asPositiveInteger(safeState.scorecards.roundSetup.roundNumber) ?? 1,
     currentEnvelope?.tournament.rounds.length || 0
   );
   const mergedTournament = mergeRoundIntoTournament({
     tournamentId,
     tournamentName: tournament.name,
     course: tournament.course,
-    state,
+    state: safeState,
     settings: mergedSettings,
     roundCount,
     existingTournament: currentEnvelope?.tournament ?? null,
@@ -998,14 +1023,14 @@ export const persistTournamentPageState = ({
     tournamentId,
     tournament.name,
     tournament.course,
-    state,
+    safeState,
     mergedTournament.settings,
     roundCount,
     mergedTournament
   );
 
   saveTournamentStorageEnvelope(tournamentId, envelope);
-  if (state.teams.length === 0 || state.players.length === 0) {
+  if (safeState.teams.length === 0 || safeState.players.length === 0) {
     return;
   }
 
@@ -1044,7 +1069,10 @@ export const persistTournamentPageState = ({
       },
     };
 
-    await syncTournamentPlayers(sharedEnvelope);
+    await syncTournamentPlayers(
+      sharedEnvelope,
+      asPositiveInteger(safeState.scorecards.roundSetup.roundNumber) ?? 1
+    );
 
     if (snapshotSyncTimeout) {
       clearTimeout(snapshotSyncTimeout);

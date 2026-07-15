@@ -101,15 +101,21 @@ test("director dashboard review queue links groups needing review to live scorin
       name: storedTournament.name,
       course: storedTournament.course,
       settings: storedTournament.settings,
-      teams: [],
-      players: [],
+      teams: [{ id: "team-1", name: "Ready State", players: ["player-1", "player-2"] }],
+      players: [
+        { id: "player-1", firstName: "Ava", lastName: "Green", teamId: "team-1", isIndividual: false, statistics: {} },
+        { id: "player-2", firstName: "Ben", lastName: "Marker", teamId: "team-1", isIndividual: false, statistics: {} },
+      ],
       pairings: [],
       scores: [],
       rounds: [],
     },
     uiState: {
-      teams: [],
-      players: [],
+      teams: [{ id: 1, schoolName: "Ready State", shortName: "RS", teamColor: "#0B3D2E", coachName: "Coach" }],
+      players: [
+        { id: 1, firstName: "Ava", lastName: "Green", teamId: "1", teamName: "Ready State", handicap: "0", email: "" },
+        { id: 2, firstName: "Ben", lastName: "Marker", teamId: "1", teamName: "Ready State", handicap: "0", email: "" },
+      ],
       pairings: [
         {
           groupNumber: 1,

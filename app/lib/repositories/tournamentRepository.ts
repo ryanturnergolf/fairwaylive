@@ -48,6 +48,24 @@ export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
   updated_at: string | null;
 };
 
+export type TournamentPlayerReconcileScope = {
+  tournamentId: string;
+  roundNumber: number;
+};
+
+export const findStaleTournamentPlayerIds = (
+  existingPlayerIds: string[],
+  rows: TournamentPlayerUpsertRow[],
+  scope: TournamentPlayerReconcileScope
+) => {
+  const authoritativeIds = new Set(
+    rows
+      .filter((row) => row.tournament_id === scope.tournamentId && row.round_number === scope.roundNumber)
+      .map((row) => row.player_id)
+  );
+  return existingPlayerIds.filter((playerId) => !authoritativeIds.has(playerId));
+};
+
 export type TournamentStateSnapshotUpsertInput = {
   tournamentId: string;
   localTournamentId: string;
@@ -175,17 +193,41 @@ export const createTournamentRow = async (
   return data as TournamentRow;
 };
 
-export const upsertTournamentPlayers = async (rows: TournamentPlayerUpsertRow[]) => {
-  if (rows.length === 0) {
-    return;
-  }
-
+export const reconcileTournamentPlayers = async (
+  scopes: TournamentPlayerReconcileScope[],
+  rows: TournamentPlayerUpsertRow[]
+) => {
   if (typeof window !== "undefined") {
-    await postTournamentMutation<{ ok: true }>({ action: "upsertTournamentPlayers", rows });
+    await postTournamentMutation<{ ok: true }>({ action: "reconcileTournamentPlayers", scopes, rows });
     return;
   }
 
   const supabase = getClient();
+  for (const scope of scopes) {
+    const { data: existingRows, error: readError } = await supabase
+      .from("tournament_players")
+      .select("player_id")
+      .eq("tournament_id", scope.tournamentId)
+      .eq("round_number", scope.roundNumber);
+    if (readError) throw readError;
+
+    const staleIds = findStaleTournamentPlayerIds(
+      (existingRows ?? []).map((row) => String(row.player_id)),
+      rows,
+      scope
+    );
+    if (staleIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("tournament_players")
+        .delete()
+        .eq("tournament_id", scope.tournamentId)
+        .eq("round_number", scope.roundNumber)
+        .in("player_id", staleIds);
+      if (deleteError) throw deleteError;
+    }
+  }
+
+  if (rows.length === 0) return;
   const { error } = await supabase
     .from("tournament_players")
     .upsert(rows, { onConflict: "tournament_id,round_number,player_id" });

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
+import { getTournamentPlayers } from "../../lib/repositories/tournamentRepository";
 import {
   normalizeTournamentRoundSetup,
 } from "../../lib/services/tournamentDerivedState";
@@ -37,8 +38,11 @@ import {
 } from "../../lib/services/tournamentService";
 import {
   buildImportedPlayers,
+  createInvalidatedRosterDependentState,
   generatePairings,
-  generateScorecardRows,
+  hasDuplicateRosterIdentity,
+  isDuplicatePlayerFormIdentity,
+  generateScorecardRowsFromPairings,
   parseImportedPlayerCsv,
   playerImportTemplateCsv,
   relocatePairingPlayer,
@@ -46,6 +50,8 @@ import {
   upsertPlayerFromForm,
   upsertTeamFromForm,
   validatePlayerForm,
+  validatePairingIntegrity,
+  validateScorecardIntegrity,
   validateTeamForm,
 } from "../../lib/services/tournamentPageHelpers";
 import {
@@ -536,6 +542,22 @@ export default function TournamentPage() {
 
   const readinessOpenItems = tournamentReadiness?.reasons.filter((reason) => reason.severity !== "pass") ?? [];
   const readinessBlockingReasons = tournamentReadiness?.reasons.filter((reason) => reason.severity === "error" || reason.severity === "warning") ?? [];
+  const qrSharedTournamentId =
+    sharedTournamentId ||
+    tournamentReadiness?.sharedTournamentId ||
+    (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tournamentId)
+      ? tournamentId
+      : "");
+
+  const invalidateRosterDependentState = useCallback(() => {
+    const hadGeneratedState = pairings.length > 0 || scorecardRows.length > 0 || scorecardsGenerated;
+    const invalidatedState = createInvalidatedRosterDependentState();
+    setPairings(invalidatedState.pairings);
+    setScorecardRows(invalidatedState.scorecardRows);
+    setScorecardsGenerated(invalidatedState.scorecardsGenerated);
+    previousValidPairingsRef.current = null;
+    setPairingsMessage(hadGeneratedState ? "Roster changed. Regenerate pairings and scorecards." : "");
+  }, [pairings.length, scorecardRows.length, scorecardsGenerated]);
 
   const resetTeamForm = () => {
     setTeamFormState(defaultTeamFormState);
@@ -600,7 +622,13 @@ export default function TournamentPage() {
 
     const importedPlayers = buildImportedPlayers(playerImportRows, Date.now());
 
+    if (hasDuplicateRosterIdentity([...importedPlayers, ...players])) {
+      setPlayerImportError("Each player name and team combination must be unique.");
+      return;
+    }
+
     setPlayers((current) => [...importedPlayers, ...current]);
+    invalidateRosterDependentState();
     closePlayerImportModal();
   };
 
@@ -657,6 +685,13 @@ export default function TournamentPage() {
       return;
     }
 
+    const existingTeam = editingTeamId ? teams.find((team) => team.id === editingTeamId) : null;
+    const normalizedSchoolName = teamFormState.schoolName.trim().replace(/\s+/g, " ").toLowerCase();
+    if (teams.some((team) => team.id !== editingTeamId && team.schoolName.trim().replace(/\s+/g, " ").toLowerCase() === normalizedSchoolName)) {
+      setTeamErrors((current) => ({ ...current, schoolName: "A team with this name already exists." }));
+      return;
+    }
+
     setTeams((current) =>
       upsertTeamFromForm({
         teams: current,
@@ -666,6 +701,14 @@ export default function TournamentPage() {
         nextTeamId: Date.now(),
       })
     );
+    if (existingTeam && existingTeam.schoolName !== teamFormState.schoolName.trim()) {
+      setPlayers((current) => current.map((player) =>
+        player.teamId === String(existingTeam.id)
+          ? { ...player, teamName: teamFormState.schoolName.trim() }
+          : player
+      ));
+    }
+    invalidateRosterDependentState();
 
     closeTeamModal();
   };
@@ -733,6 +776,14 @@ export default function TournamentPage() {
       return;
     }
 
+    if (isDuplicatePlayerFormIdentity({ players, teams, playerFormState, editingPlayerId })) {
+      setPlayerErrors((current) => ({
+        ...current,
+        firstName: "A player with this name and team already exists.",
+      }));
+      return;
+    }
+
     setPlayers((current) =>
       upsertPlayerFromForm({
         players: current,
@@ -742,6 +793,7 @@ export default function TournamentPage() {
         nextPlayerId: Date.now(),
       })
     );
+    invalidateRosterDependentState();
 
     closePlayerModal();
   };
@@ -967,7 +1019,15 @@ export default function TournamentPage() {
       return;
     }
 
-    setPairings(generatePairings(players));
+    if (hasDuplicateRosterIdentity(players)) {
+      setPairings([]);
+      setPairingsMessage("Resolve duplicate player names and teams before generating pairings.");
+      return;
+    }
+
+    const generatedPairings = generatePairings(players);
+    previousValidPairingsRef.current = snapshotPairings(generatedPairings);
+    setPairings(generatedPairings);
     setPairingsMessage("");
   };
 
@@ -986,10 +1046,15 @@ export default function TournamentPage() {
         return snapshotPairings(baselinePairings);
       }
 
+      if (!validatePairingIntegrity(normalizedPairings, players)) {
+        setPairingsMessage("Pairings no longer match the current roster. Regenerate pairings.");
+        return snapshotPairings(baselinePairings);
+      }
+
       previousValidPairingsRef.current = snapshotPairings(normalizedPairings);
+      setPairingsMessage("");
       return normalizedPairings;
     });
-    setPairingsMessage("");
   };
 
   const movePairingPlayer = (
@@ -1033,9 +1098,51 @@ export default function TournamentPage() {
       return;
     }
 
+    if (pairings.length === 0 || !validatePairingIntegrity(pairings, players)) {
+      setPairingsMessage("Generate valid pairings for the current roster before generating scorecards.");
+      setScorecardsGenerated(false);
+      setScorecardRows([]);
+      return;
+    }
+
+    const generatedRows = generateScorecardRowsFromPairings(pairings, players, normalizedRoundSetup.numberOfHoles);
+    if (!validateScorecardIntegrity(generatedRows, pairings, players)) {
+      setPairingsMessage("Scorecards could not be generated from the current pairings.");
+      setScorecardsGenerated(false);
+      setScorecardRows([]);
+      return;
+    }
+
     setScorecardsGenerated(true);
-    setScorecardRows(generateScorecardRows(players, normalizedRoundSetup.numberOfHoles));
+    setScorecardRows(generatedRows);
   };
+
+  const validateQrReadiness = useCallback(async () => {
+    if (hasDuplicateRosterIdentity(players)) return "Resolve duplicate roster players before generating QR access.";
+    if (!validatePairingIntegrity(pairings, players)) return "Regenerate valid pairings before generating QR access.";
+    if (!scorecardsGenerated || !validateScorecardIntegrity(scorecardRows, pairings, players)) {
+      return "Generate valid scorecards before generating QR access.";
+    }
+    if (!qrSharedTournamentId) return "Wait for tournament synchronization, then try QR access again.";
+
+    try {
+      const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
+      const synchronizedRows = await getTournamentPlayers(qrSharedTournamentId, roundNumber);
+      const expectedIds = new Set(pairings.flatMap((pairing) => pairing.players.map((player) => player.playerId)));
+      const synchronizedIds = new Set(synchronizedRows.map((row) => row.player_id));
+      if (
+        synchronizedRows.length !== players.length ||
+        synchronizedIds.size !== expectedIds.size ||
+        [...expectedIds].some((playerId) => !synchronizedIds.has(playerId))
+      ) {
+        return "Player synchronization is incomplete. Try QR access again.";
+      }
+    } catch {
+      return "Player synchronization failed. Try QR access again.";
+    }
+
+    return null;
+  }, [normalizedRoundSetup.roundNumber, pairings, players, qrSharedTournamentId, scorecardRows, scorecardsGenerated]);
 
   const handleAutoRepairInputChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -1328,6 +1435,8 @@ export default function TournamentPage() {
                 onDeleteTeam={(teamId) => {
                   if (!isTournamentFinalized) {
                     setTeams((current) => current.filter((item) => item.id !== teamId));
+                    setPlayers((current) => current.filter((player) => player.teamId !== String(teamId)));
+                    invalidateRosterDependentState();
                   }
                 }}
                 onCloseTeamModal={closeTeamModal}
@@ -1339,6 +1448,7 @@ export default function TournamentPage() {
                 onDeletePlayer={(playerId) => {
                   if (!isTournamentFinalized) {
                     setPlayers((current) => current.filter((item) => item.id !== playerId));
+                    invalidateRosterDependentState();
                   }
                 }}
                 onClosePlayerModal={closePlayerModal}
@@ -1381,7 +1491,7 @@ export default function TournamentPage() {
               <TournamentPrintExport
                 activeTab={activeTab}
                 tournamentId={tournamentId}
-                sharedTournamentId={sharedTournamentId}
+                sharedTournamentId={qrSharedTournamentId}
                 tournament={tournament}
                 normalizedRoundSetup={normalizedRoundSetup}
                 pairings={pairings}
@@ -1394,6 +1504,7 @@ export default function TournamentPage() {
                 readinessCheckEntries={readinessCheckEntries}
                 readinessBlockingReasons={readinessBlockingReasons}
                 onRefreshReadiness={refreshTournamentReadiness}
+                onValidateQrReadiness={validateQrReadiness}
                 isReadinessRefreshing={isReadinessRefreshing}
               >
                 {({ onPrintTournamentScorecards, onOpenQrModal, onOpenPrintScorecardModal }) =>
