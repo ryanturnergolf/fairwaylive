@@ -1322,7 +1322,7 @@ test("shared tournament page hydrates generated scorecards from snapshot without
     .toContain(storedTournament.name);
 });
 
-test("add team modal hides optional internal fields", async ({ page }) => {
+test("team-only roster persists two teams across refresh, second tab, and player selection", async ({ page }) => {
   await page.route("**/rest/v1/**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -1331,6 +1331,8 @@ test("add team modal hides optional internal fields", async ({ page }) => {
     });
   });
 
+  await gotoApp(page, baseUrl);
+  await page.evaluate((key) => window.localStorage.removeItem(key), tournamentStorageKey);
   await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Teams" }).click();
   await page.getByRole("button", { name: "Add Team" }).click();
@@ -1341,9 +1343,32 @@ test("add team modal hides optional internal fields", async ({ page }) => {
   await expect(page.getByLabel("Team Color")).toHaveCount(0);
   await expect(page.getByLabel("Coach Name")).toHaveCount(0);
 
-  await page.getByLabel("School Name").fill("Modal Cleanup College");
+  await page.getByLabel("School Name").fill("Team A");
   await page.getByRole("button", { name: "Add Team" }).last().click();
-  await expect(page.getByText("Modal Cleanup College")).toBeVisible();
+  await expect(page.getByText("Team A", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Add Team" }).click();
+  await page.getByLabel("School Name").fill("Team B");
+  await page.getByRole("button", { name: "Add Team" }).last().click();
+  await expect(page.getByText("Team B", { exact: true })).toBeVisible();
+
+  await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), `clubhouse-hq-tournament-${tournamentId}`))
+    .toContain("Team B");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Teams" }).click();
+  await expect(page.getByText("Team A", { exact: true })).toBeVisible();
+  await expect(page.getByText("Team B", { exact: true })).toBeVisible();
+
+  const secondTab = await page.context().newPage();
+  await gotoApp(secondTab, `${baseUrl}/tournament/${tournamentId}`);
+  await secondTab.getByRole("button", { name: "Teams" }).click();
+  await expect(secondTab.getByText("Team A", { exact: true })).toBeVisible();
+  await expect(secondTab.getByText("Team B", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Players" }).click();
+  await page.getByRole("button", { name: "Add Player" }).click();
+  await expect(page.getByLabel("Team").locator("option", { hasText: "Team A" })).toHaveCount(1);
+  await expect(page.getByLabel("Team").locator("option", { hasText: "Team B" })).toHaveCount(1);
 });
 
 test("live scoreboard uses marker scores instead of self-entered scores", async ({ page }) => {

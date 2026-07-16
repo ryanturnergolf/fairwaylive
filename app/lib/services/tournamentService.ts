@@ -1018,13 +1018,6 @@ export const persistTournamentPageState = ({
       }
     : state;
   const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
-  const hasPopulatedStoredTournament =
-    Boolean(currentEnvelope) &&
-    ((currentEnvelope?.tournament.teams.length ?? 0) > 0 || (currentEnvelope?.tournament.players.length ?? 0) > 0);
-  if (hasPopulatedStoredTournament && (safeState.teams.length === 0 || safeState.players.length === 0)) {
-    return;
-  }
-
   const persistedSettings =
     typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {};
   const currentFinalization = currentEnvelope?.tournament.settings.finalization;
@@ -1063,11 +1056,8 @@ export const persistTournamentPageState = ({
     mergedTournament
   );
 
-  saveTournamentStorageEnvelope(tournamentId, envelope);
-  if (safeState.teams.length === 0 || safeState.players.length === 0) {
-    return;
-  }
-
+  const savedLocally = saveTournamentStorageEnvelope(tournamentId, envelope);
+  if (!savedLocally) return;
     if (skipRemoteSync) return;
 
     const nextSharedTournamentId = await ensureSharedTournament({
@@ -1081,7 +1071,7 @@ export const persistTournamentPageState = ({
       rounds: tournament.rounds,
       scoringFormat: tournament.scoringFormat,
       status: tournament.status,
-      settings: tournament.settings,
+      settings: mergedSettings,
     });
 
     if (!isObsolete() && nextSharedTournamentId !== sharedTournamentId) {

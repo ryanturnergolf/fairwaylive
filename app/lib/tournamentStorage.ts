@@ -589,9 +589,9 @@ export const saveTournamentStorageEnvelope = (
   tournamentId: string,
   envelope: TournamentStorageEnvelope,
   options: { allowEmptyOverwrite?: boolean } = {}
-) => {
+): boolean => {
   if (typeof window === "undefined" || !tournamentId) {
-    return;
+    return false;
   }
 
   const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
@@ -599,8 +599,8 @@ export const saveTournamentStorageEnvelope = (
   if (
     !options.allowEmptyOverwrite &&
     currentEnvelope &&
-    (currentEnvelope.tournament.teams.length > 0 || currentEnvelope.tournament.players.length > 0) &&
-    (envelope.tournament.teams.length === 0 || envelope.tournament.players.length === 0)
+    ((currentEnvelope.tournament.teams.length > 0 && envelope.tournament.teams.length === 0) ||
+      (currentEnvelope.tournament.players.length > 0 && envelope.tournament.players.length === 0))
   ) {
     console.error("[TournamentStorage] save aborted: refusing to overwrite a populated tournament with empty teams or players.", {
       tournamentId,
@@ -609,10 +609,11 @@ export const saveTournamentStorageEnvelope = (
       nextTeamsCount: envelope.tournament.teams.length,
       nextPlayersCount: envelope.tournament.players.length,
     });
-    return;
+    return false;
   }
 
   window.localStorage.setItem(getTournamentStateStorageKey(tournamentId), JSON.stringify(envelope));
+  return true;
 };
 
 export const loadTournamentStateFromStorage = <T,>(tournamentId: string): T | null => {
@@ -735,11 +736,11 @@ export const mergeTournamentScoreSubmission = (
     return false;
   }
 
-  saveTournamentStorageEnvelope(tournamentId, {
+  const saved = saveTournamentStorageEnvelope(tournamentId, {
     version: 2,
     tournament: nextTournament,
     uiState: nextUiState,
   });
 
-  return true;
+  return saved;
 };
