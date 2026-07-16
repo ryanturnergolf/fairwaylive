@@ -88,7 +88,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                 Create and refine your tee-time flow.
               </h3>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
+            {!isReadOnly ? <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={onGeneratePairings}
@@ -105,7 +105,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
               >
                 Auto Re-Pair by Results
               </button>
-            </div>
+            </div> : null}
           </div>
 
           <p className="mt-4 max-w-3xl text-lg leading-8 text-[#51635C]">
@@ -335,14 +335,14 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
           >
             Print Scorecards
           </button>
-          <button
+          {!isReadOnly ? <button
             type="button"
             onClick={onGenerateScorecards}
             disabled={isReadOnly}
             className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
           >
             {scorecardsGenerated ? "Regenerate Scorecards" : "Generate Scorecards"}
-          </button>
+          </button> : null}
         </div>
       </div>
 

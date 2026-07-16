@@ -333,7 +333,7 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
   );
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Finalize Tournament" }).first().click();
-  await expect(page.getByText("Tournament Finalized")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeVisible();
 
   const finalizedRecord = await page.evaluate((key) => {
     const envelope = JSON.parse(window.localStorage.getItem(key) || "{}");
@@ -345,10 +345,17 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
 
   await gotoApp(page, `/tournament/${tournamentId}?tab=Players`);
   await expect(page.getByText("Finalized Read-Only")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add Player" })).toBeDisabled();
+  await expect(page.getByText("Status: Finalized")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Player" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add Round" })).toHaveCount(0);
 
   await gotoApp(page, `/tournament/${tournamentId}?tab=Pairings`);
-  await expect(page.getByRole("button", { name: "Generate Pairings" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Generate Pairings" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Auto Re-Pair by Results" })).toHaveCount(0);
+
+  await gotoApp(page, `/tournament/${tournamentId}?tab=Live%20Scoring`);
+  await expect(page.getByRole("button", { name: /Generate Scorecards|Regenerate Scorecards/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Open QR code for/ })).toHaveCount(0);
 
   await gotoApp(page, `/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeDisabled();

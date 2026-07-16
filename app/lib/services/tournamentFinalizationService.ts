@@ -390,10 +390,13 @@ export const loadTournamentFinalizationStatus = async ({
     localEnvelope,
     loadError,
   });
+  const finalizationRecord =
+    getTournamentFinalizationRecord(aggregate?.envelope ?? null) ?? getTournamentFinalizationRecord(localEnvelope);
 
   return {
     ...status,
-    finalizationRecord: getTournamentFinalizationRecord(localEnvelope),
+    finalizationRecord,
+    eligible: finalizationRecord ? false : status.eligible,
   };
 };
 

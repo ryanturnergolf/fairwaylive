@@ -863,8 +863,14 @@ export default function PlayerScorecardPage() {
         }
       } finally {
         if (!isCancelled) {
-          const nextScores = loadedSelfScores ?? normalizeHoleScores(undefined, holeCount);
-          const nextMarkerScores = loadedMarkerScores ?? normalizeHoleScores(undefined, holeCount);
+          const nextScores = chooseMostCompleteScores(
+            loadedSelfScores,
+            scoresRef.current
+          ) ?? normalizeHoleScores(undefined, holeCount);
+          const nextMarkerScores = chooseMostCompleteScores(
+            loadedMarkerScores,
+            markerScoresRef.current
+          ) ?? normalizeHoleScores(undefined, holeCount);
 
           scoresRef.current = nextScores;
           markerScoresRef.current = nextMarkerScores;

@@ -95,7 +95,7 @@ export default function LiveScoringLeaderboard({
       />
       {isReadOnly ? (
         <div className="rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
-          This tournament is finalized. Score entry is locked, but leaderboards, scorecards, QR viewing, and print tools remain available.
+          This tournament is finalized. Score entry is locked, but leaderboards, scorecards, print tools, and reports remain available.
         </div>
       ) : null}
       {reviewResolutionItems.length > 0 ? (
@@ -303,14 +303,14 @@ export default function LiveScoringLeaderboard({
                           <td className="px-4 py-4 font-black text-[#0B3D2E]">
                             <div className="flex items-center gap-3">
                               <span>{row.playerName}</span>
-                              <button
+                              {!isReadOnly ? <button
                                 type="button"
                                 onClick={() => onOpenQrModal(row)}
                                 className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E8DCC8] bg-[#FCFAF5] text-sm font-black text-[#0B3D2E] transition duration-300 hover:bg-[#E8DCC8]"
                                 aria-label={`Open QR code for ${row.playerName}`}
                               >
                                 ⬢
-                              </button>
+                              </button> : null}
                             </div>
                           </td>
                           <td className="px-4 py-4 text-sm text-[#51635C]">{row.team}</td>

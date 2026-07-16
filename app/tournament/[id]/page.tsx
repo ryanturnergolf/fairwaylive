@@ -17,6 +17,7 @@ import {
 } from "../../lib/services/tournamentReadinessService";
 import {
   getTournamentFinalizationRecord,
+  loadTournamentFinalizationStatus,
   type TournamentFinalizationRecord,
 } from "../../lib/services/tournamentFinalizationService";
 import { loadComparisonScores } from "../../lib/services/scoreService";
@@ -401,7 +402,8 @@ export default function TournamentPage() {
       return;
     }
 
-    setFinalizationRecord(getTournamentFinalizationRecord(loadTournamentStorageEnvelope(tournamentId)));
+    const localFinalizationRecord = getTournamentFinalizationRecord(loadTournamentStorageEnvelope(tournamentId));
+    if (localFinalizationRecord) setFinalizationRecord(localFinalizationRecord);
   }, [
     isClientMounted,
     pairings.length,
@@ -484,6 +486,23 @@ export default function TournamentPage() {
     hydrationPendingRef,
     flushPendingSaves,
   });
+
+  useEffect(() => {
+    if (!isClientMounted || !tournamentId) return;
+
+    let isCancelled = false;
+    void loadTournamentFinalizationStatus({ tournamentId, sharedTournamentId })
+      .then((status) => {
+        if (!isCancelled) setFinalizationRecord(status.finalizationRecord);
+      })
+      .catch((error) => {
+        console.warn("[TournamentFinalization] Unable to load finalization authority.", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isClientMounted, sharedTournamentId, tournamentId]);
   useSharedScoreSynchronization({
     isClientMounted,
     tournamentId,
@@ -1293,14 +1312,15 @@ export default function TournamentPage() {
                       </div>
                     ))}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAddRound}
-                    disabled={isTournamentFinalized}
-                    className="rounded-full border border-[#0B3D2E] px-5 py-3 text-xs font-black uppercase tracking-[0.24em] text-[#0B3D2E] transition duration-300 hover:bg-[#0B3D2E] hover:text-[#F6F1E6] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Add Round
-                  </button>
+                  {!isTournamentFinalized ? (
+                    <button
+                      type="button"
+                      onClick={handleAddRound}
+                      className="rounded-full border border-[#0B3D2E] px-5 py-3 text-xs font-black uppercase tracking-[0.24em] text-[#0B3D2E] transition duration-300 hover:bg-[#0B3D2E] hover:text-[#F6F1E6]"
+                    >
+                      Add Round
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </section>

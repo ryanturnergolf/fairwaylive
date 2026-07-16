@@ -134,14 +134,14 @@ export default function TeamPlayerManagement({
                 Build your tournament field.
               </h3>
             </div>
-            <button
+            {!isReadOnly ? <button
               type="button"
               onClick={onOpenAddTeamModal}
               disabled={isReadOnly}
               className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#51635C]"
             >
               Add Team
-            </button>
+            </button> : null}
           </div>
 
           {teams.length === 0 ? (
@@ -179,7 +179,7 @@ export default function TeamPlayerManagement({
                     </div>
                   </div>
 
-                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  {!isReadOnly ? <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                     <button
                       type="button"
                       onClick={() => onOpenEditTeamModal(team)}
@@ -196,7 +196,7 @@ export default function TeamPlayerManagement({
                     >
                       Delete
                     </button>
-                  </div>
+                  </div> : null}
                 </div>
               ))}
             </div>
@@ -213,7 +213,7 @@ export default function TeamPlayerManagement({
                 Build your player roster.
               </h3>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
+            {!isReadOnly ? <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                   onClick={onOpenPlayerImportModal}
@@ -230,7 +230,7 @@ export default function TeamPlayerManagement({
               >
                 Add Player
               </button>
-            </div>
+            </div> : null}
           </div>
 
           {players.length === 0 ? (
@@ -258,7 +258,7 @@ export default function TeamPlayerManagement({
                     </h4>
                   </div>
 
-                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  {!isReadOnly ? <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                     <button
                       type="button"
                       onClick={() => onOpenEditPlayerModal(player)}
@@ -275,7 +275,7 @@ export default function TeamPlayerManagement({
                     >
                       Delete
                     </button>
-                  </div>
+                  </div> : null}
                 </div>
               ))}
             </div>

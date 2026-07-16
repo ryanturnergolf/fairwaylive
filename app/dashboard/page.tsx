@@ -779,10 +779,14 @@ export default function DashboardPage() {
                       <div className="mt-6 rounded-[20px] border border-[#D6E0D8] bg-[#F8FBF8] p-4">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <span className={`inline-flex w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${finalizationStatus?.eligible ? finalizationStatusStyles.eligible : finalizationStatusStyles.blocked}`}>
-                              {finalizationStatus?.eligible ? "Ready to finalize" : "Not ready to finalize"}
+                            <span className={`inline-flex w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${finalizationStatus?.finalizationRecord || finalizationStatus?.eligible ? finalizationStatusStyles.eligible : finalizationStatusStyles.blocked}`}>
+                              {finalizationStatus?.finalizationRecord
+                                ? "Tournament Finalized"
+                                : finalizationStatus?.eligible
+                                  ? "Ready to finalize"
+                                  : "Not ready to finalize"}
                             </span>
-                            {!finalizationStatus?.eligible ? (
+                            {!finalizationStatus?.eligible && !finalizationStatus?.finalizationRecord ? (
                               <p className="mt-3 text-sm font-semibold text-[#51635C]">
                                 Tournament scoring and verification must be completed before finalization.
                               </p>
