@@ -1,14 +1,8 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-13
+Last updated: 2026-07-16
 
 ## Open Bugs
-
-### Duplicate React keys on tournament print-scorecard rows
-
-Status: open.
-
-The tournament live-scoring view emits duplicate React key errors for player print-scorecard rows.
 
 ### Multiple anonymous GoTrueClient warnings
 
@@ -17,6 +11,48 @@ Status: open.
 The signed-out share-token scorecard creates multiple anonymous GoTrueClient instances using the default Supabase storage key. These clients do not compete for `clubhouse-hq-coach-auth`, but the warnings and redundant clients remain to be resolved.
 
 ## Resolved
+
+### Roster, pairing, and scorecard duplication
+
+Status: resolved in commit `479cf1ccb2af74fe32ad12a6e63ee9f0b2b9bead`.
+
+Active rosters are unique, pairings require every active player exactly once, and scorecards render only from validated pairings. This also resolved the duplicate React player-row keys caused by duplicated tournament data.
+
+### Stale tournament saves and hydration overwrites
+
+Status: resolved in commit `72669985ae0828deebc927be3b68675e0df77aa1`.
+
+Page-level saves are serialized, obsolete completions are ignored, authenticated hydration prefers remote state, and version-2 local envelopes are parsed consistently across tabs.
+
+### Unreliable QR and signed-out Mobile Scoring loading
+
+Status: resolved in commit `8a69ae4a2200fa1e484c2ed30ef61cfd174ee62b`.
+
+QR readiness requires synchronized validated data, share tokens are validated before rendering, and signed-out scorecards use authoritative tournament, player, pairing, score, and marker identities.
+
+### Scoring, Review Hub, and readiness inconsistency
+
+Status: resolved in commit `b6f3ec76f6cfc3e728871bb6add5e16ed840f830`.
+
+Scorer and marker changes persist through navigation and refresh, submissions are idempotent, and review and completion calculations use persisted scores only.
+
+### Team-only tournament saves rejected with an empty player roster
+
+Status: resolved in commit `a2200bf15a151df55a6f72d9c383ea6a2c1c5870`.
+
+Destructive-save protection is collection-specific, allowing teams to be created before players while retaining protection against genuine collection erasure.
+
+### Conflicting finalized status and mutation controls
+
+Status: resolved in commit `4ea6aa79ce67d8c2f9958221ca8f8007577617c6`.
+
+Finalized state is authoritative across dashboard, tournament, and mobile views; coach mutation controls are removed and historical scorecards remain read-only.
+
+### Dashboard readiness convergence delay
+
+Status: resolved in commit `650cc7a3ccea792ce4f727cf577d41d77b2938d7`.
+
+Targeted refreshes promptly converge dashboard readiness against persisted submission and review data without weakening finalization rules.
 
 ### QR modal stuck on Preparing
 

@@ -1,8 +1,28 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-13
+Last updated: 2026-07-16
 
 ## Active Decisions
+
+### Minimum Viable Stable Tournament uses the current persistence architecture
+
+The completed MVST baseline stabilizes the existing architecture without introducing a revision system or replacement persistence model.
+
+### Tournament collections require canonical integrity
+
+An active player may appear only once in the roster and exactly once in validated pairings. Scorecards and QR access may be generated only from valid pairings and synchronized tournament players. Team changes must update dependent state and invalidate stale pairings.
+
+### Tournament saves and hydration are ordered and authority-aware
+
+Page-level saves are serialized and obsolete asynchronous completions are ignored. Authenticated tournaments prefer current remote state, local reads use the canonical version-2 envelope parser, and synchronization stops when local persistence rejects a save.
+
+### Persisted scoring and review data determine readiness
+
+Scoring completion, Review Hub verification, and finalization readiness are calculated from persisted data. Targeted dashboard refreshes may accelerate convergence after mutations but must never infer readiness optimistically.
+
+### Finalized tournament state is authoritative and read-only
+
+Canonical finalized status from Supabase governs the dashboard, tournament page, and signed-out scorecards. Finalized tournaments expose historical data but no mutation-capable controls; UI prevention occurs before a request is created, with server authority retained as defense in depth.
 
 ### Temporary clients never manage coach authentication
 

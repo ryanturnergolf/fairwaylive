@@ -4,9 +4,25 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-13
+Last updated: 2026-07-16
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
+
+### Minimum Viable Stable Tournament
+
+Status: **COMPLETE**
+
+The current architecture supports the complete coach workflow from tournament creation through finalized, read-only historical access.
+
+1. MVST 1 — roster, pairing, scorecard, and QR integrity (`479cf1ccb2af74fe32ad12a6e63ee9f0b2b9bead`).
+2. MVST 2 — deterministic save ordering and hydration (`72669985ae0828deebc927be3b68675e0df77aa1`).
+3. MVST 3 — reliable QR and signed-out Mobile Scoring (`8a69ae4a2200fa1e484c2ed30ef61cfd174ee62b`).
+4. MVST 4 — scoring, Review Hub, and readiness lifecycle (`b6f3ec76f6cfc3e728871bb6add5e16ed840f830`).
+5. Team-only persistence correction supporting MVST 5 (`a2200bf15a151df55a6f72d9c383ea6a2c1c5870`).
+6. MVST 5 — canonical Teams and Finalization authority (`4ea6aa79ce67d8c2f9958221ca8f8007577617c6`).
+7. Dashboard readiness convergence (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
+
+The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
 ### Completed Milestone: Secure QR And Share-Token Verification
 
@@ -17,9 +33,8 @@ Status: complete.
 - Verified real Supabase tournament creation, player synchronization, and share-token reads.
 - Verified the mobile scorecard from a clean signed-out browser context.
 
-### Next Milestone: Resolve duplicate React keys and remaining anonymous GoTrueClient warnings.
+### Post-MVST Follow-up: Resolve remaining anonymous GoTrueClient warnings.
 
-- Remove duplicate React keys from tournament print-scorecard rows.
 - Consolidate anonymous share-token clients so the default Supabase storage-key warnings no longer occur.
 
 ### Milestone 1: Shared Tournament Read Model

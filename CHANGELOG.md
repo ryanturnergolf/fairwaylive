@@ -1,5 +1,22 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-16
+
+### Minimum Viable Stable Tournament Complete
+
+- Completed MVST 1: roster, team, pairing, scorecard, `tournament_players`, and QR-readiness integrity (`479cf1ccb2af74fe32ad12a6e63ee9f0b2b9bead`).
+- Completed MVST 2: deterministic tournament save ordering, hydration precedence, version-2 storage parsing, cross-tab synchronization, and round changes (`72669985ae0828deebc927be3b68675e0df77aa1`).
+- Completed MVST 3: reliable QR generation, share-token validation, and signed-out Mobile Scoring loading and identity selection (`8a69ae4a2200fa1e484c2ed30ef61cfd174ee62b`).
+- Completed MVST 4: reliable scorer and marker autosave, hole navigation, score restoration, Review Hub verification, and readiness calculation (`b6f3ec76f6cfc3e728871bb6add5e16ed840f830`).
+- Preserved valid team-only tournament saves and stopped synchronization after rejected local persistence (`a2200bf15a151df55a6f72d9c383ea6a2c1c5870`).
+- Completed MVST 5: canonical team behavior, finalized tournament authority, and post-finalization read-only enforcement (`4ea6aa79ce67d8c2f9958221ca8f8007577617c6`).
+- Eliminated the prolonged dashboard scoring/review readiness delay with targeted convergence against persisted state (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
+
+### Verification
+
+- Marked the Minimum Viable Stable Tournament milestone complete across creation, teams, players, pairings, scorecards, QR sharing, signed-out scoring, review, readiness, and finalization.
+- Verified finalized state remains authoritative after refresh and in clean browser contexts, with historical mobile scores visible read-only.
+
 ## 2026-07-13
 
 ### Fixed
