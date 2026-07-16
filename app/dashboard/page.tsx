@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
 import {
   loadDirectorDashboardReadModel,
+  loadDirectorTournamentSummary,
   type DirectorDashboardReadModel,
   type DirectorGroupStatusValue,
   type DirectorReviewSeverity,
@@ -300,6 +301,75 @@ export default function DashboardPage() {
       isCancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isClientMounted) {
+      return;
+    }
+
+    let refreshInFlight = false;
+    const intervalId = window.setInterval(() => {
+      if (refreshInFlight) {
+        return;
+      }
+
+      const candidate = directorReadModel.tournaments
+        .filter((summary) => {
+          const status = finalizationStatuses[summary.tournamentId || summary.sharedTournamentId];
+          return (
+            summary.completion.totalScorecards > 0 &&
+            !summary.completion.isReadyToClose &&
+            !status?.finalizationRecord
+          );
+        })
+        .sort((left, right) =>
+          String(right.lastSnapshotAt ?? "").localeCompare(String(left.lastSnapshotAt ?? ""))
+        )[0];
+
+      if (!candidate) {
+        return;
+      }
+
+      const localTournament = tournaments.find((tournament) => tournament.id === candidate.tournamentId) ?? null;
+      refreshInFlight = true;
+      void loadDirectorTournamentSummary({
+        tournamentId: candidate.tournamentId,
+        sharedTournamentId: candidate.sharedTournamentId,
+        localTournament,
+        stalledTimeoutMinutes: directorStalledTimeoutMinutes,
+      })
+        .then(async (summary) => {
+          setDirectorReadModel((current) => ({
+            generatedAt: new Date().toISOString(),
+            tournaments: current.tournaments.map((item) =>
+              (item.tournamentId || item.sharedTournamentId) === (summary.tournamentId || summary.sharedTournamentId)
+                ? summary
+                : item
+            ),
+          }));
+
+          const status = await loadTournamentFinalizationStatus({
+            tournamentId: summary.tournamentId,
+            sharedTournamentId: summary.sharedTournamentId,
+            localTournament,
+          });
+          setFinalizationStatuses((current) => ({
+            ...current,
+            [summary.tournamentId || summary.sharedTournamentId]: status,
+          }));
+        })
+        .catch((error) => {
+          console.warn("[DirectorDashboardService] Unable to refresh active tournament summary.", error);
+        })
+        .finally(() => {
+          refreshInFlight = false;
+        });
+    }, 4000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [directorReadModel.tournaments, finalizationStatuses, isClientMounted, tournaments]);
 
   useEffect(() => {
     if (!isClientMounted) {

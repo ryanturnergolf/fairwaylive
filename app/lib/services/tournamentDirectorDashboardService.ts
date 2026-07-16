@@ -11,6 +11,7 @@ import {
 import type { LegacyPairingGroup, TournamentStorageEnvelope } from "../tournamentModel";
 import { loadComparisonScores } from "./scoreService";
 import {
+  getTournamentAggregate,
   loadSharedTournamentAggregates,
   type TournamentAggregate,
 } from "./tournamentService";
@@ -705,6 +706,29 @@ export const buildDirectorTournamentSummary = async ({
   };
 };
 
+export type LoadDirectorTournamentSummaryInput = {
+  tournamentId: string;
+  sharedTournamentId?: string;
+  localTournament?: StoredTournament | null;
+  stalledTimeoutMinutes?: number;
+};
+
+export const loadDirectorTournamentSummary = async ({
+  tournamentId,
+  sharedTournamentId = "",
+  localTournament = null,
+  stalledTimeoutMinutes = defaultStalledTimeoutMinutes,
+}: LoadDirectorTournamentSummaryInput): Promise<DirectorTournamentSummary> => {
+  const aggregateId = sharedTournamentId || tournamentId;
+  const aggregate = aggregateId ? await getTournamentAggregate(aggregateId) : null;
+
+  return buildDirectorTournamentSummary({
+    aggregate,
+    localTournament,
+    stalledTimeoutMinutes,
+  });
+};
+
 export const loadDirectorDashboardReadModel = async (
   localTournaments: StoredTournament[],
   options: LoadDirectorDashboardReadModelOptions = {}
@@ -717,16 +741,24 @@ export const loadDirectorDashboardReadModel = async (
   });
   const summariesById = new Map<string, DirectorTournamentSummary>();
 
-  for (const aggregate of sharedAggregates) {
-    const summary = await buildDirectorTournamentSummary({ aggregate, localTournament: null, stalledTimeoutMinutes, now });
+  const sharedSummaries = await Promise.all(
+    sharedAggregates.map((aggregate) =>
+      buildDirectorTournamentSummary({ aggregate, localTournament: null, stalledTimeoutMinutes, now })
+    )
+  );
+  for (const summary of sharedSummaries) {
     summariesById.set(summary.tournamentId || summary.sharedTournamentId, summary);
   }
 
-  for (const tournament of localTournaments) {
-    const sharedTournamentId = loadSharedTournamentIdFromStorage(tournament.id);
-    const aggregate =
-      sharedAggregates.find((item) => item.sharedTournamentId === sharedTournamentId || item.tournamentId === tournament.id) ?? null;
-    const summary = await buildDirectorTournamentSummary({ aggregate, localTournament: tournament, stalledTimeoutMinutes, now });
+  const localSummaries = await Promise.all(
+    localTournaments.map((tournament) => {
+      const sharedTournamentId = loadSharedTournamentIdFromStorage(tournament.id);
+      const aggregate =
+        sharedAggregates.find((item) => item.sharedTournamentId === sharedTournamentId || item.tournamentId === tournament.id) ?? null;
+      return buildDirectorTournamentSummary({ aggregate, localTournament: tournament, stalledTimeoutMinutes, now });
+    })
+  );
+  for (const summary of localSummaries) {
     summariesById.set(summary.tournamentId || summary.sharedTournamentId, summary);
   }
 
