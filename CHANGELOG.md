@@ -2,6 +2,21 @@
 
 ## 2026-07-16
 
+### Real Supabase Tournament Workflow Certified
+
+- Prevented rapid Save Hole actions from shifting adjacent-hole scores by pinning each transaction to one hole, draining pending autosaves, and blocking duplicate navigation while persistence completes.
+- Aligned Review Hub submission validation with the marked-player self scores and marker scores rendered by the review table.
+- Hydrated the live leaderboard with authoritative Supabase player identities, preserving marker-score selection without cross-player score merges.
+- Limited configured team counting scores to the smallest available team roster while preserving the configured count for teams with enough players.
+- Kept finalization eligibility polling active until the completed snapshot converges, then finalized through an authenticated, version-guarded Supabase mutation.
+- Added focused Playwright coverage for rapid adjacent-hole saves, Review submission, leaderboard hydration, feasible team standings, finalization convergence, authoritative finalization, duplicate-finalize rejection, and read-only enforcement.
+
+### Certification
+
+- Certified the complete real Supabase workflow through tournament creation, roster setup, pairings, QR generation, clean signed-out mobile scoring, refresh restoration, Review Hub submission, individual and team leaderboard convergence, Tournament Ready, finalization, and desktop/mobile read-only enforcement.
+- Verified the authoritative finalized tournament and snapshot remain finalized after refresh and in clean browser contexts.
+- Final regression baseline: production build passed and Playwright passed 47/47.
+
 ### Minimum Viable Stable Tournament Complete
 
 - Completed MVST 1: roster, team, pairing, scorecard, `tournament_players`, and QR-readiness integrity (`479cf1ccb2af74fe32ad12a6e63ee9f0b2b9bead`).

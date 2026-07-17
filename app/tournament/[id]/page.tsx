@@ -246,7 +246,21 @@ export default function TournamentPage() {
     pairingOrder: "Worst to Best",
     teeTimeInterval: "8 minutes",
   });
-  const normalizedRoundSetup = normalizeTournamentRoundSetup(roundSetup, defaultRoundSetupState);
+  const normalizedRoundSetup = normalizeTournamentRoundSetup(roundSetup, defaultRoundSetupState, scorecardRows);
+  useEffect(() => {
+    if (
+      !scorecardsGenerated ||
+      scorecardRows.length === 0 ||
+      String(normalizedRoundSetup.countingScores) === roundSetup.countingScores
+    ) {
+      return;
+    }
+
+    setRoundSetup((current) => ({
+      ...current,
+      countingScores: String(normalizedRoundSetup.countingScores),
+    }));
+  }, [normalizedRoundSetup.countingScores, roundSetup.countingScores, scorecardRows.length, scorecardsGenerated]);
   const latestState = useMemo(
     () => ({
       teams,
@@ -510,6 +524,7 @@ export default function TournamentPage() {
     scorecardsGenerated,
     scorecardRowsLength: scorecardRows.length,
     roundNumber: roundSetup.roundNumber,
+    playerIdsByName,
     setScorecardRows,
   });
 

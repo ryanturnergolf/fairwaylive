@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Tournament scoring certification blockers
+
+Status: resolved and certified against real Supabase on 2026-07-16.
+
+Rapid Save Hole actions no longer shift adjacent-hole values; Review submission validates the same marked-player comparison shown in the UI; live scoring merges submitted rows by authoritative player identity; team counting-score configuration remains feasible for small rosters; completed snapshots continue converging into finalization eligibility; and finalization now persists through the authenticated, version-guarded Supabase mutation path.
+
+The complete workflow was verified through finalization and read-only refresh behavior in desktop and clean signed-out mobile contexts. Focused regressions are included in `mobile-scorecard-persistence.spec.ts`, `roster-pairing-integrity.spec.ts`, and `tournament-finalization-workflow.spec.ts`.
+
 ### Roster, pairing, and scorecard duplication
 
 Status: resolved in commit `479cf1ccb2af74fe32ad12a6e63ee9f0b2b9bead`.

@@ -300,7 +300,7 @@ const routeSharedTournamentRoster = async (page: Page) => {
   });
 };
 
-const routeSharedScoreEntriesStore = async (page: Page) => {
+const routeSharedScoreEntriesStore = async (page: Page, writeDelayMs = 0) => {
   const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
   let scoreReadCount = 0;
 
@@ -309,6 +309,7 @@ const routeSharedScoreEntriesStore = async (page: Page) => {
     const url = new URL(request.url());
 
     if (request.method() !== "GET") {
+      if (writeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, writeDelayMs));
       const body = request.postDataJSON() as Partial<ReturnType<typeof buildScoreEntry>>;
       const entry = buildScoreEntry(
         String(body.player_id),
@@ -756,8 +757,41 @@ test("scorer and marker inputs autosave before navigation and survive refresh", 
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("5");
 });
 
+test("rapid Save Hole actions preserve adjacent persisted hole positions", async ({ page }) => {
+  const sharedStore = await routeSharedScoreEntriesStore(page, 150);
+
+  await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await waitForMobileScorecardControls(page);
+  await waitForSharedScoreHydration(sharedStore);
+
+  const selfScores = [3, 4, 5, 4, 5, 3, 4, 5, 3, 4, 5, 3, 4, 5, 3, 4, 5, 3];
+  const markerScores = [4, 5, 6, 6, 7, 4, 5, 6, 4, 5, 6, 4, 5, 6, 4, 5, 6, 4];
+  const selfScoreInput = page.getByLabel("Ava Green's Score");
+  const markerScoreInput = page.getByLabel("Ben Marker's Score");
+  const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
+
+  for (let holeIndex = 0; holeIndex < selfScores.length; holeIndex += 1) {
+    await expect(page.getByText(`Hole ${holeIndex + 1}`, { exact: true })).toBeVisible();
+    await selfScoreInput.fill(String(selfScores[holeIndex]));
+    await markerScoreInput.fill(String(markerScores[holeIndex]));
+    await saveHoleButton.click();
+  }
+
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-1")?.hole_scores)
+    .toEqual(selfScores);
+  await expect
+    .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2")?.hole_scores)
+    .toEqual(markerScores);
+  expect(sharedStore.savedScoreRows.find((row) => row.player_id === "player-1")?.hole_scores.slice(3, 5)).toEqual([4, 5]);
+  expect(sharedStore.savedScoreRows.find((row) => row.player_id === "player-2")?.hole_scores.slice(3, 5)).toEqual([6, 7]);
+  await expect(page.getByText("Through 18/18", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review & Submit Round" })).toBeEnabled();
+});
+
 test("completed scorer and marker entries submit once and restore submitted state", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  sharedStore.savedScoreRows.push(buildScoreEntry("player-2", "player-2", Array.from({ length: 18 }, () => 4)));
   await page.route("**/api/score-mutations", async (route) => {
     const body = route.request().postDataJSON() as { action: string; input: Record<string, unknown> };
     if (body.action === "saveScoreEntry") {
@@ -824,6 +858,85 @@ test("completed scorer and marker entries submit once and restore submitted stat
     .toBe(2);
   await expect(page.getByRole("button", { name: "Confirm Submit" })).toHaveCount(0);
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
+  await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted").length)
+    .toBe(2);
+});
+
+test("Review submission uses the same marked-player comparison rendered by the table", async ({ page }) => {
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+  const scorerScores = Array.from({ length: 18 }, () => 6);
+  const markerScores = Array.from({ length: 18 }, () => 4);
+  const mismatchedMarkedPlayerScores = [...markerScores];
+  mismatchedMarkedPlayerScores[0] = 5;
+  sharedStore.savedScoreRows.push(
+    buildScoreEntry("player-1", "player-1", scorerScores),
+    buildScoreEntry("player-2", "player-1", markerScores),
+    buildScoreEntry("player-2", "player-2", mismatchedMarkedPlayerScores)
+  );
+
+  await page.route("**/api/score-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action: string; input: Record<string, unknown> };
+    if (body.action === "saveScoreEntry") {
+      const row = {
+        ...buildScoreEntry(
+          String(body.input.playerId),
+          String(body.input.enteredByPlayerId),
+          body.input.holeScores as number[],
+          String(body.input.tournamentId)
+        ),
+        entry_status: String(body.input.entryStatus),
+        submitted_at: body.input.submittedAt as string | null,
+      };
+      const index = sharedStore.savedScoreRows.findIndex(
+        (entry) => entry.player_id === row.player_id && entry.entered_by_player_id === row.entered_by_player_id
+      );
+      if (index >= 0) sharedStore.savedScoreRows.splice(index, 1, row);
+      else sharedStore.savedScoreRows.push(row);
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(row) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: "review-status", ...body.input }) });
+  });
+  await page.route("**/rest/v1/score_review_status**", async (route) => {
+    const input = route.request().postDataJSON() as Record<string, unknown> | null;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "review-status",
+        tournament_id: input?.tournament_id ?? sharedTournamentId,
+        round_number: input?.round_number ?? 1,
+        player_id: input?.player_id ?? "player-1",
+        self_review_complete: Boolean(input?.self_review_complete),
+        marker_review_complete: Boolean(input?.marker_review_complete),
+        official_at: null,
+        created_at: null,
+        updated_at: null,
+      }),
+    });
+  });
+
+  await gotoApp(page, baseUrl);
+  await page.evaluate(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: sharedTournamentStorageKey, value: sharedTournamentId }
+  );
+  await gotoApp(page, `${baseUrl}/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
+  await waitForSharedScoreHydration(sharedStore, 4);
+  await expect(page.getByText("⚠ Discrepancies Found", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hole 1: Self 5 vs Marker 4", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Edit Scores" }).click();
+  await expect(page.getByText("Hole 1", { exact: true })).toBeVisible();
+  await page.getByLabel("Ben Marker's Score").fill("5");
+  await page.getByRole("button", { name: "Save Hole" }).click();
+  await page.getByRole("button", { name: "Review & Submit Round" }).click();
+  await expect(page.getByText("✓", { exact: true })).toHaveCount(18);
+  await page.getByRole("button", { name: "Submit Verification" }).click();
+  await page.getByRole("button", { name: "Confirm Submit" }).click();
   await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
   await expect
     .poll(() => sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted").length)
@@ -1422,6 +1535,87 @@ test("live scoreboard uses marker scores instead of self-entered scores", async 
   const benRow = page.getByRole("row").filter({ hasText: "Ben Marker" });
   await expect(avaRow.getByRole("spinbutton").first()).toHaveValue("0");
   await expect(benRow.getByRole("spinbutton").first()).toHaveValue("5");
+});
+
+test("live leaderboard hydrates submitted Supabase player identities across refresh", async ({ page }) => {
+  const avaScores = Array.from({ length: 18 }, () => 4);
+  const benScores = Array.from({ length: 18 }, () => 5);
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+  sharedStore.savedScoreRows.push(
+    {
+      ...buildScoreEntry("player-1", "player-1", Array.from({ length: 18 }, () => 9)),
+      entry_status: "submitted",
+      submitted_at: "2026-07-16T12:00:00.000Z",
+    },
+    {
+      ...buildScoreEntry("player-1", "player-2", avaScores),
+      entry_status: "submitted",
+      submitted_at: "2026-07-16T12:01:00.000Z",
+    },
+    {
+      ...buildScoreEntry("player-2", "player-2", Array.from({ length: 18 }, () => 8)),
+      entry_status: "submitted",
+      submitted_at: "2026-07-16T12:02:00.000Z",
+    },
+    {
+      ...buildScoreEntry("player-2", "player-1", benScores),
+      entry_status: "submitted",
+      submitted_at: "2026-07-16T12:03:00.000Z",
+    },
+    {
+      ...buildScoreEntry("player-unrelated", "player-1", Array.from({ length: 18 }, () => 2)),
+      entry_status: "submitted",
+      submitted_at: "2026-07-16T12:04:00.000Z",
+    }
+  );
+  await routeSharedTournamentRoster(page);
+  await routeTournamentStateSnapshotStore(page);
+
+  const timestampIdentityEnvelope = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
+  timestampIdentityEnvelope.uiState.scorecards.scorecardRows[0].id = 1784252056760;
+  timestampIdentityEnvelope.uiState.scorecards.scorecardRows[1].id = 1784252058282;
+
+  await gotoApp(page, baseUrl);
+  await page.evaluate(
+    ({ envelope, sharedKey, sharedId, storageKey }) => {
+      window.localStorage.setItem(storageKey, JSON.stringify(envelope));
+      window.localStorage.setItem(sharedKey, sharedId);
+    },
+    {
+      envelope: timestampIdentityEnvelope,
+      sharedKey: sharedTournamentStorageKey,
+      sharedId: sharedTournamentId,
+      storageKey: tournamentStorageKey,
+    }
+  );
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThan(1);
+
+  const assertHydratedLeaderboard = async () => {
+    const avaRow = page.getByRole("row").filter({ hasText: "Ava Green" }).first();
+    const benRow = page.getByRole("row").filter({ hasText: "Ben Marker" }).first();
+    const teamScores = page.getByText("Counting Score Total (1)", { exact: true }).locator("../..");
+    const teamRow = teamScores.getByRole("row").filter({ hasText: "E2E University" });
+
+    await expect(avaRow).toContainText("72");
+    await expect(avaRow).toContainText("E");
+    await expect(avaRow).toContainText("F");
+    await expect(benRow).toContainText("90");
+    await expect(benRow).toContainText("+18");
+    await expect(benRow).toContainText("F");
+    await expect(teamRow).toContainText("72");
+    await expect(avaRow).not.toContainText("36");
+    await expect(benRow).not.toContainText("36");
+  };
+
+  await assertHydratedLeaderboard();
+  await expect(page.locator('input[type="number"][value="4"]')).toHaveCount(18);
+  await expect(page.locator('input[type="number"][value="5"]')).toHaveCount(18);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await assertHydratedLeaderboard();
 });
 
 test("phone shared score save updates live scoreboard", async ({ page }) => {

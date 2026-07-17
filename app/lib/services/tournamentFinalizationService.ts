@@ -7,6 +7,7 @@ import {
   type StoredTournament,
 } from "../tournamentStorage";
 import type { TournamentFinalizationRecord, TournamentSettings, TournamentStorageEnvelope } from "../tournamentModel";
+import { finalizeTournamentAggregate } from "../repositories/tournamentRepository";
 import {
   buildDirectorTournamentSummary,
   type DirectorTournamentSummary,
@@ -107,6 +108,17 @@ export type LoadTournamentFinalizationStatusInput = {
   sharedTournamentId?: string;
   localTournament?: StoredTournament | null;
 };
+
+export const shouldRefreshTournamentFinalizationStatus = (
+  summary: DirectorTournamentSummary,
+  status: TournamentFinalizationStatus | undefined
+) =>
+  summary.completion.totalScorecards > 0 &&
+  !status?.finalizationRecord &&
+  (
+    !summary.completion.isReadyToClose ||
+    Boolean(status?.blockingReasons.some((reason) => reason.code === "snapshot_not_current"))
+  );
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
@@ -414,7 +426,11 @@ export const finalizeTournament = async ({
     };
   }
 
-  const envelope = loadTournamentStorageEnvelope(tournamentId);
+  const effectiveSharedTournamentId = status.sharedTournamentId || sharedTournamentId;
+  let envelope = loadTournamentStorageEnvelope(tournamentId);
+  if (!envelope && effectiveSharedTournamentId) {
+    envelope = (await getTournamentAggregate(effectiveSharedTournamentId).catch(() => null))?.envelope ?? null;
+  }
   if (!envelope) {
     return {
       finalized: false,
@@ -456,9 +472,33 @@ export const finalizeTournament = async ({
     },
   };
 
+  if (!effectiveSharedTournamentId) {
+    return {
+      finalized: false,
+      status: {
+        ...status,
+        eligible: false,
+        finalizationRecord: null,
+        blockingReasons: [
+          ...status.blockingReasons,
+          {
+            code: "finalization_load_failed",
+            message: "Tournament finalization could not resolve the shared tournament identity.",
+          },
+        ],
+      },
+    };
+  }
+
+  await finalizeTournamentAggregate({
+    tournamentId: effectiveSharedTournamentId,
+    localTournamentId: tournamentId,
+    schemaVersion: finalizedEnvelope.version,
+    stateSnapshot: finalizedEnvelope,
+    finalizedAt: finalizationRecord.finalizedAt,
+  });
   saveTournamentStorageEnvelope(tournamentId, finalizedEnvelope);
   updateStoredTournamentFinalizationSettings(tournamentId, "Finalized", finalizationRecord);
-  await syncFinalizedSnapshot(tournamentId, status.sharedTournamentId || sharedTournamentId, finalizedEnvelope);
 
   return {
     finalized: true,

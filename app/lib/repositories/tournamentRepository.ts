@@ -13,6 +13,7 @@ export type TournamentRow = {
   tournament_date: string | null;
   number_of_rounds: number;
   status: string;
+  finalized_at?: string | null;
   aggregate_version?: number;
   created_at: string | null;
   updated_at: string | null;
@@ -99,7 +100,7 @@ export type ShareTokenReadOptions = {
 };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,aggregate_version,created_at,updated_at";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at";
 
 const tournamentPlayerColumns =
   "id,tournament_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
@@ -325,6 +326,21 @@ export const getTournamentRow = async (
 
   return data as TournamentRow | null;
 };
+
+export const finalizeTournamentAggregate = async (input: {
+  tournamentId: string;
+  localTournamentId: string;
+  schemaVersion: number;
+  stateSnapshot: unknown;
+  finalizedAt: string;
+}) =>
+  postTournamentMutation<{
+    tournament: TournamentRow;
+    snapshotAggregateVersion: number;
+  }>({
+    action: "finalizeTournament",
+    input,
+  });
 
 export const listTournamentRows = async (): Promise<TournamentRow[]> => {
   const supabase = getClient();

@@ -13,6 +13,7 @@ import {
 import {
   finalizeTournament,
   loadTournamentFinalizationStatus,
+  shouldRefreshTournamentFinalizationStatus,
   type TournamentFinalizationStatus,
 } from "../lib/services/tournamentFinalizationService";
 import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
@@ -316,11 +317,7 @@ export default function DashboardPage() {
       const candidate = directorReadModel.tournaments
         .filter((summary) => {
           const status = finalizationStatuses[summary.tournamentId || summary.sharedTournamentId];
-          return (
-            summary.completion.totalScorecards > 0 &&
-            !summary.completion.isReadyToClose &&
-            !status?.finalizationRecord
-          );
+          return shouldRefreshTournamentFinalizationStatus(summary, status);
         })
         .sort((left, right) =>
           String(right.lastSnapshotAt ?? "").localeCompare(String(left.lastSnapshotAt ?? ""))

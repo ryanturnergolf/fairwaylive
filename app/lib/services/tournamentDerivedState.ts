@@ -30,18 +30,44 @@ export type TeamLeaderboardRow = {
   today: string;
 };
 
+export const limitCountingScoresToAvailablePlayers = (
+  configuredCountingScores: number,
+  scorecardRows: LegacyScorecardRow[]
+) => {
+  const normalizedConfiguredCount = Math.max(1, Math.min(6, configuredCountingScores || 4));
+  const teamPlayerCounts = new Map<string, number>();
+
+  scorecardRows.forEach((row) => {
+    const teamName = row.team.trim();
+    if (teamName) {
+      teamPlayerCounts.set(teamName, (teamPlayerCounts.get(teamName) ?? 0) + 1);
+    }
+  });
+
+  if (teamPlayerCounts.size === 0) {
+    return normalizedConfiguredCount;
+  }
+
+  return Math.min(normalizedConfiguredCount, ...teamPlayerCounts.values());
+};
+
 export const normalizeTournamentRoundSetup = (
   roundSetup: LegacyRoundSetupState | null | undefined,
-  defaultRoundSetup: LegacyRoundSetupState
-): NormalizedRoundSetup => ({
-  roundNumber: Math.max(1, Number(roundSetup?.roundNumber) || 1),
-  numberOfHoles: Math.max(1, Math.min(18, Number(roundSetup?.numberOfHoles) || 18)),
-  countingScores: Math.max(1, Math.min(6, Number(roundSetup?.countingScores) || 4)),
-  startingHole: Math.max(1, Number(roundSetup?.startingHole) || 1),
-  teeIntervalMinutes: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.teeIntervalMinutes) || 10),
-  defaultGroupSize: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.defaultGroupSize) || 4),
-  teeTime: roundSetup?.teeTime || defaultRoundSetup.teeTime,
-});
+  defaultRoundSetup: LegacyRoundSetupState,
+  scorecardRows: LegacyScorecardRow[] = []
+): NormalizedRoundSetup => {
+  const configuredCountingScores = Math.max(1, Math.min(6, Number(roundSetup?.countingScores) || 4));
+
+  return {
+    roundNumber: Math.max(1, Number(roundSetup?.roundNumber) || 1),
+    numberOfHoles: Math.max(1, Math.min(18, Number(roundSetup?.numberOfHoles) || 18)),
+    countingScores: limitCountingScoresToAvailablePlayers(configuredCountingScores, scorecardRows),
+    startingHole: Math.max(1, Number(roundSetup?.startingHole) || 1),
+    teeIntervalMinutes: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.teeIntervalMinutes) || 10),
+    defaultGroupSize: Math.max(1, Number((roundSetup as Partial<Record<string, unknown>> | null)?.defaultGroupSize) || 4),
+    teeTime: roundSetup?.teeTime || defaultRoundSetup.teeTime,
+  };
+};
 
 export const calculateTotal = (scores: number[]) =>
   scores.reduce((total, score) => total + (Number.isFinite(score) ? score : 0), 0);

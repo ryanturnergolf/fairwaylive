@@ -1,5 +1,9 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
-import { reopenFinalizedTournament } from "../../app/lib/services/tournamentFinalizationService";
+import {
+  buildTournamentFinalizationStatus,
+  reopenFinalizedTournament,
+  shouldRefreshTournamentFinalizationStatus,
+} from "../../app/lib/services/tournamentFinalizationService";
 
 const tournamentId = "finalization-workflow-tournament";
 const sharedTournamentId = "55555555-5555-4555-8555-555555555555";
@@ -125,6 +129,66 @@ const tournamentEnvelope = {
     },
   },
 };
+
+test("completed snapshot convergence is retried while incomplete tournaments remain ineligible", () => {
+  const completedSummary = {
+    tournamentId,
+    sharedTournamentId,
+    totalGroups: 1,
+    groupsFinished: 1,
+    groups: [{ status: "Finished" }],
+    reviewQueue: [],
+    readiness: { status: "Ready", reasons: [] },
+    completion: {
+      totalScorecards: 2,
+      scorecardsComplete: 2,
+      requiredScoresTotal: 2,
+      requiredScoresSubmitted: 2,
+      holesRemaining: 0,
+      playersRemaining: 0,
+      groupsRemaining: 0,
+      isReadyToClose: true,
+    },
+  };
+  const snapshotPendingStatus = {
+    finalizationRecord: null,
+    blockingReasons: [{ code: "snapshot_not_current" }],
+  };
+
+  expect(
+    shouldRefreshTournamentFinalizationStatus(
+      completedSummary as never,
+      snapshotPendingStatus as never
+    )
+  ).toBe(true);
+  expect(
+    shouldRefreshTournamentFinalizationStatus(
+      completedSummary as never,
+      { finalizationRecord: null, blockingReasons: [] } as never
+    )
+  ).toBe(false);
+
+  const incompleteStatus = buildTournamentFinalizationStatus({
+    summary: {
+      ...completedSummary,
+      completion: {
+        ...completedSummary.completion,
+        scorecardsComplete: 1,
+        requiredScoresSubmitted: 1,
+        holesRemaining: 18,
+        playersRemaining: 1,
+        groupsRemaining: 1,
+        isReadyToClose: false,
+      },
+    } as never,
+    aggregate: { envelope: tournamentEnvelope } as never,
+    localEnvelope: tournamentEnvelope as never,
+  });
+  expect(incompleteStatus.eligible).toBe(false);
+  expect(incompleteStatus.blockingReasons.map((reason) => reason.code)).toEqual(
+    expect.arrayContaining(["scorecards_incomplete", "required_scores_missing"])
+  );
+});
 
 const tournamentRow = {
   id: sharedTournamentId,
@@ -317,14 +381,51 @@ const routeFinalizationBackend = async (page: Page, options: FinalizationBackend
 
 test("eligible tournament can be finalized and becomes read-only", async ({ page }) => {
   await routeFinalizationBackend(page);
-  page.on("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Finalize this tournament?");
-    await dialog.accept();
-  });
+  let finalizedMutation: Record<string, unknown> | null = null;
+  let hasFinalized = false;
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action?: string; input?: Record<string, unknown> };
+    if (body.action !== "finalizeTournament") {
+      await route.fallback();
+      return;
+    }
+    if (hasFinalized) {
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Tournament is already finalized." }),
+      });
+      return;
+    }
 
+    hasFinalized = true;
+    finalizedMutation = body.input ?? null;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tournament: {
+          ...tournamentRow,
+          status: "finalized",
+          finalized_at: body.input?.finalizedAt,
+          aggregate_version: 2,
+        },
+        snapshotAggregateVersion: 2,
+      }),
+    });
+  });
   await gotoApp(page, "/dashboard");
   await page.evaluate(
     ({ tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }) => {
+      window.localStorage.setItem(
+        "clubhouse-hq-coach-auth",
+        JSON.stringify({
+          access_token: "e2e-finalization-access-token",
+          refresh_token: "e2e-finalization-refresh-token",
+          expires_at: 4102444800,
+          user: { id: "11111111-1111-4111-8111-111111111111", role: "authenticated" },
+        })
+      );
       window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([storedTournament]));
       window.localStorage.setItem(tournamentStorageKey, JSON.stringify(tournamentEnvelope));
       window.localStorage.setItem(sharedTournamentStorageKey, sharedTournamentId);
@@ -332,8 +433,37 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
     { tournamentStorageKey, sharedTournamentStorageKey, storedTournament, tournamentEnvelope, sharedTournamentId }
   );
   await page.reload({ waitUntil: "domcontentloaded" });
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Finalize this tournament?");
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "Finalize Tournament" }).first().click();
+  await expect.poll(() => finalizedMutation).not.toBeNull();
   await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeVisible();
+  expect(finalizedMutation).toMatchObject({
+    tournamentId: sharedTournamentId,
+    localTournamentId: tournamentId,
+    schemaVersion: 2,
+  });
+  expect((finalizedMutation as { finalizedAt?: string }).finalizedAt).toBeTruthy();
+  expect(
+    ((finalizedMutation as { stateSnapshot?: typeof tournamentEnvelope }).stateSnapshot?.tournament.settings as {
+      finalization?: { isFinalized?: boolean };
+    }).finalization?.isFinalized
+  ).toBe(true);
+
+  const secondFinalizeStatus = await page.evaluate(
+    async ({ input }) => {
+      const response = await fetch("/api/tournament-mutations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "finalizeTournament", input }),
+      });
+      return response.status;
+    },
+    { input: finalizedMutation }
+  );
+  expect(secondFinalizeStatus).toBe(409);
 
   const finalizedRecord = await page.evaluate((key) => {
     const envelope = JSON.parse(window.localStorage.getItem(key) || "{}");

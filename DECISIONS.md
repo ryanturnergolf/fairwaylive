@@ -4,6 +4,18 @@ Last updated: 2026-07-16
 
 ## Active Decisions
 
+### Certified scoring mutations preserve authoritative identity and ordering
+
+Each Save Hole transaction captures one immutable target hole and completes pending score persistence before navigation. Review submission uses the same marked-player self and marker comparison rendered by the Review Hub. Shared leaderboard hydration maps local scorecard rows to authoritative tournament player identities while retaining marker-entered scores as the competition source.
+
+### Team counting scores must be feasible
+
+The configured counting-score value remains unchanged when every team has enough players. When a team roster is smaller, the effective count is limited to the smallest available team so a valid team leaderboard cannot be impossible to produce.
+
+### Finalization is an authenticated authoritative mutation
+
+Eligibility remains strict and continues polling while an otherwise completed tournament waits for snapshot convergence. Finalization writes the finalized snapshot and tournament status through the authenticated server mutation path with aggregate-version guards. A repeated or stale finalization request is rejected rather than treated as a successful no-op.
+
 ### Minimum Viable Stable Tournament uses the current persistence architecture
 
 The completed MVST baseline stabilizes the existing architecture without introducing a revision system or replacement persistence model.

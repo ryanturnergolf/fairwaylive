@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Certification: Real Supabase Tournament Workflow
+
+Status: **COMPLETE**
+
+- Certified rapid adjacent-hole scoring without score-position shifts.
+- Certified matching Review Hub submission and mismatch blocking.
+- Certified authoritative player identity hydration for individual and team leaderboards.
+- Certified feasible counting-score normalization for three-player teams without changing four-player or larger-team behavior.
+- Certified readiness and snapshot convergence into finalization eligibility.
+- Certified the authenticated, version-guarded Supabase finalization mutation, duplicate-finalize rejection, and durable desktop/mobile read-only state.
+- Final automated regression: production build passed and Playwright passed 47/47.
+
 ### Completed Milestone: Secure QR And Share-Token Verification
 
 Status: complete.

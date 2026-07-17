@@ -12,6 +12,10 @@ import {
   validateScorecardIntegrity,
 } from "../../app/lib/services/tournamentPageHelpers";
 import { buildTournamentPlayerRows } from "../../app/lib/services/tournamentService";
+import {
+  buildTeamLeaderboard,
+  limitCountingScoresToAvailablePlayers,
+} from "../../app/lib/services/tournamentDerivedState";
 import type { LegacyPlayer, TournamentStorageEnvelope } from "../../app/lib/tournamentModel";
 
 const teams = [
@@ -116,4 +120,52 @@ test("authoritative scoring rows use current unique scorer and marker IDs", () =
   expect(new Set(rows.map((row) => row.player_id)).size).toBe(2);
   expect(rows.every((row) => row.marker_player_id && row.marker_player_id !== row.player_id)).toBe(true);
   expect(new Set(players.map(getRosterPlayerIdentity)).size).toBe(2);
+});
+
+test("team counting scores remain feasible for three-player teams without changing larger teams", () => {
+  const buildRows = (playersPerTeam: number) =>
+    ["Team A", "Team B"].flatMap((team, teamIndex) =>
+      Array.from({ length: playersPerTeam }, (_, playerIndex) => ({
+        id: teamIndex * 10 + playerIndex,
+        playerName: `${team} Player ${playerIndex + 1}`,
+        team,
+        scores: Array.from({ length: 18 }, () => 4 + playerIndex),
+      }))
+    );
+
+  const threePlayerRows = buildRows(3);
+  const threePlayerCount = limitCountingScoresToAvailablePlayers(4, threePlayerRows);
+  expect(threePlayerCount).toBe(3);
+  expect(
+    buildTeamLeaderboard({
+      scorecardsGenerated: true,
+      scorecardRows: threePlayerRows,
+      displayHoleCount: 18,
+      countingScores: threePlayerCount,
+    })
+  ).toHaveLength(2);
+
+  const fourPlayerRows = buildRows(4);
+  const fourPlayerCount = limitCountingScoresToAvailablePlayers(4, fourPlayerRows);
+  expect(fourPlayerCount).toBe(4);
+  expect(
+    buildTeamLeaderboard({
+      scorecardsGenerated: true,
+      scorecardRows: fourPlayerRows,
+      displayHoleCount: 18,
+      countingScores: fourPlayerCount,
+    })
+  ).toHaveLength(2);
+
+  const fivePlayerRows = buildRows(5);
+  const fivePlayerCount = limitCountingScoresToAvailablePlayers(4, fivePlayerRows);
+  const fivePlayerStandings = buildTeamLeaderboard({
+    scorecardsGenerated: true,
+    scorecardRows: fivePlayerRows,
+    displayHoleCount: 18,
+    countingScores: fivePlayerCount,
+  });
+  expect(fivePlayerCount).toBe(4);
+  expect(fivePlayerStandings).toHaveLength(2);
+  expect(fivePlayerStandings.every((team) => team.totalScore === 18 * (4 + 5 + 6 + 7))).toBe(true);
 });

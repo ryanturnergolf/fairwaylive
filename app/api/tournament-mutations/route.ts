@@ -42,10 +42,20 @@ type MutationBody =
       input: {
         tokenId: string;
       };
+    }
+  | {
+      action: "finalizeTournament";
+      input: {
+        tournamentId: string;
+        localTournamentId: string;
+        schemaVersion: number;
+        stateSnapshot: unknown;
+        finalizedAt: string;
+      };
     };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,aggregate_version,created_at,updated_at";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at";
 
 const getAuthenticatedClient = async (request: Request) => {
   const authorization = request.headers.get("authorization") ?? "";
@@ -81,6 +91,7 @@ const getAuthenticatedClient = async (request: Request) => {
 
 class AuthenticationError extends Error {}
 class AuthorizationError extends Error {}
+class MutationConflictError extends Error {}
 
 const extractErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -93,9 +104,11 @@ const extractErrorMessage = (error: unknown): string => {
 const jsonError = (error: unknown, status = 400) => {
   const message = extractErrorMessage(error);
   const httpStatus = error instanceof AuthenticationError
-    ? 401
-    : error instanceof AuthorizationError || (error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "42501")
-      ? 403
+      ? 401
+      : error instanceof AuthorizationError || (error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "42501")
+        ? 403
+        : error instanceof MutationConflictError
+          ? 409
       : status;
   return NextResponse.json({ error: message }, { status: httpStatus });
 };
@@ -253,6 +266,61 @@ export async function POST(request: Request) {
 
       if (error) throw error;
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "finalizeTournament") {
+      const { data: tournament, error: tournamentReadError } = await supabase
+        .from("tournaments")
+        .select(tournamentColumns)
+        .eq("id", body.input.tournamentId)
+        .maybeSingle();
+      if (tournamentReadError) throw tournamentReadError;
+      if (!tournament) throw new MutationConflictError("Tournament could not be loaded for finalization.");
+      if (tournament.finalized_at || ["finalized", "complete"].includes(String(tournament.status).toLowerCase())) {
+        throw new MutationConflictError("Tournament is already finalized.");
+      }
+
+      const { data: snapshot, error: snapshotReadError } = await supabase
+        .from("tournament_state_snapshots")
+        .select("aggregate_version")
+        .eq("tournament_id", body.input.tournamentId)
+        .maybeSingle();
+      if (snapshotReadError) throw snapshotReadError;
+      if (!snapshot) throw new MutationConflictError("Tournament snapshot could not be loaded for finalization.");
+
+      const { data: finalizedSnapshot, error: snapshotWriteError } = await supabase
+        .from("tournament_state_snapshots")
+        .update({
+          local_tournament_id: body.input.localTournamentId || null,
+          schema_version: body.input.schemaVersion,
+          state_snapshot: body.input.stateSnapshot,
+        })
+        .eq("tournament_id", body.input.tournamentId)
+        .eq("aggregate_version", snapshot.aggregate_version)
+        .select("aggregate_version")
+        .maybeSingle();
+      if (snapshotWriteError) throw snapshotWriteError;
+      if (!finalizedSnapshot) throw new MutationConflictError("Tournament snapshot changed before finalization completed.");
+
+      const { data: finalizedTournament, error: tournamentWriteError } = await supabase
+        .from("tournaments")
+        .update({
+          status: "finalized",
+          finalized_at: body.input.finalizedAt,
+          aggregate_version: Number(tournament.aggregate_version) + 1,
+        })
+        .eq("id", body.input.tournamentId)
+        .eq("aggregate_version", tournament.aggregate_version)
+        .is("finalized_at", null)
+        .select(tournamentColumns)
+        .maybeSingle();
+      if (tournamentWriteError) throw tournamentWriteError;
+      if (!finalizedTournament) throw new MutationConflictError("Tournament changed before finalization completed.");
+
+      return NextResponse.json({
+        tournament: finalizedTournament,
+        snapshotAggregateVersion: finalizedSnapshot.aggregate_version,
+      });
     }
 
     return jsonError(new Error("Unknown mutation action."));

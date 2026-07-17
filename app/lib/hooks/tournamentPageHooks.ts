@@ -442,14 +442,19 @@ export const useTournamentStoragePolling = ({
   ]);
 };
 
-const mergeSharedScores = (rows: LegacyScorecardRow[], entries: ComparisonScoreEntry[]) => {
+const mergeSharedScores = (
+  rows: LegacyScorecardRow[],
+  entries: ComparisonScoreEntry[],
+  playerIdsByName: ReadonlyMap<string, string>
+) => {
   const entriesByPlayerId = new Map<string, ComparisonScoreEntry[]>();
   entries.forEach((entry) => {
     entriesByPlayerId.set(String(entry.player_id), [...(entriesByPlayerId.get(String(entry.player_id)) ?? []), entry]);
   });
 
   return rows.map((row) => {
-    const playerEntries = entriesByPlayerId.get(String(row.id)) ?? [];
+    const playerId = playerIdsByName.get(row.playerName) ?? String(row.id);
+    const playerEntries = entriesByPlayerId.get(playerId) ?? entriesByPlayerId.get(String(row.id)) ?? [];
     const selectedEntry = playerEntries.find((entry) => String(entry.entered_by_player_id) !== String(entry.player_id));
 
     if (!selectedEntry?.hole_scores?.length) {
@@ -470,6 +475,7 @@ export const useSharedScoreSynchronization = ({
   scorecardsGenerated,
   scorecardRowsLength,
   roundNumber,
+  playerIdsByName,
   setScorecardRows,
 }: {
   isClientMounted: boolean;
@@ -478,6 +484,7 @@ export const useSharedScoreSynchronization = ({
   scorecardsGenerated: boolean;
   scorecardRowsLength: number;
   roundNumber: string;
+  playerIdsByName: ReadonlyMap<string, string>;
   setScorecardRows: SetState<LegacyScorecardRow[]>;
 }) => {
   useEffect(() => {
@@ -500,7 +507,7 @@ export const useSharedScoreSynchronization = ({
         }
 
         setScorecardRows((currentRows) => {
-          const mergedRows = mergeSharedScores(currentRows, sharedScores);
+          const mergedRows = mergeSharedScores(currentRows, sharedScores, playerIdsByName);
           return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
         });
       } catch (error) {
@@ -515,7 +522,16 @@ export const useSharedScoreSynchronization = ({
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [isClientMounted, roundNumber, scorecardRowsLength, scorecardsGenerated, setScorecardRows, sharedTournamentId, tournamentId]);
+  }, [
+    isClientMounted,
+    playerIdsByName,
+    roundNumber,
+    scorecardRowsLength,
+    scorecardsGenerated,
+    setScorecardRows,
+    sharedTournamentId,
+    tournamentId,
+  ]);
 };
 
 export const useBodyOverflowLock = (isLocked: boolean) => {
