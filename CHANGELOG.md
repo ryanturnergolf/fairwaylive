@@ -1,5 +1,20 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-18
+
+### Fixed
+
+- Restored homepage Login and Get Started navigation to the coach sign-in flow and validated internal `next` redirects before navigation.
+- Preserved the Supabase coach session across dashboard, homepage, tournament navigation, and refresh while exposing an authenticated homepage state and Coach Sign Out.
+- Connected homepage and dashboard Tournaments navigation to the tournament dashboard instead of inert fragment links.
+- Reworked Seed Test Tournament to require coach authentication, create exactly one owned Supabase tournament, persist its seeded snapshot, prevent duplicate clicks, show loading/error feedback, and redirect to the new tournament UUID.
+- Added focused Playwright coverage for persistent authentication, homepage tournament navigation, single seeded creation, successful redirect, refresh access, and visible seed failures.
+
+### Verification
+
+- Production build passed and Playwright passed 52/52.
+- Verified real Supabase tournament creation through the normal coach login, Saved Tournaments visibility, 20 synchronized players, 5 pairing groups, 20 scorecards, full readiness, QR sharing, and signed-out mobile scoring.
+
 ## 2026-07-16
 
 ### Real Supabase Tournament Workflow Certified

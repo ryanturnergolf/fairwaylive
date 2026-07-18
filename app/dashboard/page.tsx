@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
+import { getSupabaseBrowserClient } from "../lib/supabaseClient";
 import {
   loadDirectorDashboardReadModel,
   loadDirectorTournamentSummary,
@@ -16,13 +17,20 @@ import {
   shouldRefreshTournamentFinalizationStatus,
   type TournamentFinalizationStatus,
 } from "../lib/services/tournamentFinalizationService";
-import { createTournament, loadTournamentList } from "../lib/services/tournamentService";
+import {
+  createTournament,
+  loadTournamentList,
+  syncTournamentStateSnapshot,
+} from "../lib/services/tournamentService";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
+  loadTournamentStorageEnvelope,
   loadTournamentsFromStorage,
+  saveTournamentStorageEnvelope,
   saveTournamentsToStorage,
   seedTestTournament,
+  TEST_TOURNAMENT_ID,
   type StoredTournament,
 } from "../lib/tournamentStorage";
 
@@ -216,6 +224,35 @@ export default function DashboardPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
   const [creationError, setCreationError] = useState("");
+  const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isSeedingTournament, setIsSeedingTournament] = useState(false);
+  const [seedError, setSeedError] = useState("");
+  const seedInFlightRef = useRef(false);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setIsCoachAuthenticated(Boolean(data.session && !data.session.user.is_anonymous));
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsCoachAuthenticated(Boolean(session && !session.user.is_anonymous));
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleCoachSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    const supabase = getSupabaseBrowserClient();
+    await supabase?.auth.signOut();
+    setIsCoachAuthenticated(false);
+    setIsSigningOut(false);
+    router.replace("/coach-auth?next=/dashboard");
+    router.refresh();
+  };
 
   const refreshDirectorReadModel = (sourceTournaments: Tournament[]) =>
     loadDirectorDashboardReadModel(sourceTournaments, {
@@ -402,13 +439,85 @@ export default function DashboardPage() {
     });
   };
 
-  const handleSeedTestTournament = () => {
-    const seededTournament = seedTestTournament();
+  const handleSeedTestTournament = async () => {
+    if (seedInFlightRef.current) return;
 
-    if (seededTournament) {
-      const nextTournaments = loadTournamentsFromStorage() as Tournament[];
+    seedInFlightRef.current = true;
+    setIsSeedingTournament(true);
+    setSeedError("");
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      if (!data.session || data.session.user.is_anonymous) {
+        throw new Error("Coach authentication is required before seeding a tournament.");
+      }
+
+      const localSeed = seedTestTournament();
+      const localEnvelope = loadTournamentStorageEnvelope(TEST_TOURNAMENT_ID);
+      if (!localSeed || !localEnvelope) {
+        throw new Error("Unable to prepare the test tournament.");
+      }
+
+      const tournamentName = `Test Tournament ${new Date().toISOString()}`;
+      const createResult = await createTournament({
+        fallbackId: TEST_TOURNAMENT_ID,
+        name: tournamentName,
+        date: localSeed.date,
+        course: localSeed.course,
+        city: localSeed.city,
+        state: localSeed.state,
+        rounds: localSeed.rounds,
+        scoringFormat: localSeed.scoringFormat,
+        status: "Upcoming",
+        settings: localSeed.settings,
+      });
+      if (createResult.source !== "supabase") {
+        throw createResult.error instanceof Error
+          ? createResult.error
+          : new Error("Supabase tournament creation failed.");
+      }
+
+      const tournament = createResult.tournament as Tournament;
+      const envelope = {
+        ...localEnvelope,
+        tournament: {
+          ...localEnvelope.tournament,
+          id: tournament.id,
+          name: tournament.name,
+        },
+      };
+      const snapshotSaved = await syncTournamentStateSnapshot({
+        tournamentId: tournament.id,
+        localTournamentId: tournament.id,
+        envelope,
+      });
+      if (!snapshotSaved) {
+        throw new Error("The tournament was created, but its seeded tournament data could not be saved.");
+      }
+
+      saveTournamentStorageEnvelope(tournament.id, envelope);
+      const nextTournaments = [
+        tournament,
+        ...(loadTournamentsFromStorage() as Tournament[]).filter(
+          (item) => item.id !== TEST_TOURNAMENT_ID && item.id !== tournament.id
+        ),
+      ];
+      saveTournamentsToStorage(nextTournaments);
+      window.localStorage.removeItem(getTournamentStateStorageKey(TEST_TOURNAMENT_ID));
       setTournaments(nextTournaments);
-      void refreshDirectorReadModel(nextTournaments);
+      router.push(`/tournament/${tournament.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Tournament seeding failed.";
+      setSeedError(message);
+      const withoutLocalSeed = loadTournamentsFromStorage().filter(
+        (tournament) => tournament.id !== TEST_TOURNAMENT_ID
+      );
+      saveTournamentsToStorage(withoutLocalSeed);
+      window.localStorage.removeItem(getTournamentStateStorageKey(TEST_TOURNAMENT_ID));
+    } finally {
+      seedInFlightRef.current = false;
+      setIsSeedingTournament(false);
     }
   };
 
@@ -670,12 +779,15 @@ export default function DashboardPage() {
         </Link>
 
         <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/">
+            Homepage
+          </Link>
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
             Live Scores
           </Link>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
             Tournaments
-          </a>
+          </Link>
           <a className="transition duration-300 hover:text-[#B8892D]" href="#director">
             Director
           </a>
@@ -688,9 +800,20 @@ export default function DashboardPage() {
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
             Dashboard
           </Link>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-auth?next=/dashboard">
-            Coach Sign In
-          </Link>
+          {isCoachAuthenticated ? (
+            <button
+              type="button"
+              onClick={() => void handleCoachSignOut()}
+              disabled={isSigningOut}
+              className="transition duration-300 hover:text-[#B8892D] disabled:opacity-60"
+            >
+              {isSigningOut ? "Signing Out" : "Coach Sign Out"}
+            </button>
+          ) : (
+            <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-auth?next=/dashboard">
+              Coach Sign In
+            </Link>
+          )}
           <a className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="#">
             Get Started
           </a>
@@ -740,10 +863,11 @@ export default function DashboardPage() {
             {isClientMounted ? (
               <button
                 type="button"
-                onClick={handleSeedTestTournament}
-                className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                onClick={() => void handleSeedTestTournament()}
+                disabled={isSeedingTournament}
+                className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Seed Test Tournament
+                {isSeedingTournament ? "Seeding Tournament..." : "Seed Test Tournament"}
               </button>
             ) : null}
             <Link
@@ -762,6 +886,11 @@ export default function DashboardPage() {
               Import Teams
             </a>
           </div>
+          {seedError ? (
+            <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
+              {seedError}
+            </p>
+          ) : null}
 
           <section id="director" className="mt-10 rounded-[32px] border border-[#D6E0D8] bg-[#F8FBF8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

@@ -1,8 +1,20 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-16
+Last updated: 2026-07-18
 
 ## Active Decisions
+
+### Coach authentication state comes from the Supabase singleton
+
+Homepage and dashboard authentication UI must read and subscribe to the durable Supabase browser-client session. localStorage may contain Supabase's persisted session representation, but application code must not treat a separate local flag as authentication authority.
+
+### Post-authentication redirects must remain internal
+
+Coach sign-in accepts only paths beginning with a single `/`; protocol-relative and external destinations fall back to `/dashboard`. Login, Get Started, Homepage, and Tournaments navigation use Next.js links to explicit application routes.
+
+### Seeded tournaments use the authenticated production mutation path
+
+Seed Test Tournament is a guarded one-click operation. It requires a verified coach session, creates the owned tournament through the authenticated mutation endpoint and RLS, persists the seeded Tournament Aggregate snapshot, exposes pending and failure states, and redirects only after the shared data is saved.
 
 ### Certified scoring mutations preserve authoritative identity and ordering
 

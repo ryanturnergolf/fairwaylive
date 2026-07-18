@@ -4,7 +4,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-16
+Last updated: 2026-07-18
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -23,6 +23,16 @@ The current architecture supports the complete coach workflow from tournament cr
 7. Dashboard readiness convergence (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
+
+### Completed Milestone: Authenticated Seeded Tournament Entry Flow
+
+Status: **COMPLETE**
+
+- Restored coach login, validated internal redirects, persistent homepage/dashboard auth state, and Coach Sign Out.
+- Connected homepage and dashboard tournament navigation to the tournament dashboard.
+- Made Seed Test Tournament an authenticated, duplicate-safe Supabase creation and snapshot workflow with loading/error feedback and UUID redirect.
+- Verified Saved Tournaments, refresh access, 20 synchronized players, 5 pairings, 20 scorecards, full readiness, QR sharing, and clean signed-out mobile scoring.
+- Final automated regression: production build passed and Playwright passed 52/52.
 
 ### Completed Certification: Real Supabase Tournament Workflow
 

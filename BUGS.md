@@ -1,6 +1,6 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-16
+Last updated: 2026-07-18
 
 ## Open Bugs
 
@@ -11,6 +11,14 @@ Status: open.
 The signed-out share-token scorecard creates multiple anonymous GoTrueClient instances using the default Supabase storage key. These clients do not compete for `clubhouse-hq-coach-auth`, but the warnings and redundant clients remain to be resolved.
 
 ## Resolved
+
+### Coach auth navigation and seeded tournament controls
+
+Status: resolved and verified against real Supabase on 2026-07-18.
+
+The homepage now reflects the durable Supabase coach session, Login/Get Started and Tournaments use real internal routes, coach-auth validates `next` destinations, and dashboard sign-out clears the authenticated session. Seed Test Tournament now creates one authenticated, owned Supabase tournament with its seeded snapshot, blocks duplicate clicks, reports failures, and redirects to the UUID tournament page.
+
+Focused coverage verifies dashboard-homepage-dashboard persistence, refresh access, tournament navigation, one seed mutation, redirect behavior, and the failure state.
 
 ### Tournament scoring certification blockers
 

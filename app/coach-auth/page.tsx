@@ -13,13 +13,38 @@ function CoachAuthForm() {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [sessionCheckComplete, setSessionCheckComplete] = useState(false);
+  const nextPath = (() => {
+    const requestedPath = searchParams.get("next");
+    return requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
+      ? requestedPath
+      : "/dashboard";
+  })();
 
   useEffect(() => {
+    let isCancelled = false;
     const supabase = getSupabaseBrowserClient();
-    void supabase?.auth.getUser().then(({ data }) => {
-      if (data.user && !data.user.is_anonymous) router.replace(searchParams.get("next") || "/dashboard");
+    if (!supabase) {
+      setSessionCheckComplete(true);
+      return;
+    }
+
+    void supabase.auth.getUser().then(async ({ data, error }) => {
+      if (isCancelled) return;
+      if (!error && data.user && !data.user.is_anonymous) {
+        router.replace(nextPath);
+        return;
+      }
+      if (error) {
+        await supabase.auth.signOut({ scope: "local" });
+      }
+      if (!isCancelled) setSessionCheckComplete(true);
     });
-  }, [router, searchParams]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [nextPath, router]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -41,11 +66,15 @@ function CoachAuthForm() {
     } else if (!result.data.session) {
       setMessage("Check your email to confirm the account, then sign in.");
     } else {
-      router.replace(searchParams.get("next") || "/dashboard");
+      router.replace(nextPath);
       router.refresh();
     }
     setPending(false);
   };
+
+  if (!sessionCheckComplete) {
+    return <main aria-label="Checking coach session" className="min-h-screen bg-[#F6F1E6]" />;
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#F6F1E6] px-6 py-12 text-[#0B3D2E]">

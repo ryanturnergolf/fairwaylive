@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { loadTournamentList } from "./lib/services/tournamentService";
+import { getSupabaseBrowserClient } from "./lib/supabaseClient";
 import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 
 const teams = [
@@ -95,6 +96,7 @@ const features = [
 
 export default function Home() {
   const [savedTournaments, setSavedTournaments] = useState<StoredTournament[]>([]);
+  const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -116,6 +118,20 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setIsCoachAuthenticated(Boolean(data.session && !data.session.user.is_anonymous));
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsCoachAuthenticated(Boolean(session && !session.user.is_anonymous));
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
@@ -135,9 +151,9 @@ export default function Home() {
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
             Live Scores
           </Link>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
             Tournaments
-          </a>
+          </Link>
           <a className="transition duration-300 hover:text-[#B8892D]" href="#">
             Features
           </a>
@@ -150,12 +166,18 @@ export default function Home() {
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-dashboard">
             Coach Portal
           </Link>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
-            Login
-          </a>
-          <a className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="#">
-            Get Started
-          </a>
+          <Link
+            className="transition duration-300 hover:text-[#B8892D]"
+            href={isCoachAuthenticated ? "/dashboard" : "/coach-auth?next=/dashboard"}
+          >
+            {isCoachAuthenticated ? "Coach Dashboard" : "Login"}
+          </Link>
+          <Link
+            className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+            href={isCoachAuthenticated ? "/dashboard" : "/coach-auth?next=/dashboard"}
+          >
+            {isCoachAuthenticated ? "Manage Tournaments" : "Get Started"}
+          </Link>
         </nav>
       </header>
 
