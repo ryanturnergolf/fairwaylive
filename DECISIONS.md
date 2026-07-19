@@ -4,6 +4,10 @@ Last updated: 2026-07-18
 
 ## Active Decisions
 
+### Viewport overlays render outside transformed page subtrees
+
+QR/mobile scoring dialogs must render at the document body so fixed positioning is relative to the viewport, not a transformed or positioned tournament-page ancestor. Long modal content must scroll inside a viewport-bounded overlay, and share links must remain visible and selectable without weakening token validation.
+
 ### Coach authentication state comes from the Supabase singleton
 
 Homepage and dashboard authentication UI must read and subscribe to the durable Supabase browser-client session. localStorage may contain Supabase's persisted session representation, but application code must not treat a separate local flag as authentication authority.

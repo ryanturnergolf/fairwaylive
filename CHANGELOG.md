@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Kept the QR/mobile scoring modal inside the browser viewport by rendering it through a document-body portal with independent scrolling and accessible dialog semantics.
+- Made the generated player scoring URL visible, selectable, and copyable while preserving secure share-token validation.
+- Added regressions for modal viewport geometry, signed-out Hole 1 controls, refresh persistence, and visible invalid-token errors instead of blank screens.
 - Restored homepage Login and Get Started navigation to the coach sign-in flow and validated internal `next` redirects before navigation.
 - Preserved the Supabase coach session across dashboard, homepage, tournament navigation, and refresh while exposing an authenticated homepage state and Coach Sign Out.
 - Connected homepage and dashboard Tournaments navigation to the tournament dashboard instead of inert fragment links.
@@ -12,7 +15,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 52/52.
+- Production build passed and Playwright passed 53/53.
+- Verified the real QR flow on desktop and an iPhone-sized LAN browser: the modal remained usable, signed-out scoring loaded Evan Brooks at Hole 1, valid score inputs enabled Save Hole, refresh preserved access, and invalid tokens displayed an error.
 - Verified real Supabase tournament creation through the normal coach login, Saved Tournaments visibility, 20 synchronized players, 5 pairing groups, 20 scorecards, full readiness, QR sharing, and signed-out mobile scoring.
 
 ## 2026-07-16

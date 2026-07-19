@@ -24,6 +24,15 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Viewport-Safe QR Mobile Entry
+
+Status: **COMPLETE**
+
+- Moved the QR scoring modal to a document-body portal so the tournament page scroll position cannot hide the panel behind its green overlay.
+- Added viewport height constraints, independent modal scrolling, accessible dialog semantics, and a visible selectable player URL.
+- Verified signed-out desktop and phone-sized LAN scorecards, Hole 1 controls, refresh access, and invalid/expired-token errors.
+- Final automated regression: production build passed and Playwright passed 53/53.
+
 ### Completed Milestone: Authenticated Seeded Tournament Entry Flow
 
 Status: **COMPLETE**

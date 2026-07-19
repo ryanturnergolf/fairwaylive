@@ -12,6 +12,12 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### QR modal displayed as a blank green screen
+
+Status: resolved and verified on desktop and phone-sized LAN contexts on 2026-07-18.
+
+The fixed QR overlay was rendered inside a tournament-page containing block, so a scrolled Live Scoring page could position the modal panel above the viewport while leaving only the green backdrop visible. The QR modal now renders through a document-body portal, remains viewport-bound and independently scrollable, exposes a copyable player URL, and retains explicit loading and invalid-token errors.
+
 ### Coach auth navigation and seeded tournament controls
 
 Status: resolved and verified against real Supabase on 2026-07-18.

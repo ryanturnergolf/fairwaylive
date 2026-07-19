@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { buildAppUrl } from "../../../lib/appUrl";
 import {
   buildPrintablePairings,
@@ -635,13 +636,16 @@ export default function TournamentPrintExport({
         </div>
       ) : null}
 
-      {activeQrPlayer ? (
+      {activeQrPlayer && typeof document !== "undefined" ? createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-8 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mobile-score-entry-title"
+          className="fixed inset-0 z-50 flex overflow-y-auto bg-[#0B3D2E]/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-8"
           onClick={closeQrModal}
         >
           <div
-            className="flex max-h-[calc(100vh-4rem)] w-full max-w-xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            className="mx-auto my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)] sm:max-h-[calc(100dvh-4rem)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -650,13 +654,14 @@ export default function TournamentPrintExport({
                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                     Mobile Score Entry
                   </p>
-                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                  <h3 id="mobile-score-entry-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
                     {activeQrPlayer.playerName}
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={closeQrModal}
+                  aria-label="Close mobile score entry"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
                 >
                   &times;
@@ -702,13 +707,22 @@ export default function TournamentPrintExport({
                     ? `Group ${activeQrPairing?.groupNumber ?? ""} mobile scoring access`
                     : "Preparing mobile scoring access"}
                 </p>
-                <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                  {qrIntegrityError
-                    ? "Scorecard URL unavailable"
-                    : isQrMobileScorecardReady
-                      ? `Scorecard URL: ${resolvedMobileScorecardUrl}`
-                      : "Scorecard URL: Preparing shared link"}
-                </div>
+                {isQrMobileScorecardReady && resolvedMobileScorecardUrl ? (
+                  <label className="mt-4 block text-left text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
+                    Player scoring link
+                    <input
+                      aria-label="Player scoring link"
+                      readOnly
+                      value={resolvedMobileScorecardUrl}
+                      onFocus={(event) => event.currentTarget.select()}
+                      className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold normal-case tracking-normal text-[#0B3D2E]"
+                    />
+                  </label>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-[#E8DCC8] bg-white/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                    {qrIntegrityError ? "Scorecard URL unavailable" : "Scorecard URL: Preparing shared link"}
+                  </div>
+                )}
               </div>
 
               <p className="mt-6 text-center text-base leading-8 text-[#51635C]">
@@ -751,7 +765,8 @@ export default function TournamentPrintExport({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
       {activePrintPlayer ? (

@@ -1076,6 +1076,23 @@ test("mobile scorecard renders while shared score lookup is pending", async ({ p
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
 });
 
+test("invalid mobile share token shows a visible error instead of a blank screen", async ({ page }) => {
+  await page.route("**/api/share-tokens/resolve", (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Share token is invalid or expired." }),
+    })
+  );
+
+  await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=invalid-token`);
+
+  await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
+  await expect(page.getByText("Mobile Score Entry Unavailable")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "This scoring link is not valid." })).toBeVisible();
+  await expect(page.getByText("This secure scoring link is invalid or expired. Please request a new QR code.")).toBeVisible();
+});
+
 test("phone QR resolver loads shared Supabase player-2 by QR player id", async ({ page }) => {
   const consoleErrors: string[] = [];
   await routeTournamentStateSnapshotStore(page, 201, [{
@@ -1165,6 +1182,13 @@ test("phone QR resolver loads shared Supabase player-2 by QR player id", async (
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
   await expect(page.getByText("Ben Marker", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hole 1")).toBeVisible();
+  await expect(page.getByLabel("Ben Marker's Score")).toBeEditable();
+  await expect(page.getByLabel("Ava Green's Score")).toBeEditable();
+  await expect(page.getByRole("button", { name: "Save Hole" })).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Hole 1")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save Hole" })).toBeVisible();
   await expect.poll(() => consoleErrors).toEqual([]);
 });
 
@@ -1332,9 +1356,18 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   await page.getByRole("button", { name: "Live Scoring" }).click();
   await expect(page.getByRole("button", { name: "Open QR code for Ava Green" })).toBeVisible();
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
+  const qrDialog = page.getByRole("dialog", { name: "Ava Green" });
+  await expect(qrDialog).toBeVisible();
+  await expect(qrDialog.getByLabel("Player scoring link")).toBeVisible();
+  await expect
+    .poll(() => qrDialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top >= 0 && rect.bottom <= window.innerHeight;
+    }))
+    .toBe(true);
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
-  await expect(page.getByText(/Scorecard URL: .*\/scorecard\/player-1\?pairing=1&round=1&shareToken=/)).toBeVisible();
+  await expect(qrDialog.getByLabel("Player scoring link")).toHaveValue(/\/scorecard\/player-1\?pairing=1&round=1&shareToken=/);
 
   const href = await mobileScorecardLink.getAttribute("href");
   expect(href).toBeTruthy();
