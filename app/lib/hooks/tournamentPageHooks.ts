@@ -219,6 +219,7 @@ export const useTournamentPagePersistence = ({
   hydrationPendingRef,
   authenticatedHydrationRef,
   isCoachAuthenticated,
+  isRemoteSyncBlocked,
 }: {
   tournamentId: string;
   storageKey: string;
@@ -230,6 +231,7 @@ export const useTournamentPagePersistence = ({
   hydrationPendingRef: MutableRefObject<boolean>;
   authenticatedHydrationRef: MutableRefObject<boolean>;
   isCoachAuthenticated: boolean;
+  isRemoteSyncBlocked: boolean;
 }) => {
   const snapshotSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSnapshotSignatureRef = useRef("");
@@ -237,6 +239,15 @@ export const useTournamentPagePersistence = ({
 
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
+      return;
+    }
+
+    if (isRemoteSyncBlocked) {
+      if (snapshotSyncTimeoutRef.current) {
+        clearTimeout(snapshotSyncTimeoutRef.current);
+        snapshotSyncTimeoutRef.current = null;
+      }
+      saveCoordinatorRef.current.enqueue(async () => undefined);
       return;
     }
 
@@ -271,6 +282,7 @@ export const useTournamentPagePersistence = ({
     authenticatedHydrationRef,
     hydrationPendingRef,
     isCoachAuthenticated,
+    isRemoteSyncBlocked,
     setSharedTournamentId,
     sharedTournamentId,
     state,

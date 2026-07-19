@@ -288,7 +288,16 @@ export default function TournamentPage() {
   const latestStateRef = useLatestTournamentPageState(latestState);
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
-  const isTournamentFinalized = Boolean(finalizationRecord);
+  const tournamentSettings =
+    tournament.settings && typeof tournament.settings === "object"
+      ? (tournament.settings as { finalization?: { isFinalized?: unknown }; status?: unknown })
+      : null;
+  const normalizedTournamentStatus = String(tournament.status || tournamentSettings?.status || "").toLowerCase();
+  const isTournamentFinalized =
+    Boolean(finalizationRecord) ||
+    Boolean(tournamentSettings?.finalization?.isFinalized) ||
+    normalizedTournamentStatus === "finalized" ||
+    normalizedTournamentStatus === "complete";
   const visibleTabs = useMemo(
     () => (isTournamentFinalized ? [...baseTabs, officialResultsTab] : baseTabs),
     [isTournamentFinalized]
@@ -482,6 +491,7 @@ export default function TournamentPage() {
     hydrationPendingRef,
     authenticatedHydrationRef,
     isCoachAuthenticated,
+    isRemoteSyncBlocked: isTournamentFinalized,
   });
   useTournamentStoragePolling({
     tournamentId,

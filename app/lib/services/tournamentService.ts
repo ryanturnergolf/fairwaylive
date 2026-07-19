@@ -1005,6 +1005,20 @@ export const persistTournamentPageState = ({
   isObsolete = () => false,
   skipRemoteSync = false,
 }: TournamentPagePersistenceInput): Promise<void> => (async () => {
+  const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
+  const persistedFinalization = currentEnvelope?.tournament.settings.finalization;
+  if (
+    persistedFinalization &&
+    typeof persistedFinalization === "object" &&
+    (persistedFinalization as { isFinalized?: unknown }).isFinalized
+  ) {
+    if (snapshotSyncTimeout) {
+      clearTimeout(snapshotSyncTimeout);
+      onSnapshotTimeoutChange(null);
+    }
+    return;
+  }
+
   const hasInvalidPairings = state.pairings.length > 0 && !validatePairingIntegrity(state.pairings, state.players);
   const safeState = hasInvalidPairings
     ? {
@@ -1017,7 +1031,6 @@ export const persistTournamentPageState = ({
         },
       }
     : state;
-  const currentEnvelope = loadTournamentStorageEnvelope(tournamentId);
   const persistedSettings =
     typeof tournament.settings === "object" && tournament.settings !== null ? (tournament.settings as Record<string, unknown>) : {};
   const currentFinalization = currentEnvelope?.tournament.settings.finalization;
@@ -1073,6 +1086,7 @@ export const persistTournamentPageState = ({
       status: tournament.status,
       settings: mergedSettings,
     });
+    if (isObsolete()) return;
 
     if (!isObsolete() && nextSharedTournamentId !== sharedTournamentId) {
       saveSharedTournamentIdToStorage(tournamentId, nextSharedTournamentId);
@@ -1086,6 +1100,16 @@ export const persistTournamentPageState = ({
         id: nextSharedTournamentId,
       },
     };
+
+    const latestPersistedEnvelope = loadTournamentStorageEnvelope(tournamentId);
+    const latestFinalization = latestPersistedEnvelope?.tournament.settings.finalization;
+    if (
+      latestFinalization &&
+      typeof latestFinalization === "object" &&
+      (latestFinalization as { isFinalized?: unknown }).isFinalized
+    ) {
+      return;
+    }
 
     await syncTournamentPlayers(
       sharedEnvelope,

@@ -104,6 +104,7 @@ test("authenticated hydration prefers the current remote snapshot over stale loc
   remoteEnvelope.tournament.id = sharedTournamentId;
   remoteEnvelope.tournament.players[0].firstName = "Remote";
   remoteEnvelope.uiState.players[0].firstName = "Remote";
+  const routineMutationActions: string[] = [];
 
   await page.addInitScript(({ storageKey, envelope, tournamentId, sharedTournamentId, coachToken }) => {
     window.localStorage.setItem(storageKey, JSON.stringify(envelope));
@@ -129,9 +130,16 @@ test("authenticated hydration prefers the current remote snapshot over stale loc
   await page.route("**/rest/v1/tournament_players**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/rest/v1/score_entries**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/rest/v1/score_hole_entries**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action?: string };
+    routineMutationActions.push(body.action ?? "unknown");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
 
   await page.goto(`${baseUrl}/tournament/${tournamentId}`, { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Players", exact: true }).click();
   await expect(page.getByText("Remote Player", { exact: true })).toBeVisible();
   await expect(page.getByText("Original Player", { exact: true })).toHaveCount(0);
+  await expect.poll(() => routineMutationActions).toContain("reconcileTournamentPlayers");
+  await expect.poll(() => routineMutationActions).toContain("upsertTournamentStateSnapshot");
 });

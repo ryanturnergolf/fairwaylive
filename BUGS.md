@@ -1,6 +1,6 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Open Bugs
 
@@ -11,6 +11,14 @@ Status: open.
 The signed-out share-token scorecard creates multiple anonymous GoTrueClient instances using the default Supabase storage key. These clients do not compete for `clubhouse-hq-coach-auth`, but the warnings and redundant clients remain to be resolved.
 
 ## Resolved
+
+### Finalized tournament refresh attempted routine persistence
+
+Status: resolved and verified against real Supabase on 2026-07-19.
+
+Two tournament-page persistence effect runs could begin before finalized authority finished hydrating. Both attempted `reconcileTournamentPlayers`, received HTTP 500 from finalized-tournament write protection, and stopped before routine snapshot synchronization.
+
+Finalized metadata now blocks the page persistence lifecycle, clears pending snapshot timers, and obsoletes queued work. The persistence service also rechecks the latest finalized envelope before remote mutations. The authoritative finalization mutation remains unchanged, finalized writes remain protected, and pre-finalization reconciliation and snapshot synchronization continue normally.
 
 ### Review treated missing marked-player self rows as a clean match
 

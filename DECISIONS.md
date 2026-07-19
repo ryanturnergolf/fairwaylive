@@ -1,8 +1,12 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Active Decisions
+
+### Finalized tournament hydration is read-only
+
+Once Supabase tournament status, finalized snapshot settings, or the finalization record establishes finalized authority, routine page persistence must stop before player reconciliation or snapshot synchronization. Queued work must recheck the latest finalized envelope before remote mutation. Only the authenticated, version-guarded finalization operation may write the final snapshot; endpoint write protection remains strict.
 
 ### Review comparison requires two complete authoritative cards
 

@@ -1,5 +1,18 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-19
+
+### Fixed
+
+- Stopped routine tournament-page persistence after authoritative finalized hydration, including queued player reconciliation and snapshot synchronization work.
+- Preserved the single version-guarded finalization mutation and normal pre-finalization roster/snapshot synchronization while keeping finalized refreshes read-only.
+- Added regressions for one final snapshot write, zero routine mutations after finalized refresh, post-finalization HTTP error prevention, and continued pre-finalization synchronization.
+
+### Verification
+
+- Production build passed and Playwright passed 57/57.
+- Verified the real finalized tournament refresh sends zero `POST /api/tournament-mutations` requests and produces zero HTTP 500 responses while desktop and signed-out mobile remain read-only.
+
 ## 2026-07-18
 
 ### Fixed

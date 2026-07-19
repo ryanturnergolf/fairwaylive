@@ -408,9 +408,20 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
   await routeFinalizationBackend(page);
   let finalizedMutation: Record<string, unknown> | null = null;
   let hasFinalized = false;
+  let successfulFinalizationMutations = 0;
+  const routineMutationsAfterFinalization: Array<{ action: string; status: number }> = [];
   await page.route("**/api/tournament-mutations", async (route) => {
     const body = route.request().postDataJSON() as { action?: string; input?: Record<string, unknown> };
     if (body.action !== "finalizeTournament") {
+      if (hasFinalized) {
+        routineMutationsAfterFinalization.push({ action: body.action ?? "unknown", status: 500 });
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Routine finalized-tournament mutation must not be sent." }),
+        });
+        return;
+      }
       await route.fallback();
       return;
     }
@@ -424,6 +435,7 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
     }
 
     hasFinalized = true;
+    successfulFinalizationMutations += 1;
     finalizedMutation = body.input ?? null;
     await route.fulfill({
       status: 200,
@@ -489,6 +501,7 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
     { input: finalizedMutation }
   );
   expect(secondFinalizeStatus).toBe(409);
+  expect(successfulFinalizationMutations).toBe(1);
 
   const finalizedRecord = await page.evaluate((key) => {
     const envelope = JSON.parse(window.localStorage.getItem(key) || "{}");
@@ -511,6 +524,10 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
   await gotoApp(page, `/tournament/${tournamentId}?tab=Live%20Scoring`);
   await expect(page.getByRole("button", { name: /Generate Scorecards|Regenerate Scorecards/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Open QR code for/ })).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Finalized Read-Only")).toBeVisible();
+  await page.waitForTimeout(1_000);
+  expect(routineMutationsAfterFinalization).toEqual([]);
 
   await gotoApp(page, `/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
   await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeDisabled();
