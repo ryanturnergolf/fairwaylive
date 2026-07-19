@@ -352,7 +352,32 @@ const routeFinalizationBackend = async (page: Page, options: FinalizationBackend
   });
 
   await page.route("**/api/score-mutations", async (route) => {
-    const body = route.request().postDataJSON() as { action?: string; rows?: Array<Record<string, unknown>> };
+    const body = route.request().postDataJSON() as {
+      action?: string;
+      input?: Record<string, unknown>;
+      rows?: Array<Record<string, unknown>>;
+    };
+    if (body.action === "saveScoreEntry") {
+      options.onScoreSave?.(route.request());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: `${body.input?.playerId}-${body.input?.enteredByPlayerId}`,
+          tournament_id: body.input?.tournamentId,
+          round_number: body.input?.roundNumber,
+          player_id: body.input?.playerId,
+          entered_by_player_id: body.input?.enteredByPlayerId,
+          hole_scores: body.input?.holeScores,
+          total: body.input?.total,
+          entry_status: body.input?.entryStatus,
+          submitted_at: body.input?.submittedAt ?? null,
+          created_at: null,
+          updated_at: null,
+        }),
+      });
+      return;
+    }
     if (body.action !== "saveScoreHoleEntries") {
       await route.fallback();
       return;

@@ -41,6 +41,8 @@ type PlayerScorecard = {
   markerTeam?: string;
   playerScoreIds?: string[];
   markerScoreIds?: string[];
+  initialPlayerScores?: number[];
+  initialMarkerScores?: number[];
 };
 
 type PairingGroup = {
@@ -510,6 +512,12 @@ export default function PlayerScorecardPage() {
         }
 
         const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
+        const selectedSnapshotScorecard = scorecardRows.find(
+          (row) => row.playerName === selectedPlayer.playerName && row.team === selectedPlayer.teamName
+        );
+        const markerSnapshotScorecard = scorecardRows.find(
+          (row) => row.playerName === markerPlayer.playerName && row.team === markerPlayer.teamName
+        );
 
         finishResolution({
           playerId: String(selectedPlayerId),
@@ -523,6 +531,8 @@ export default function PlayerScorecardPage() {
           markerTeam: markerPlayer?.teamName,
           playerScoreIds: selectedPlayerIds,
           markerScoreIds: markerPlayerIds,
+          initialPlayerScores: selectedSnapshotScorecard?.scores,
+          initialMarkerScores: markerSnapshotScorecard?.scores,
         });
       } catch {
         finishResolution({ error: "Invalid scoring link. Please request a new mobile scoring link." });
@@ -580,6 +590,7 @@ export default function PlayerScorecardPage() {
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [scoreLoadError, setScoreLoadError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [scoreControlsReady, setScoreControlsReady] = useState(false);
   const [submissionComplete, setSubmissionComplete] = useState(false);
@@ -662,10 +673,18 @@ export default function PlayerScorecardPage() {
 
       const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
       const holeCount = scorecard.holes.length;
-      let loadedSelfScores: number[] | null = null;
-      let loadedMarkerScores: number[] | null = null;
+      const hasSnapshotInitialScores =
+        hasAnyHoleScore(scorecard.initialPlayerScores) ||
+        hasAnyHoleScore(scorecard.initialMarkerScores);
+      let loadedSelfScores: number[] | null = hasAnyHoleScore(scorecard.initialPlayerScores)
+        ? normalizeHoleScores(scorecard.initialPlayerScores, holeCount)
+        : null;
+      let loadedMarkerScores: number[] | null = hasAnyHoleScore(scorecard.initialMarkerScores)
+        ? normalizeHoleScores(scorecard.initialMarkerScores, holeCount)
+        : null;
       let loadedMarkedPlayerSelfScores: number[] | null = null;
       let loadedSubmissionComplete = false;
+      let remoteLoadFailed = false;
       let localStorageLoadedCount = 0;
       let supabaseLoadedCount = 0;
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
@@ -857,7 +876,15 @@ export default function PlayerScorecardPage() {
           }
         }
       } catch (error) {
+        remoteLoadFailed = true;
         console.warn("[ScoreService] Unable to load shared score entries.", error);
+        if (!isCancelled) {
+          setScoreLoadError(
+            hasAnyHoleScore(loadedSelfScores) || hasAnyHoleScore(loadedMarkerScores)
+              ? "Live score updates could not be checked. Showing the latest saved tournament scores."
+              : "Saved scores could not be loaded. Check the scoring link or connection and try again."
+          );
+        }
         if (isDevelopment) {
           setScoreDiagnostics((current) => ({
             ...current,
@@ -885,7 +912,11 @@ export default function PlayerScorecardPage() {
           setSavedHoles(getScoredHoleNumbers(scorecard.holes, nextScores, nextMarkerScores));
 
           const firstIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, nextScores);
-          if (loadedSubmissionComplete) {
+          if (requestedShareToken && hasSnapshotInitialScores && supabaseLoadedCount === 0) {
+            currentHoleIndexRef.current = 0;
+            setCurrentHoleIndex(0);
+            setView("scoring");
+          } else if (loadedSubmissionComplete) {
             setView("submitted");
           } else if (firstIncompleteIndex >= 0) {
             currentHoleIndexRef.current = firstIncompleteIndex;
@@ -895,7 +926,11 @@ export default function PlayerScorecardPage() {
           }
 
           setScoresLoaded(true);
-          setScoreControlsReady(true);
+          setScoreControlsReady(
+            !remoteLoadFailed ||
+              hasAnyHoleScore(nextScores) ||
+              hasAnyHoleScore(nextMarkerScores)
+          );
           if (isDevelopment) {
             setScoreDiagnostics((current) => ({
               ...current,
@@ -1058,7 +1093,7 @@ export default function PlayerScorecardPage() {
     updateCurrentHoleStats({ [field]: currentValue === value ? null : value });
   };
 
-  const toggleNumberStat = (field: "putts" | "penaltyStrokes", value: number) => {
+  const toggleNumberStat = (field: "putts", value: number) => {
     const currentValue = holeStats[currentHoleIndex]?.[field] ?? null;
     updateCurrentHoleStats({ [field]: currentValue === value ? null : value });
   };
@@ -1155,7 +1190,7 @@ export default function PlayerScorecardPage() {
                     fairwayHit: stats?.fairwayHit ?? null,
                     greenInRegulation: stats?.greenInRegulation ?? null,
                     putts: stats?.putts ?? null,
-                    penaltyStrokes: stats?.penaltyStrokes ?? null,
+                    penaltyStrokes: null,
                     entryStatus,
                     shareToken: requestedShareToken || undefined,
                   })
@@ -1306,7 +1341,7 @@ export default function PlayerScorecardPage() {
           fairwayHit: targetHole.par === 3 ? null : selectedStats.fairwayHit,
           greenInRegulation: selectedStats.greenInRegulation,
           putts: selectedStats.putts,
-          penaltyStrokes: selectedStats.penaltyStrokes,
+          penaltyStrokes: null,
         };
         const stableSelfPlayerId = String(scorecard.playerId);
         const stableMarkerPlayerId = isValidPlayerId(scorecard.markerPlayerId) ? String(scorecard.markerPlayerId) : "";
@@ -1787,6 +1822,17 @@ export default function PlayerScorecardPage() {
             </div>
           </div>
 
+          {!scoresLoaded ? (
+            <p className="mt-4 rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-sm font-semibold text-[#51635C]">
+              Loading saved scores...
+            </p>
+          ) : null}
+          {scoreLoadError ? (
+            <p role="alert" className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">
+              {scoreLoadError}
+            </p>
+          ) : null}
+
           <label className="mt-4 block text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
             {scorecard.playerName}'s Score
             <input
@@ -1880,25 +1926,6 @@ export default function PlayerScorecardPage() {
               </div>
             </fieldset>
 
-            <fieldset className="mt-4" aria-label="Penalty Strokes">
-              <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
-                Penalty Strokes
-              </legend>
-              <div className="mt-2 grid grid-cols-5 gap-2">
-                {[0, 1, 2, 3, 4].map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={currentStatCapture.penaltyStrokes === value}
-                    onClick={() => toggleNumberStat("penaltyStrokes", value)}
-                    disabled={!scoreControlsReady || isTournamentFinalized || isSavingHole}
-                    className={statButtonClass(currentStatCapture.penaltyStrokes === value)}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
           </div>
 
           <button

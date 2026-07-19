@@ -4,6 +4,14 @@ Last updated: 2026-07-18
 
 ## Active Decisions
 
+### Secure mobile scoring hydrates from Supabase snapshot state before local cache
+
+A valid mobile scoring share token determines the tournament UUID. Existing score-entry rows remain the current mutation/read authority, while Tournament Aggregate snapshot scorecards provide the compatibility baseline when synchronized `score_entries` have not been created yet. Snapshot cards are mapped to stable synchronized player identities by stable ID or unique player/team identity, and later saves use the same tournament, round, player, and entered-by upsert key. localStorage may assist recovery but cannot override the share-token tournament.
+
+### Penalty Strokes is not a mobile-entered statistic
+
+Mobile scoring exposes fairway hit, green in regulation, and putts only. The historical `penalty_strokes` field remains available for schema compatibility, but mobile UI and completion rules do not request it and mobile mutations write `null`.
+
 ### Viewport overlays render outside transformed page subtrees
 
 QR/mobile scoring dialogs must render at the document body so fixed positioning is relative to the viewport, not a transformed or positioned tournament-page ancestor. Long modal content must scroll inside a viewport-bounded overlay, and share links must remain visible and selectable without weakening token validation.

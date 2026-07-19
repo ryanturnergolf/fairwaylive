@@ -1222,6 +1222,20 @@ export const loadSharedTournamentScorecardState = async (
         markerPlayerId: String(row.marker_player_id),
       })),
     }));
+  const snapshotScorecardRows = snapshotEnvelope.uiState.scorecards.scorecardRows;
+  const findSnapshotScorecard = (row: TournamentPlayerRow) => {
+    const byStableId = snapshotScorecardRows.filter((scorecard) => String(scorecard.id) === row.player_id);
+    if (byStableId.length === 1) {
+      return byStableId[0];
+    }
+
+    const byIdentity = snapshotScorecardRows.filter(
+      (scorecard) =>
+        scorecard.playerName === row.player_name &&
+        scorecard.team === (row.team_name || "")
+    );
+    return byIdentity.length === 1 ? byIdentity[0] : null;
+  };
 
   return {
     tournament: toStoredTournament(tournamentRow),
@@ -1231,12 +1245,18 @@ export const loadSharedTournamentScorecardState = async (
         (snapshotEnvelope.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
     ),
     pairings,
-    scorecardRows: sharedPlayerRows.map((row) => ({
-      id: row.player_id,
-      playerName: row.player_name,
-      team: row.team_name || "",
-      scores: Array.from({ length: parsedHoleCount }, () => 0),
-    })),
+    scorecardRows: sharedPlayerRows.map((row) => {
+      const snapshotScorecard = findSnapshotScorecard(row);
+      return {
+        id: row.player_id,
+        playerName: row.player_name,
+        team: row.team_name || "",
+        scores: Array.from(
+          { length: parsedHoleCount },
+          (_, index) => Number(snapshotScorecard?.scores[index]) || 0
+        ),
+      };
+    }),
     roundSetup: {
       roundNumber: String(roundNumber),
       numberOfHoles: String(parsedHoleCount),

@@ -24,6 +24,17 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Snapshot-Hydrated Mobile Scoring
+
+Status: **COMPLETE**
+
+- Mapped legacy Tournament Aggregate scorecards onto synchronized Supabase player identities without changing stable score-entry upsert keys.
+- Hydrated signed-out player and marker values across hole navigation and refresh, while preventing stale localStorage tournaments from overriding the share-token UUID.
+- Added visible score-loading and failure states.
+- Removed Penalty Strokes from mobile entry and validation while retaining the compatibility field as `null`.
+- Verified Evan Brooks Hole 1 as `3` and marker Mason Hayes as `5` in the real Supabase tournament.
+- Final automated regression: production build passed and Playwright passed 54/54.
+
 ### Completed Milestone: Viewport-Safe QR Mobile Entry
 
 Status: **COMPLETE**

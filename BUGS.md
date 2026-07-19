@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Signed-out mobile scorecards discarded existing snapshot scores
+
+Status: resolved and verified against real Supabase on 2026-07-18.
+
+Desktop live scoring read completed legacy scorecards from the Tournament Aggregate snapshot, but the signed-out resolver rebuilt synchronized player rows with zeroed scores and then found no `score_entries` rows. The shared resolver now carries snapshot values onto stable Supabase player identities, mobile hydrates player and marker inputs before editing, and subsequent saves retain the existing tournament/round/player/entered-by upsert key.
+
+Stale mobile localStorage cannot replace the share-token tournament, hydration failures render an explicit error instead of blank authoritative-looking inputs, and Penalty Strokes is no longer exposed or required by mobile scoring.
+
 ### QR modal displayed as a blank green screen
 
 Status: resolved and verified on desktop and phone-sized LAN contexts on 2026-07-18.

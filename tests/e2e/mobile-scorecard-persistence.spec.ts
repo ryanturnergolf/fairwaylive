@@ -943,7 +943,7 @@ test("Review submission uses the same marked-player comparison rendered by the t
     .toBe(2);
 });
 
-test("mobile scorecard saves a hole with all optional stats", async ({ page }) => {
+test("mobile scorecard omits penalty strokes and saves the available optional stats", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
   const holeStatsStore = await routeScoreHoleEntriesStore(page);
 
@@ -955,7 +955,7 @@ test("mobile scorecard saves a hole with all optional stats", async ({ page }) =
   await page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { name: "Yes" }).click();
   await page.getByRole("group", { name: "Green in Regulation" }).getByRole("button", { name: "No" }).click();
   await page.getByRole("group", { name: "Putts" }).getByRole("button", { name: "2" }).click();
-  await page.getByRole("group", { name: "Penalty Strokes" }).getByRole("button", { name: "1" }).click();
+  await expect(page.getByRole("group", { name: "Penalty Strokes" })).toHaveCount(0);
   await page.getByRole("button", { name: "Save Hole" }).click();
 
   await expect
@@ -969,7 +969,7 @@ test("mobile scorecard saves a hole with all optional stats", async ({ page }) =
       fairway_hit: true,
       green_in_regulation: false,
       putts: 2,
-      penalty_strokes: 1,
+      penalty_strokes: null,
     });
 });
 
@@ -1183,11 +1183,13 @@ test("phone QR resolver loads shared Supabase player-2 by QR player id", async (
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
   await expect(page.getByText("Ben Marker", { exact: true })).toBeVisible();
   await expect(page.getByText("Hole 1")).toBeVisible();
-  await expect(page.getByLabel("Ben Marker's Score")).toBeEditable();
-  await expect(page.getByLabel("Ava Green's Score")).toBeEditable();
+  await expect(page.getByText("Saved scores could not be loaded. Check the scoring link or connection and try again.")).toBeVisible();
+  await expect(page.getByLabel("Ben Marker's Score")).toBeDisabled();
+  await expect(page.getByLabel("Ava Green's Score")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save Hole" })).toBeVisible();
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByText("Hole 1")).toBeVisible();
+  await expect(page.getByText("Saved scores could not be loaded. Check the scoring link or connection and try again.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save Hole" })).toBeVisible();
   await expect.poll(() => consoleErrors).toEqual([]);
 });
@@ -1731,6 +1733,96 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
   await expect(page.getByText("Hole 4")).toBeVisible();
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
+});
+
+test("signed-out shared scorecard hydrates legacy snapshot scores by stable Supabase identity", async ({ page }) => {
+  const snapshotScores = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
+  snapshotScores.uiState.scorecards.scorecardRows[0].scores = [3, 5, 4, ...Array.from({ length: 15 }, () => 0)];
+  snapshotScores.uiState.scorecards.scorecardRows[1].scores = [4, 4, 5, ...Array.from({ length: 15 }, () => 0)];
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+  await routeSharedTournamentRoster(page);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: snapshotScores,
+  }]);
+  await page.route("**/api/share-tokens/resolve", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tournamentId: sharedTournamentId,
+        purpose: "mobile_scoring",
+        expiresAt: "2026-07-22T00:00:00.000Z",
+      }),
+    })
+  );
+  await page.route("**/api/score-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action: string; input: Record<string, unknown> };
+    if (body.action !== "saveScoreEntry") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+    const row = buildScoreEntry(
+      String(body.input.playerId),
+      String(body.input.enteredByPlayerId),
+      body.input.holeScores as number[],
+      String(body.input.tournamentId)
+    );
+    const existingIndex = sharedStore.savedScoreRows.findIndex(
+      (entry) =>
+        entry.tournament_id === row.tournament_id &&
+        entry.round_number === row.round_number &&
+        entry.player_id === row.player_id &&
+        entry.entered_by_player_id === row.entered_by_player_id
+    );
+    if (existingIndex >= 0) sharedStore.savedScoreRows.splice(existingIndex, 1, row);
+    else sharedStore.savedScoreRows.push(row);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(row) });
+  });
+
+  await page.addInitScript(({ key, stale }) => {
+    window.localStorage.setItem(key, JSON.stringify(stale));
+  }, {
+    key: tournamentsStorageKey,
+    stale: [{ ...storedTournament, id: "popcorn", name: "popcorn" }],
+  });
+  await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=secure-e2e-token`);
+
+  await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("3");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
+  await expect(page.getByRole("group", { name: "Penalty Strokes" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Next Hole" }).click();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("5");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("3");
+
+  await page.getByLabel("Ava Green's Score").fill("4");
+  await page.getByRole("button", { name: "Save Hole" }).click();
+  await expect
+    .poll(() =>
+      sharedStore.savedScoreRows.filter(
+        (row) => row.player_id === "player-1" && row.entered_by_player_id === "player-1"
+      )
+    )
+    .toHaveLength(1);
+  await expect(
+    sharedStore.savedScoreRows.find(
+      (row) => row.player_id === "player-1" && row.entered_by_player_id === "player-1"
+    )?.hole_scores[0]
+  ).toBe(4);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Hole 4", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
+  await expect(page.getByRole("heading", { name: "popcorn" })).toHaveCount(0);
 });
 
 test("shared QR phone without local tournament still saves stable IDs to Supabase", async ({ page }) => {

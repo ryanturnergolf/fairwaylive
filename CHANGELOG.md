@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Hydrated signed-out mobile player and marker scores from the authoritative Supabase tournament snapshot when stable `score_entries` rows do not exist yet, while preserving synchronized player IDs for subsequent upserts.
+- Prevented stale mobile localStorage tournaments from overriding the tournament UUID resolved by a valid scoring share token.
+- Added explicit mobile score-loading and failure states so a failed read cannot appear as a legitimate blank scorecard.
+- Removed Penalty Strokes from mobile score entry and now persist `penalty_strokes: null` without deleting the compatibility field.
+- Added regressions for snapshot score hydration, hole navigation, refresh persistence, stable-key updates without duplicates, stale localStorage isolation, and Penalty Strokes removal.
 - Kept the QR/mobile scoring modal inside the browser viewport by rendering it through a document-body portal with independent scrolling and accessible dialog semantics.
 - Made the generated player scoring URL visible, selectable, and copyable while preserving secure share-token validation.
 - Added regressions for modal viewport geometry, signed-out Hole 1 controls, refresh persistence, and visible invalid-token errors instead of blank screens.
@@ -15,7 +20,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 53/53.
+- Production build passed and Playwright passed 54/54.
+- Verified the real signed-out Evan Brooks scorecard hydrates Hole 1 as Evan `3` and marker Mason Hayes `5`, with both values preserved after refresh.
 - Verified the real QR flow on desktop and an iPhone-sized LAN browser: the modal remained usable, signed-out scoring loaded Evan Brooks at Hole 1, valid score inputs enabled Save Hole, refresh preserved access, and invalid tokens displayed an error.
 - Verified real Supabase tournament creation through the normal coach login, Saved Tournaments visibility, 20 synchronized players, 5 pairing groups, 20 scorecards, full readiness, QR sharing, and signed-out mobile scoring.
 
