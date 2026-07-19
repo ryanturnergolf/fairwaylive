@@ -4,6 +4,10 @@ Last updated: 2026-07-18
 
 ## Active Decisions
 
+### Review comparison requires two complete authoritative cards
+
+The marked player's stable self-entered `score_entries` row takes precedence in Review & Submit. When that row does not exist, the Tournament Aggregate snapshot may supply a compatibility baseline without creating a second permanent source of truth or synthetic score rows. Verification requires all 18 self and marker values to exist and match; missing comparison data always blocks submission.
+
 ### Secure mobile scoring hydrates from Supabase snapshot state before local cache
 
 A valid mobile scoring share token determines the tournament UUID. Existing score-entry rows remain the current mutation/read authority, while Tournament Aggregate snapshot scorecards provide the compatibility baseline when synchronized `score_entries` have not been created yet. Snapshot cards are mapped to stable synchronized player identities by stable ID or unique player/team identity, and later saves use the same tournament, round, player, and entered-by upsert key. localStorage may assist recovery but cannot override the share-token tournament.

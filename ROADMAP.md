@@ -24,6 +24,16 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Snapshot-Compatible Mobile Review
+
+Status: **COMPLETE**
+
+- Resolved the marked player's Review Self card from stable self-entered score rows first and the Tournament Aggregate snapshot only when the stable row is absent.
+- Required complete 18-hole self and marker cards before submission, retained hole-level mismatch blocking, and displayed separate Self and Marker totals.
+- Preserved the existing idempotent verification service/repository flow without generating duplicate or synthetic score rows.
+- Verified the real Evan Brooks review of Mason Hayes at `72` / `72`, including submission and refresh persistence.
+- Final automated regression: production build passed and Playwright passed 57/57.
+
 ### Completed Milestone: Snapshot-Hydrated Mobile Scoring
 
 Status: **COMPLETE**

@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Review treated missing marked-player self rows as a clean match
+
+Status: resolved and verified against real Supabase on 2026-07-18.
+
+Review & Submit previously read the marked player's Self column only from a stable self-entered `score_entries` row. Legacy tournaments with a complete authoritative snapshot card but no migrated self row therefore rendered blanks, calculated a zero total, omitted mismatches, and could leave verification enabled.
+
+Review now prefers stable self-entered rows and uses the Tournament Aggregate scorecard only as a compatibility fallback. Submission requires complete 18-hole self and marker cards, missing values never count as matches, separate totals are displayed, and verification continues through the existing idempotent repository/service flow.
+
 ### Signed-out mobile scorecards discarded existing snapshot scores
 
 Status: resolved and verified against real Supabase on 2026-07-18.

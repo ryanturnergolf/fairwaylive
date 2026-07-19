@@ -682,7 +682,9 @@ export default function PlayerScorecardPage() {
       let loadedMarkerScores: number[] | null = hasAnyHoleScore(scorecard.initialMarkerScores)
         ? normalizeHoleScores(scorecard.initialMarkerScores, holeCount)
         : null;
-      let loadedMarkedPlayerSelfScores: number[] | null = null;
+      let loadedMarkedPlayerSelfScores: number[] | null = hasAnyHoleScore(scorecard.initialMarkerScores)
+        ? normalizeHoleScores(scorecard.initialMarkerScores, holeCount)
+        : null;
       let loadedSubmissionComplete = false;
       let remoteLoadFailed = false;
       let localStorageLoadedCount = 0;
@@ -734,9 +736,9 @@ export default function PlayerScorecardPage() {
           if (hasAnyHoleScore(markedPlayerSelf?.holeScores)) {
             localStorageLoadedCount += 1;
           }
-          loadedMarkedPlayerSelfScores = hasAnyHoleScore(markedPlayerSelf?.holeScores)
-            ? normalizeHoleScores(markedPlayerSelf?.holeScores, holeCount)
-            : null;
+          if (hasAnyHoleScore(markedPlayerSelf?.holeScores)) {
+            loadedMarkedPlayerSelfScores = normalizeHoleScores(markedPlayerSelf?.holeScores, holeCount);
+          }
         }
 
         if (!isCancelled) {
@@ -798,12 +800,11 @@ export default function PlayerScorecardPage() {
             resolvedPlayerIds.markerPlayerIds,
             resolvedPlayerIds.markerPlayerId
           );
-          if (hasAnyHoleScore(remoteMarkedPlayerSelfScores)) {
-            supabaseLoadedCount += 1;
-            loadedMarkedPlayerSelfScores = chooseMostCompleteScores(
-              loadedMarkedPlayerSelfScores,
-              remoteMarkedPlayerSelfScores
-            );
+          if (remoteMarkedPlayerSelfScores) {
+            if (hasAnyHoleScore(remoteMarkedPlayerSelfScores)) {
+              supabaseLoadedCount += 1;
+            }
+            loadedMarkedPlayerSelfScores = remoteMarkedPlayerSelfScores;
           }
         }
 
@@ -967,6 +968,14 @@ export default function PlayerScorecardPage() {
   }, [markedPlayerSelfScores, markerScores, scorecard.holes]);
 
   const hasDiscrepancies = discrepancies.length > 0;
+  const hasCompleteMarkedPlayerSelfScores =
+    markedPlayerSelfScores.length === scorecard.holes.length &&
+    markedPlayerSelfScores.every((score) => score > 0);
+  const hasCompleteMarkerScores =
+    markerScores.length === scorecard.holes.length &&
+    markerScores.every((score) => score > 0);
+  const hasCompleteComparison = hasCompleteMarkedPlayerSelfScores && hasCompleteMarkerScores;
+  const canSubmitVerification = hasCompleteComparison && !hasDiscrepancies && !isTournamentFinalized;
 
   const currentHole = scorecard.holes[currentHoleIndex];
   const allHolesScored = scorecard.holes.length > 0 && scores.every((s) => s > 0);
@@ -1007,6 +1016,7 @@ export default function PlayerScorecardPage() {
   // Front/back 9 totals for marked player
   const markedPlayerFront9Total = markedPlayerSelfScores.slice(0, 9).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
   const markedPlayerBack9Total = markedPlayerSelfScores.slice(9, scorecard.holes.length).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
+  const markedPlayerMarkerTotal = markerScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
 
   const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
@@ -1469,7 +1479,12 @@ export default function PlayerScorecardPage() {
     }
 
     const roundNumber = Number(scorecard.round);
-    if (!Number.isInteger(roundNumber) || roundNumber < 1 || scores.some((score) => score <= 0) || markerScores.some((score) => score <= 0)) {
+    if (
+      !Number.isInteger(roundNumber) ||
+      roundNumber < 1 ||
+      scores.some((score) => score <= 0) ||
+      !hasCompleteComparison
+    ) {
       setSaveError("Complete every scorer and marker score before submitting.");
       return;
     }
@@ -1685,15 +1700,29 @@ export default function PlayerScorecardPage() {
                 </div>
               </div>
             )}
+            {!hasCompleteComparison ? (
+              <div role="alert" className="mt-4 rounded-2xl border border-amber-400 bg-amber-50 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-800">
+                  Score Comparison Incomplete
+                </p>
+                <p className="mt-2 text-xs leading-5 text-amber-900">
+                  Every self and marker score must be available before this scorecard can be verified.
+                </p>
+              </div>
+            ) : null}
 
             {front9Holes.length > 0 ? renderHolesTable(front9Holes, 0, "Front 9") : null}
             {back9Holes.length > 0 ? renderHolesTable(back9Holes, 9, "Back 9") : null}
 
-            <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Total</span>
-              <div className="text-right">
-                <span className="text-xl font-black text-[#0B3D2E]">{markedPlayerTotals.total}</span>
-                <span className="ml-2 text-sm font-semibold text-[#51635C]">({markedPlayerTotals.toPar})</span>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Self Total</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{markedPlayerTotals.total}</p>
+                <p className="text-xs font-semibold text-[#51635C]">{markedPlayerTotals.toPar}</p>
+              </div>
+              <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Marker Total</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{markedPlayerMarkerTotal}</p>
               </div>
             </div>
           </div>
@@ -1710,14 +1739,20 @@ export default function PlayerScorecardPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm(true)}
-                disabled={hasDiscrepancies || isTournamentFinalized}
+                disabled={!canSubmitVerification}
                 className={`w-full rounded-full px-6 py-4 text-sm font-black uppercase tracking-[0.25em] transition duration-300 ${
-                  hasDiscrepancies || isTournamentFinalized
+                  !canSubmitVerification
                     ? "cursor-not-allowed border border-[#E8DCC8] bg-[#F6F1E6] text-[#B8892D] opacity-50"
                     : "bg-[#B8892D] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 active:translate-y-0.5"
                 }`}
               >
-                {isTournamentFinalized ? "Tournament Finalized" : hasDiscrepancies ? "Fix Score Mismatches to Submit" : "Submit Verification"}
+                {isTournamentFinalized
+                  ? "Tournament Finalized"
+                  : !hasCompleteComparison
+                    ? "Complete Score Comparison to Submit"
+                    : hasDiscrepancies
+                      ? "Fix Score Mismatches to Submit"
+                      : "Submit Verification"}
               </button>
             </div>
           ) : (

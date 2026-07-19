@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Hydrated the Review & Submit marked-player Self column from stable `score_entries` first, with Tournament Aggregate snapshot scores used only as a compatibility fallback.
+- Required complete 18-hole self and marker cards before verification, displayed separate totals, and preserved mismatch blocking and idempotent repository/service submission.
 - Hydrated signed-out mobile player and marker scores from the authoritative Supabase tournament snapshot when stable `score_entries` rows do not exist yet, while preserving synchronized player IDs for subsequent upserts.
 - Prevented stale mobile localStorage tournaments from overriding the tournament UUID resolved by a valid scoring share token.
 - Added explicit mobile score-loading and failure states so a failed read cannot appear as a legitimate blank scorecard.
@@ -20,7 +22,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 54/54.
+- Production build passed and Playwright passed 57/57.
+- Verified Evan Brooks reviewing Mason Hayes against real Supabase: Self Total `72`, Marker Total `72`, all 18 holes matched, verification persisted after refresh, and no duplicate score rows were created.
 - Verified the real signed-out Evan Brooks scorecard hydrates Hole 1 as Evan `3` and marker Mason Hayes `5`, with both values preserved after refresh.
 - Verified the real QR flow on desktop and an iPhone-sized LAN browser: the modal remained usable, signed-out scoring loaded Evan Brooks at Hole 1, valid score inputs enabled Save Hole, refresh preserved access, and invalid tokens displayed an error.
 - Verified real Supabase tournament creation through the normal coach login, Saved Tournaments visibility, 20 synchronized players, 5 pairing groups, 20 scorecards, full readiness, QR sharing, and signed-out mobile scoring.
