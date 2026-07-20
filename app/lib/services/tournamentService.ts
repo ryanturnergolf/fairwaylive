@@ -434,6 +434,7 @@ const mergeRoundIntoTournament = ({
 export type SharedTournamentScorecardState = {
   tournament: StoredTournament;
   isFinalized: boolean;
+  updatedAt: string | null;
   pairings: Array<{
     groupNumber: number;
     teeTime: string;
@@ -454,6 +455,7 @@ export type SharedTournamentScorecardState = {
   roundSetup: {
     roundNumber: string;
     numberOfHoles: string;
+    countingScores: string;
   };
 };
 
@@ -1269,6 +1271,7 @@ export const loadSharedTournamentScorecardState = async (
         typeof snapshotEnvelope.tournament.settings.finalization === "object" &&
         (snapshotEnvelope.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
     ),
+    updatedAt: snapshot.updated_at ?? tournamentRow.updated_at,
     pairings,
     scorecardRows: sharedPlayerRows.map((row) => {
       const snapshotScorecard = findSnapshotScorecard(row);
@@ -1285,6 +1288,7 @@ export const loadSharedTournamentScorecardState = async (
     roundSetup: {
       roundNumber: String(roundNumber),
       numberOfHoles: String(parsedHoleCount),
+      countingScores: String(Number(exactRoundSetup.countingScores) || 4),
     },
   };
 };

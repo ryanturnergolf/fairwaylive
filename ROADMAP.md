@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Share-Token Tournament Leaderboard
+
+Status: **COMPLETE**
+
+- Added a dedicated signed-out `/leaderboard` route that resolves the existing share token to the authoritative tournament UUID.
+- Loaded roster, submitted marker scores, round configuration, finalization state, and snapshot compatibility data through share-token-authorized reads.
+- Reused the authenticated workspace's team and individual leaderboard calculations without exposing its controls or using `/live` demo content.
+- Verified invalid-token rejection, finalized viewing, refresh persistence, responsive standings, and zero database mutations.
+- Verified the real `Real Test` leaderboard on port 3000; final automated regression passed 74/74.
+
+Recommended next milestone: connect the post-submission confirmation and read-only scorecard/statistics view to this secure leaderboard destination.
+
 ### Completed Milestone: End-Of-Round Statistics Review
 
 Status: **COMPLETE**

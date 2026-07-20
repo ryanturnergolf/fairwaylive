@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added a dedicated `/leaderboard` route for signed-out, share-token-authorized access to real tournament team and individual standings.
+- Reused the authenticated workspace's individual/team leaderboard calculations while loading authoritative marker-entered scores, roster identity, round setup, and snapshot compatibility data through the existing share-token read path.
+- Added secure invalid-link handling, finalized-tournament viewing, responsive read-only standings, refresh coverage, and assertions that the public leaderboard issues no database mutations.
 - Added an end-of-round Statistics Review table with per-hole fairway, green-in-regulation, putt, and completion values plus compact round summaries.
 - Added exact missing-hole/statistic guidance and the explicit “Continue and finalize round without recording statistics” submission-time opt-out.
 - Required complete par-4/par-5 fairways, all-hole greens in regulation, and all-hole putts unless the opt-out is selected; par-3 fairways remain excluded.
@@ -22,7 +25,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 72/72.
+- Production build passed and Playwright passed 74/74.
+- Verified the signed-out `Real Test` leaderboard on port 3000 with the existing mobile share token: authoritative team and individual standings loaded, refresh succeeded, Tournament Director controls remained absent, and no write requests occurred.
 - Verified complete and incomplete statistics, exact missing-field warnings, par-3 fairway exclusion, summary totals, opt-out gating, mismatch protection, refresh hydration, and duplicate-row prevention.
 - Verified the real `Real Test` race condition: an initially unavailable counterpart Self card synchronized to total `72` without refresh, retained marker total `75`, and exposed the three authoritative mismatches.
 - Verified ten focused catalog cases covering Supabase-only, snapshot-backed, local-only, mapped identity, stale status/finalization precedence, cache enrichment, stale `popcorn` isolation, and deterministic ordering.

@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Signed-out players had no authoritative tournament leaderboard
+
+Status: resolved and verified against the real `Real Test` tournament on 2026-07-19.
+
+The authenticated tournament workspace contained the real leaderboard, while `/live` was static demo content and no signed-out destination preserved share-token authorization. Sending mobile players to either location would expose the wrong data or the broader Tournament Director workspace.
+
+The dedicated `/leaderboard` route now validates the existing share token, loads the token-authorized tournament, roster, submitted marker scores, and compatibility snapshot, and reuses the established team and individual calculations. It is read-only, remains available for finalized tournaments, rejects invalid or expired links, exposes no director controls, and performs no database writes.
+
 ### Review submission ignored statistics completeness
 
 Status: resolved and verified on 2026-07-19.

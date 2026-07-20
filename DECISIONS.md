@@ -4,6 +4,10 @@ Last updated: 2026-07-19
 
 ## Active Decisions
 
+### Signed-out leaderboards use a dedicated share-token boundary
+
+Mobile players access real tournament standings only through `/leaderboard` with a validated existing share token. The token-resolved Supabase UUID determines tournament identity; stable marker-entered score rows remain authoritative and the snapshot is compatibility fallback only. The route reuses the same individual and team calculation functions as the authenticated workspace, exposes no Tournament Director controls, never uses `/live` demo data, and performs reads only.
+
 ### Entering Review is an authoritative synchronization boundary
 
 Review & Submit must drain the current save queue and reload score and hole-statistic rows before displaying comparison state. Stable `score_entries` take precedence, snapshots remain compatibility-only and never create rows, and unavailable or failed reads must not render stale Review data.
