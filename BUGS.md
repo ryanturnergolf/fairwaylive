@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Review retained stale counterpart Self scores after concurrent scoring
+
+Status: resolved and verified against the real manually created tournament on 2026-07-19.
+
+The marked player's self card was loaded only during initial scorecard hydration. When reciprocal scoring pages opened before either player finished, later stable self rows were saved correctly but Review continued displaying the initially empty comparison until refresh.
+
+Entering Review now drains pending saves, reloads authoritative `score_entries` and `score_hole_entries`, applies stable-row then snapshot-compatibility precedence, and renders only after rebuilding totals, completeness, and mismatches. Failed synchronization stays in scoring view with a retry action.
+
 ### Homepage catalog could duplicate or contaminate Supabase tournaments
 
 Status: resolved for the shared catalog and homepage proof consumer on 2026-07-19.

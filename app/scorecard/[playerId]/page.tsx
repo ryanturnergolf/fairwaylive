@@ -18,6 +18,10 @@ import {
   saveHoleStatistics,
   saveRoundHoleStatistics,
 } from "../../lib/services/statisticsService";
+import {
+  loadReviewComparisonModel,
+  type ReviewComparisonModel,
+} from "../../lib/services/reviewComparisonService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
 import { resolveShareToken } from "../../lib/services/shareTokenService";
@@ -590,6 +594,9 @@ export default function PlayerScorecardPage() {
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [reviewSyncError, setReviewSyncError] = useState("");
+  const [isReviewSynchronizing, setIsReviewSynchronizing] = useState(false);
+  const [, setReviewComparison] = useState<ReviewComparisonModel | null>(null);
   const [scoreLoadError, setScoreLoadError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [scoreControlsReady, setScoreControlsReady] = useState(false);
@@ -1425,11 +1432,39 @@ export default function PlayerScorecardPage() {
   };
 
   const handleReviewRound = async () => {
-    if (isSavingHoleRef.current) return;
-    await scoreSaveQueueRef.current;
-    setView("review");
-    setShowConfirm(false);
+    if (isSavingHoleRef.current || isReviewSynchronizing) return;
+    setIsReviewSynchronizing(true);
+    setReviewSyncError("");
     setSaveError("");
+
+    try {
+      await scoreSaveQueueRef.current;
+      if (!sharedScoreTournamentId || !resolvedPlayerIds?.markerPlayerId) {
+        throw new Error("Tournament comparison information is unavailable.");
+      }
+
+      const comparison = await loadReviewComparisonModel({
+        tournamentId: sharedScoreTournamentId,
+        roundNumber: Number(scorecard.round) || 1,
+        shareToken: requestedShareToken || undefined,
+        markedPlayerIds: resolvedPlayerIds.markerPlayerIds,
+        markerEnteredByPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+        holes: scorecard.holes,
+        snapshotSelfScores: scorecard.initialMarkerScores,
+      });
+
+      setReviewComparison(comparison);
+      setMarkedPlayerSelfScores(comparison.selfScores);
+      markerScoresRef.current = comparison.markerScores;
+      setMarkerScores(comparison.markerScores);
+      setView("review");
+      setShowConfirm(false);
+    } catch (error) {
+      console.warn("[ReviewComparison] Unable to synchronize authoritative comparison.", error);
+      setReviewSyncError("Review data could not be synchronized. Check your connection and try again.");
+    } finally {
+      setIsReviewSynchronizing(false);
+    }
   };
 
   const handleConfirmSubmit = async () => {
@@ -1998,12 +2033,41 @@ export default function PlayerScorecardPage() {
         <button
           type="button"
           onClick={handleReviewRound}
-          disabled={!scoreControlsReady || isTournamentFinalized || isSavingHole || !allHolesScored}
+          disabled={
+            !scoreControlsReady ||
+            isTournamentFinalized ||
+            isSavingHole ||
+            isReviewSynchronizing ||
+            !allHolesScored
+          }
           className="mt-5 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isTournamentFinalized ? "Tournament Finalized" : "Review & Submit Round"}
+          {isTournamentFinalized
+            ? "Tournament Finalized"
+            : isReviewSynchronizing
+              ? "Synchronizing Review..."
+              : reviewSyncError
+                ? "Retry Review Synchronization"
+                : "Review & Submit Round"}
         </button>
 
+        {isReviewSynchronizing ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-3 rounded-2xl border border-[#B8892D]/40 bg-[#FCFAF5] p-3 text-center text-sm font-semibold text-[#51635C]"
+          >
+            Loading the latest self scores, marker scores, and statistics...
+          </div>
+        ) : null}
+        {reviewSyncError ? (
+          <div
+            role="alert"
+            className="mt-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-center text-sm font-semibold text-red-700"
+          >
+            {reviewSyncError}
+          </div>
+        ) : null}
         {!allHolesScored ? (
           <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-[#51635C]">
             Save all {scorecard.holes.length} holes to submit

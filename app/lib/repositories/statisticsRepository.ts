@@ -2,6 +2,7 @@ import {
   canUseDevelopmentBrowserSupabaseWriteFallback,
   getSupabaseBrowserClient,
 } from "../supabaseClient";
+import { hashShareToken } from "../shareTokens";
 
 export type ScoreHoleEntryRow = {
   id: string;
@@ -50,12 +51,14 @@ export type SaveScoreHoleEntryInput = {
 export type GetScoreHoleEntriesForTournamentInput = {
   tournamentId: string;
   roundNumber?: number;
+  shareToken?: string;
 };
 
 export type GetScoreHoleEntriesForPlayerInput = {
   tournamentId: string;
   roundNumber?: number;
   playerId: string;
+  shareToken?: string;
 };
 
 const scoreHoleEntryColumns =
@@ -64,6 +67,22 @@ const statisticsRequestTimeoutMs = 4000;
 
 const getClient = () => {
   const supabase = getSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  return supabase;
+};
+
+const getReadClient = async (shareToken?: string) => {
+  if (!shareToken) {
+    return getClient();
+  }
+
+  const supabase = getSupabaseBrowserClient({
+    shareTokenHash: await hashShareToken(shareToken),
+  });
 
   if (!supabase) {
     throw new Error("Supabase is not configured.");
@@ -206,7 +225,7 @@ export const saveScoreHoleEntries = async (
 export const getScoreHoleEntriesForTournament = async (
   input: GetScoreHoleEntriesForTournamentInput
 ): Promise<ScoreHoleEntryRow[]> => {
-  const supabase = getClient();
+  const supabase = await getReadClient(input.shareToken);
   const requestSignal = createStatisticsRequestSignal();
   const query = supabase
     .from("score_hole_entries")
@@ -235,7 +254,7 @@ export const getScoreHoleEntriesForTournament = async (
 export const getScoreHoleEntriesForPlayer = async (
   input: GetScoreHoleEntriesForPlayerInput
 ): Promise<ScoreHoleEntryRow[]> => {
-  const supabase = getClient();
+  const supabase = await getReadClient(input.shareToken);
   const requestSignal = createStatisticsRequestSignal();
   const query = supabase
     .from("score_hole_entries")

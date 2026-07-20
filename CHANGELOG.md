@@ -10,13 +10,17 @@
 
 ### Fixed
 
+- Made Review & Submit an authoritative synchronization point that drains pending saves, reloads current score and hole-statistic rows, and rebuilds Self/Marker comparisons before rendering Review.
+- Added visible synchronization and retry states so failed reads cannot expose stale comparison data.
+- Extended signed-out statistics reads to carry the validated share-token hash and added regressions for counterpart cards completed after initial hydration, totals, mismatches, statistics completeness, and refresh.
 - Stopped routine tournament-page persistence after authoritative finalized hydration, including queued player reconciliation and snapshot synchronization work.
 - Preserved the single version-guarded finalization mutation and normal pre-finalization roster/snapshot synchronization while keeping finalized refreshes read-only.
 - Added regressions for one final snapshot write, zero routine mutations after finalized refresh, post-finalization HTTP error prevention, and continued pre-finalization synchronization.
 
 ### Verification
 
-- Production build passed and Playwright passed 67/67.
+- Production build passed and Playwright passed 69/69.
+- Verified the real `Real Test` race condition: an initially unavailable counterpart Self card synchronized to total `72` without refresh, retained marker total `75`, and exposed the three authoritative mismatches.
 - Verified ten focused catalog cases covering Supabase-only, snapshot-backed, local-only, mapped identity, stale status/finalization precedence, cache enrichment, stale `popcorn` isolation, and deterministic ordering.
 - Verified the real finalized tournament refresh sends zero `POST /api/tournament-mutations` requests and produces zero HTTP 500 responses while desktop and signed-out mobile remain read-only.
 

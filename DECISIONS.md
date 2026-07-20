@@ -4,6 +4,10 @@ Last updated: 2026-07-19
 
 ## Active Decisions
 
+### Entering Review is an authoritative synchronization boundary
+
+Review & Submit must drain the current save queue and reload score and hole-statistic rows before displaying comparison state. Stable `score_entries` take precedence, snapshots remain compatibility-only and never create rows, and unavailable or failed reads must not render stale Review data. Statistics completeness is loaded into the shared comparison model for future work but does not affect submission until that requirement is implemented separately.
+
 ### Tournament catalogs use canonical shared identity and explicit provenance
 
 When a Supabase UUID is known, it is the catalog entry's canonical identity and any mapped local ID is an alias. Supabase row metadata, status, and finalization state remain authoritative; a valid snapshot may enrich the entry, and localStorage may fill missing presentation fields without overriding authority. Unmapped local tournaments remain visible as local-only entries and are not automatically pruned.
