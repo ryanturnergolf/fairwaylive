@@ -4,6 +4,9 @@
 
 ### Added
 
+- Replaced the simple submitted-round confirmation with player, round, final score, score-to-par, and direct actions to view the submitted scorecard or the share-token leaderboard.
+- Added a refresh-stable, read-only post-submission view with compact Front 9 and Back 9 scorecards, par and scoring totals, per-hole fairway/GIR/putt values, and round statistics summaries.
+- Preserved incomplete opted-out statistics as missing values with a clear Statistics Incomplete notice, while keeping par-3 fairways marked N/A and carrying the exact share token and round into leaderboard navigation.
 - Added a dedicated `/leaderboard` route for signed-out, share-token-authorized access to real tournament team and individual standings.
 - Reused the authenticated workspace's individual/team leaderboard calculations while loading authoritative marker-entered scores, roster identity, round setup, and snapshot compatibility data through the existing share-token read path.
 - Added secure invalid-link handling, finalized-tournament viewing, responsive read-only standings, refresh coverage, and assertions that the public leaderboard issues no database mutations.
@@ -25,7 +28,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 74/74.
+- Production build passed and Playwright passed 76/76.
+- Verified the post-submission confirmation and scorecard/statistics subview on a safe submitted round, including all 18 scores, nine-hole and overall totals, missing-statistics presentation, exact leaderboard context, refresh restoration, finalized read-only behavior, and zero duplicate or synthetic writes.
 - Verified the signed-out `Real Test` leaderboard on port 3000 with the existing mobile share token: authoritative team and individual standings loaded, refresh succeeded, Tournament Director controls remained absent, and no write requests occurred.
 - Verified complete and incomplete statistics, exact missing-field warnings, par-3 fairway exclusion, summary totals, opt-out gating, mismatch protection, refresh hydration, and duplicate-row prevention.
 - Verified the real `Real Test` race condition: an initially unavailable counterpart Self card synchronized to total `72` without refresh, retained marker total `75`, and exposed the three authoritative mismatches.

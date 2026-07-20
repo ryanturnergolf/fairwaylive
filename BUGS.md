@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Submitted rounds lacked a player-facing scorecard and statistics view
+
+Status: resolved and verified on 2026-07-19.
+
+The mobile flow ended at a minimal confirmation, leaving players without a secure way to review their submitted 18-hole card, available statistics, or navigate to the real tournament leaderboard.
+
+The submitted state now shows player, round, final score, and score to par, with actions for a read-only scorecard/statistics view and the share-token leaderboard. The view reads existing authoritative score and statistic rows, separates Front 9 and Back 9, preserves missing opted-out statistics without manufacturing data, survives refresh, and performs no score or statistic writes.
+
 ### Signed-out players had no authoritative tournament leaderboard
 
 Status: resolved and verified against the real `Real Test` tournament on 2026-07-19.

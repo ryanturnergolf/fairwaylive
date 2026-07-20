@@ -14,6 +14,7 @@ import {
 import { completeReview, loadComparisonScores, loadPlayerScores, saveHole, saveRound } from "../../lib/services/scoreService";
 import {
   buildScoreHoleEntryInput,
+  loadTournamentHoleStatistics,
   type HoleStatisticsInput,
   saveHoleStatistics,
   saveRoundHoleStatistics,
@@ -602,6 +603,12 @@ export default function PlayerScorecardPage() {
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [scoreControlsReady, setScoreControlsReady] = useState(false);
   const [submissionComplete, setSubmissionComplete] = useState(false);
+  const [postSubmissionView, setPostSubmissionView] = useState<"confirmation" | "scorecard">(
+    searchParams.get("postRound") === "scorecard" ? "scorecard" : "confirmation"
+  );
+  const [submittedStatistics, setSubmittedStatistics] = useState<ReviewComparisonModel["statistics"] | null>(null);
+  const [isSubmittedStatisticsLoading, setIsSubmittedStatisticsLoading] = useState(false);
+  const [submittedStatisticsError, setSubmittedStatisticsError] = useState("");
   const [, setScoreDiagnostics] = useState<ScoreDiagnostics>(initialScoreDiagnostics);
   const finalizationVerifiedAtRef = useRef(0);
   const scoreSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -980,6 +987,70 @@ export default function PlayerScorecardPage() {
       isCancelled = true;
     };
     }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds, sharedScoreTournamentId, scorecard.holes]);
+
+  useEffect(() => {
+    if (!submissionComplete || !sharedScoreTournamentId || !resolvedPlayerIds) {
+      return;
+    }
+
+    let isCancelled = false;
+    const loadSubmittedStatistics = async () => {
+      setIsSubmittedStatisticsLoading(true);
+      setSubmittedStatisticsError("");
+      try {
+        const entries = await loadTournamentHoleStatistics({
+          tournamentId: sharedScoreTournamentId,
+          roundNumber: Number(scorecard.round) || 1,
+          shareToken: requestedShareToken || undefined,
+        });
+        const selfEntries = entries.filter(
+          (entry) =>
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id))
+        );
+        const entriesByHole = new Map(selfEntries.map((entry) => [Number(entry.hole_number), entry]));
+        const statistics = scorecard.holes.map((hole) => {
+          const entry = entriesByHole.get(hole.holeNumber);
+          return {
+            holeNumber: hole.holeNumber,
+            fairwayHit: entry?.fairway_hit ?? null,
+            greenInRegulation: entry?.green_in_regulation ?? null,
+            putts: entry?.putts ?? null,
+          };
+        });
+        if (!isCancelled) {
+          setSubmittedStatistics(statistics);
+        }
+      } catch (error) {
+        console.warn("[PostSubmission] Unable to load authoritative statistics.", error);
+        if (!isCancelled) {
+          setSubmittedStatistics(null);
+          setSubmittedStatisticsError("Round statistics could not be loaded. Recorded scores remain available.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsSubmittedStatisticsLoading(false);
+        }
+      }
+    };
+    void loadSubmittedStatistics();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    requestedShareToken,
+    resolvedPlayerIds,
+    scorecard.holes,
+    scorecard.round,
+    sharedScoreTournamentId,
+    submissionComplete,
+  ]);
+
+  useEffect(() => {
+    if (submissionComplete && searchParams.get("postRound") === "scorecard") {
+      setPostSubmissionView("scorecard");
+    }
+  }, [searchParams, submissionComplete]);
 
   // Discrepancy detection: compare marked player's self scores vs marker scores
   const discrepancies = useMemo(() => {
@@ -1608,6 +1679,20 @@ export default function PlayerScorecardPage() {
     }
   };
 
+  const updatePostSubmissionView = (nextView: "confirmation" | "scorecard") => {
+    setPostSubmissionView(nextView);
+    if (typeof window === "undefined") {
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (nextView === "scorecard") {
+      url.searchParams.set("postRound", "scorecard");
+    } else {
+      url.searchParams.delete("postRound");
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
   const isHoleSaved = savedHoles.includes(currentHole.holeNumber);
   const currentStatCapture = holeStats[currentHoleIndex] ?? emptyHoleStats();
   const statButtonClass = (isSelected: boolean) =>
@@ -1639,6 +1724,90 @@ export default function PlayerScorecardPage() {
   );
 
   if (view === "submitted") {
+    const totalPar = front9Par + back9Par;
+    const submittedStats =
+      submittedStatistics ??
+      scorecard.holes.map((hole) => ({
+        holeNumber: hole.holeNumber,
+        fairwayHit: null,
+        greenInRegulation: null,
+        putts: null,
+      }));
+    const fairwaysAvailable = scorecard.holes.filter((hole) => hole.par !== 3).length;
+    const fairwaysHit = submittedStats.filter((statistic) => statistic.fairwayHit === true).length;
+    const greensHit = submittedStats.filter((statistic) => statistic.greenInRegulation === true).length;
+    const frontNinePutts = submittedStats
+      .slice(0, 9)
+      .reduce((sum, statistic) => sum + (statistic.putts ?? 0), 0);
+    const backNinePutts = submittedStats
+      .slice(9)
+      .reduce((sum, statistic) => sum + (statistic.putts ?? 0), 0);
+    const totalPutts = frontNinePutts + backNinePutts;
+    const statisticsIncomplete = scorecard.holes.some((hole, index) => {
+      const statistic = submittedStats[index];
+      return (
+        (hole.par !== 3 && statistic.fairwayHit === null) ||
+        statistic.greenInRegulation === null ||
+        statistic.putts === null
+      );
+    });
+    const percentage = (value: number, available: number) =>
+      available > 0 ? `${Math.round((value / available) * 100)}%` : "—";
+    const formatBooleanStatistic = (value: boolean | null) =>
+      value === null ? "—" : value ? "Yes" : "No";
+    const leaderboardParams = new URLSearchParams({
+      shareToken: requestedShareToken,
+      round: requestedRound || scorecard.round,
+    });
+    const leaderboardHref = `/leaderboard?${leaderboardParams.toString()}`;
+    const renderSubmittedNine = (
+      title: string,
+      holes: Hole[],
+      startIndex: number,
+      scoreTotal: number,
+      parTotal: number
+    ) => (
+      <section className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-3 shadow-[0_14px_35px_rgba(11,61,46,0.06)]">
+        <div className="flex items-end justify-between gap-3 px-1 pb-3">
+          <h3 className="text-lg font-black tracking-[-0.02em]">{title}</h3>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#51635C]">
+            Score {scoreTotal} · Par {parTotal}
+          </p>
+        </div>
+        <table className="w-full table-fixed text-[10px]">
+          <thead>
+            <tr className="border-y border-[#E8DCC8] bg-[#FCFAF5] text-[#51635C]">
+              {["Hole", "Par", "Score", "Fairway", "GIR", "Putts"].map((heading) => (
+                <th key={heading} className="px-0.5 py-2 text-center font-black uppercase tracking-[0.08em]">
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {holes.map((hole, sectionIndex) => {
+              const index = startIndex + sectionIndex;
+              const statistic = submittedStats[index];
+              return (
+                <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
+                  <td className="px-0.5 py-2 text-center font-black">{hole.holeNumber}</td>
+                  <td className="px-0.5 py-2 text-center text-[#51635C]">{hole.par}</td>
+                  <td className="px-0.5 py-2 text-center font-black">{scores[index] || "—"}</td>
+                  <td className="px-0.5 py-2 text-center text-[#51635C]">
+                    {hole.par === 3 ? "N/A" : formatBooleanStatistic(statistic.fairwayHit)}
+                  </td>
+                  <td className="px-0.5 py-2 text-center text-[#51635C]">
+                    {formatBooleanStatistic(statistic.greenInRegulation)}
+                  </td>
+                  <td className="px-0.5 py-2 text-center text-[#51635C]">{statistic.putts ?? "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+    );
+
     return (
       <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
         {sharedHeader}
@@ -1648,36 +1817,130 @@ export default function PlayerScorecardPage() {
               This tournament is finalized. Score entry is read-only for historical viewing.
             </div>
           ) : null}
-          <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verification Submitted</p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
-              Scorecard Verified
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-[#51635C]">
-              {scorecard.markerPlayerName || "Player"}&rsquo;s round {scorecard.round} scores have been verified and recorded.
-            </p>
-            <div className="mt-5 grid grid-cols-3 gap-3">
-              {front9Holes.length > 0 ? (
-                <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9</p>
-                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{markedPlayerFront9Total}</p>
+          {postSubmissionView === "confirmation" ? (
+            <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Round Submitted</p>
+              <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#0B3D2E]">
+                Your scorecard is complete
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-[#51635C]">
+                {scorecard.playerName}&rsquo;s round {scorecard.round} has been submitted and is now read-only.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-4 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#B8892D]">Final Score</p>
+                  <p className="mt-2 text-2xl font-black">{totals.total}</p>
                 </div>
-              ) : null}
-              {back9Holes.length > 0 ? (
-                <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9</p>
-                  <p className="mt-2 text-lg font-black text-[#0B3D2E]">{markedPlayerBack9Total}</p>
+                <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-4 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#B8892D]">To Par</p>
+                  <p className="mt-2 text-2xl font-black">{totals.toPar}</p>
                 </div>
-              ) : null}
-              <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Total</p>
-                <p className="mt-2 text-lg font-black text-[#0B3D2E]">{markedPlayerTotals.total}</p>
+              </div>
+              <div className="mt-5 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => updatePostSubmissionView("scorecard")}
+                  className="min-h-12 rounded-full bg-[#0B3D2E] px-5 py-3 text-sm font-black text-[#F6F1E6]"
+                >
+                  View My Scorecard and Stats
+                </button>
+                <Link
+                  href={leaderboardHref}
+                  className="flex min-h-12 items-center justify-center rounded-full border border-[#0B3D2E] px-5 py-3 text-sm font-black text-[#0B3D2E]"
+                >
+                  Go to Leaderboard
+                </Link>
               </div>
             </div>
-            <div className="mt-3 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-              {markedPlayerTotals.toPar} to par
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-[28px] border border-[#E8DCC8] bg-[#0B3D2E] p-5 text-[#F6F1E6] shadow-[0_18px_45px_rgba(11,61,46,0.15)]">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F0C96A]">
+                  My Scorecard and Stats
+                </p>
+                <h2 className="mt-2 text-2xl font-black">{scorecard.playerName}</h2>
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+                  Round {scorecard.round} · {totals.total} · {totals.toPar} to par
+                </p>
+              </div>
+
+              {isSubmittedStatisticsLoading ? (
+                <div role="status" className="rounded-2xl border border-[#E8DCC8] bg-white p-4 text-sm font-semibold">
+                  Loading authoritative round statistics…
+                </div>
+              ) : null}
+              {statisticsIncomplete && !isSubmittedStatisticsLoading ? (
+                <div role="alert" className="rounded-2xl border border-amber-400 bg-amber-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-800">Statistics Incomplete</p>
+                  <p className="mt-2 text-xs leading-5 text-amber-900">
+                    Available statistics are shown below. Missing recorded values appear as —.
+                  </p>
+                  {submittedStatisticsError ? (
+                    <p className="mt-2 text-xs font-semibold text-amber-900">{submittedStatisticsError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {renderSubmittedNine("Front 9", front9Holes, 0, front9Total, front9Par)}
+              {back9Holes.length > 0
+                ? renderSubmittedNine("Back 9", back9Holes, 9, back9Total, back9Par)
+                : null}
+
+              <section className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-4">
+                <h3 className="text-lg font-black">Round Totals</h3>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  {[
+                    ["Front", `${front9Total} / ${front9Par}`],
+                    ["Back", `${back9Total} / ${back9Par}`],
+                    ["Total", `${totals.total} / ${totalPar}`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-2xl bg-[#FCFAF5] p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#51635C]">{label}</p>
+                      <p className="mt-1 text-base font-black">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 rounded-full bg-[#F6F1E6] px-3 py-2 text-center text-xs font-black">
+                  Score to par: {totals.toPar}
+                </p>
+              </section>
+
+              <section className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-4">
+                <h3 className="text-lg font-black">Statistics Summary</h3>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {[
+                    ["Fairways", `${fairwaysHit}/${fairwaysAvailable}`],
+                    ["Fairway %", percentage(fairwaysHit, fairwaysAvailable)],
+                    ["GIR", `${greensHit}/${scorecard.holes.length}`],
+                    ["GIR %", percentage(greensHit, scorecard.holes.length)],
+                    ["Total Putts", String(totalPutts)],
+                    ["Front / Back Putts", `${frontNinePutts} / ${backNinePutts}`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#51635C]">{label}</p>
+                      <p className="mt-1 text-lg font-black">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 pb-4">
+                <button
+                  type="button"
+                  onClick={() => updatePostSubmissionView("confirmation")}
+                  className="min-h-12 rounded-full border border-[#0B3D2E] px-5 py-3 text-sm font-black"
+                >
+                  Back to Submission Confirmation
+                </button>
+                <Link
+                  href={leaderboardHref}
+                  className="flex min-h-12 items-center justify-center rounded-full bg-[#0B3D2E] px-5 py-3 text-sm font-black text-[#F6F1E6]"
+                >
+                  Go to Leaderboard
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
         </section>
       </main>
     );

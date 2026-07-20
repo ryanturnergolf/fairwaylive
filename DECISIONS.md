@@ -4,6 +4,10 @@ Last updated: 2026-07-19
 
 ## Active Decisions
 
+### Post-submission review stays within the share-token scoring context
+
+The submitted mobile route owns its read-only confirmation and scorecard/statistics subview so player, tournament, round, and share-token identity remain unchanged across refresh. Submitted stable self-score rows and existing hole-statistic rows are authoritative, snapshot data remains compatibility fallback only, and genuinely missing statistics remain visibly missing. Leaderboard navigation carries the exact validated share token and round to the dedicated read-only leaderboard route.
+
 ### Signed-out leaderboards use a dedicated share-token boundary
 
 Mobile players access real tournament standings only through `/leaderboard` with a validated existing share token. The token-resolved Supabase UUID determines tournament identity; stable marker-entered score rows remain authoritative and the snapshot is compatibility fallback only. The route reuses the same individual and team calculation functions as the authenticated workspace, exposes no Tournament Director controls, never uses `/live` demo data, and performs reads only.

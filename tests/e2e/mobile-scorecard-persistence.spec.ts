@@ -236,14 +236,17 @@ const buildScoreHoleEntry = (body: Record<string, unknown>) => ({
   updated_at: null,
 });
 
-const buildCompleteReviewStatistics = (tournamentId = sharedTournamentId) =>
+const buildCompleteReviewStatistics = (
+  tournamentId = sharedTournamentId,
+  playerId = "player-2"
+) =>
   Array.from({ length: 18 }, (_, index) => {
     const holeNumber = index + 1;
     return buildScoreHoleEntry({
       tournament_id: tournamentId,
       round_number: 1,
-      player_id: "player-2",
-      entered_by_player_id: "player-2",
+      player_id: playerId,
+      entered_by_player_id: playerId,
       marker_for_player_id: null,
       hole_number: holeNumber,
       strokes: 4,
@@ -898,7 +901,10 @@ test("rapid Save Hole actions preserve adjacent persisted hole positions", async
 test("completed scorer and marker entries submit once and restore submitted state", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
   const holeStatsStore = await routeScoreHoleEntriesStore(page);
-  holeStatsStore.savedHoleRows.push(...buildCompleteReviewStatistics(tournamentId));
+  holeStatsStore.savedHoleRows.push(
+    ...buildCompleteReviewStatistics(tournamentId),
+    ...buildCompleteReviewStatistics(tournamentId, "player-1")
+  );
   sharedStore.savedScoreRows.push(buildScoreEntry("player-2", "player-2", Array.from({ length: 18 }, () => 4)));
   await page.addInitScript(({ key, scores }) => {
     const envelope = JSON.parse(window.localStorage.getItem(key) || "null");
@@ -967,17 +973,107 @@ test("completed scorer and marker entries submit once and restore submitted stat
   await page.getByRole("button", { name: "Review & Submit Round" }).click();
   await page.getByRole("button", { name: "Submit Verification" }).click();
   await page.getByRole("button", { name: "Confirm Submit" }).click();
-  await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View My Scorecard and Stats" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Go to Leaderboard" })).toBeVisible();
 
   await expect
     .poll(() => sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted").length)
     .toBe(2);
   await expect(page.getByRole("button", { name: "Confirm Submit" })).toHaveCount(0);
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
-  await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
   await expect
     .poll(() => sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted").length)
     .toBe(2);
+});
+
+test("submitted post-round scorecard shows authoritative scores, statistics, navigation, and refresh state", async ({ page }) => {
+  const completeStatistics = [
+    ...buildCompleteReviewStatistics(sharedTournamentId, "player-1"),
+    ...buildCompleteReviewStatistics(sharedTournamentId, "player-2"),
+  ];
+  const sharedStore = await openSharedSnapshotReview(page, {
+    snapshotMarkedSelfScores: Array.from({ length: 18 }, () => 4),
+    markerEnteredScores: Array.from({ length: 18 }, () => 4),
+    stableMarkedSelfScores: Array.from({ length: 18 }, () => 4),
+    statisticEntries: completeStatistics,
+  });
+
+  await page.getByRole("button", { name: "Submit Verification" }).click();
+  await page.getByRole("button", { name: "Confirm Submit" }).click();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ava Green’s round 1 has been submitted and is now read-only.")).toBeVisible();
+  await expect(page.getByText("Final Score").locator("..")).toContainText("72");
+  await expect(page.getByText("To Par").locator("..")).toContainText("E");
+  await expect(page.getByRole("button", { name: "View My Scorecard and Stats" })).toBeVisible();
+
+  const leaderboardLink = page.getByRole("link", { name: "Go to Leaderboard" });
+  await expect(leaderboardLink).toHaveAttribute(
+    "href",
+    "/leaderboard?shareToken=review-snapshot-token&round=1"
+  );
+  await page.getByRole("button", { name: "View My Scorecard and Stats" }).click();
+  await expect(page.getByText("My Scorecard and Stats", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toBeHidden();
+
+  const frontNine = page.getByRole("heading", { name: "Front 9" }).locator("xpath=ancestor::section[1]");
+  const backNine = page.getByRole("heading", { name: "Back 9" }).locator("xpath=ancestor::section[1]");
+  await expect(frontNine.locator("tbody tr")).toHaveCount(9);
+  await expect(backNine.locator("tbody tr")).toHaveCount(9);
+  await expect(frontNine.locator("tbody tr td:nth-child(3)")).toHaveText(Array.from({ length: 9 }, () => "4"));
+  await expect(backNine.locator("tbody tr td:nth-child(3)")).toHaveText(Array.from({ length: 9 }, () => "4"));
+  await expect(page.getByRole("cell", { name: "N/A" })).toHaveCount(4);
+
+  const roundTotals = page.getByRole("heading", { name: "Round Totals" }).locator("xpath=ancestor::section[1]");
+  await expect(roundTotals).toContainText("36 / 36");
+  await expect(roundTotals).toContainText("72 / 72");
+  await expect(roundTotals).toContainText("Score to par: E");
+  const statisticsSummary = page.getByRole("heading", { name: "Statistics Summary" }).locator("xpath=ancestor::section[1]");
+  await expect(statisticsSummary).toContainText("7/14");
+  await expect(statisticsSummary).toContainText("50%");
+  await expect(statisticsSummary).toContainText("10/18");
+  await expect(statisticsSummary).toContainText("56%");
+  await expect(statisticsSummary).toContainText("36");
+  await expect(statisticsSummary).toContainText("18 / 18");
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("My Scorecard and Stats", { exact: true })).toBeVisible();
+  await expect(page.getByText("Statistics Incomplete", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to Submission Confirmation" }).click();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View My Scorecard and Stats" })).toBeVisible();
+
+  expect(
+    sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")
+  ).toHaveLength(2);
+  expect(sharedStore.savedHoleRows).toHaveLength(36);
+});
+
+test("statistics opt-out post-round card preserves missing values without synthetic rows", async ({ page }) => {
+  const partialStatistics = [
+    buildCompleteReviewStatistics(sharedTournamentId, "player-1")[0],
+    buildCompleteReviewStatistics(sharedTournamentId, "player-2")[0],
+  ];
+  const sharedStore = await openSharedSnapshotReview(page, {
+    snapshotMarkedSelfScores: Array.from({ length: 18 }, () => 4),
+    markerEnteredScores: Array.from({ length: 18 }, () => 4),
+    stableMarkedSelfScores: Array.from({ length: 18 }, () => 4),
+    statisticEntries: partialStatistics,
+  });
+
+  await page.getByLabel("Continue and finalize round without recording statistics").check();
+  await page.getByRole("button", { name: "Submit Verification" }).click();
+  await page.getByRole("button", { name: "Confirm Submit" }).click();
+  await page.getByRole("button", { name: "View My Scorecard and Stats" }).click();
+
+  await expect(page.getByText("Statistics Incomplete", { exact: true })).toBeVisible();
+  await expect(page.getByText("—", { exact: true })).toHaveCount(47);
+  await expect(page.getByRole("cell", { name: "N/A" })).toHaveCount(4);
+  expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(2);
+  expect(sharedStore.savedHoleRows).toHaveLength(2);
 });
 
 test("Review submission uses the same marked-player comparison rendered by the table", async ({ page }) => {
@@ -1055,7 +1151,7 @@ test("Review submission uses the same marked-player comparison rendered by the t
   await expect(page.getByText("✓", { exact: true })).toHaveCount(18);
   await page.getByRole("button", { name: "Submit Verification" }).click();
   await page.getByRole("button", { name: "Confirm Submit" }).click();
-  await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
   await expect
     .poll(() => sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted").length)
     .toBe(2);
@@ -1080,7 +1176,7 @@ test("Review hydrates marked-player Self from snapshot fallback and persists ver
   await expect(page.getByRole("button", { name: "Submit Verification" })).toBeEnabled();
   await page.getByRole("button", { name: "Submit Verification" }).click();
   await page.getByRole("button", { name: "Confirm Submit" }).click();
-  await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
 
   await expect
     .poll(() =>
@@ -1107,7 +1203,7 @@ test("Review hydrates marked-player Self from snapshot fallback and persists ver
   expect(sharedStore.savedHoleRows).toHaveLength(18);
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Verification Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
 });
 
 test("Review synchronizes a counterpart self card completed after initial hydration", async ({ page }) => {

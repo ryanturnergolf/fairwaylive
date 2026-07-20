@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Post-Submission Scorecard And Statistics
+
+Status: **COMPLETE**
+
+- Replaced the simple submitted state with player, round, final score, score-to-par, and actions for the submitted scorecard and secure leaderboard.
+- Added phone-friendly Front 9 and Back 9 scorecards with per-hole par, score, fairway, GIR, and putts plus nine-hole and round summaries.
+- Preserved incomplete opted-out statistics as missing values, marked par-3 fairways N/A, and restored the selected post-round view after refresh.
+- Carried the exact share token and round into the dedicated leaderboard while retaining finalized read-only behavior and zero score/statistic writes.
+- Final automated regression: production build passed and Playwright passed 76/76.
+
+Recommended next milestone: resume the separately scoped Coach and Tournament Director dashboard separation work.
+
 ### Completed Milestone: Share-Token Tournament Leaderboard
 
 Status: **COMPLETE**
@@ -34,7 +46,7 @@ Status: **COMPLETE**
 - Verified invalid-token rejection, finalized viewing, refresh persistence, responsive standings, and zero database mutations.
 - Verified the real `Real Test` leaderboard on port 3000; final automated regression passed 74/74.
 
-Recommended next milestone: connect the post-submission confirmation and read-only scorecard/statistics view to this secure leaderboard destination.
+The post-submission confirmation and read-only scorecard/statistics view now use this secure leaderboard destination.
 
 ### Completed Milestone: End-Of-Round Statistics Review
 
@@ -46,7 +58,7 @@ Status: **COMPLETE**
 - Preserved score completeness and mismatch blocking, authoritative statistics rows, and duplicate-safe submission.
 - Final automated regression: production build passed and Playwright passed 72/72.
 
-Recommended next milestone: add the post-submission traditional scorecard and statistics summary without changing scoring or finalization rules.
+The post-submission traditional scorecard and statistics summary are now complete.
 
 ### Completed Milestone: Authoritative Review Synchronization
 
@@ -58,7 +70,7 @@ Status: **COMPLETE**
 - Loaded fairway, GIR, and putt completeness into the comparison model without changing submission rules or exposing the deferred statistics-review UI.
 - Verified the real manually created `Real Test` race without refresh; final automated regression passed 69/69.
 
-The statistics review and opt-out are complete. The post-submission scorecard/statistics actions remain deferred.
+The statistics review, opt-out, and post-submission scorecard/statistics actions are complete.
 
 ### Completed Milestone: Shared Provenance-Aware Tournament Catalog
 
