@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Review submission ignored statistics completeness
+
+Status: resolved and verified on 2026-07-19.
+
+Review synchronized authoritative hole statistics but did not present them or include their completeness in submission eligibility. Players could therefore submit without reviewing missing fairways, greens in regulation, or putts.
+
+Review now displays every hole and the round summaries, requires fairways only on par 4/5 holes plus GIR and putts on every hole, and lists exact missing fields. Incomplete statistics block submission unless the player selects the explicit submission-time opt-out; missing scores and score mismatches remain blocking, and no synthetic statistics or duplicate rows are written.
+
 ### Review retained stale counterpart Self scores after concurrent scoring
 
 Status: resolved and verified against the real manually created tournament on 2026-07-19.

@@ -6,7 +6,11 @@ Last updated: 2026-07-19
 
 ### Entering Review is an authoritative synchronization boundary
 
-Review & Submit must drain the current save queue and reload score and hole-statistic rows before displaying comparison state. Stable `score_entries` take precedence, snapshots remain compatibility-only and never create rows, and unavailable or failed reads must not render stale Review data. Statistics completeness is loaded into the shared comparison model for future work but does not affect submission until that requirement is implemented separately.
+Review & Submit must drain the current save queue and reload score and hole-statistic rows before displaying comparison state. Stable `score_entries` take precedence, snapshots remain compatibility-only and never create rows, and unavailable or failed reads must not render stale Review data.
+
+### Statistics completeness gates round submission
+
+Review requires Fairway Hit on par 4/5 holes, Green in Regulation on every hole, and Putts on every hole. Par-3 fairways are not applicable. Incomplete statistics block submission unless the player explicitly selects “Continue and finalize round without recording statistics”; that opt-out cannot bypass missing or mismatched scores and never creates synthetic statistic values. Because the current submission model has no appropriate durable opt-out field, the decision remains submission-time UI state for this milestone rather than introducing a migration.
 
 ### Tournament catalogs use canonical shared identity and explicit provenance
 

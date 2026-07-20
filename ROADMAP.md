@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: End-Of-Round Statistics Review
+
+Status: **COMPLETE**
+
+- Added per-hole Fairway Hit, GIR, Putts, applicability, and completion review with round summaries.
+- Required fairways on par 4/5 holes only and GIR/Putts on all holes.
+- Listed exact missing holes and fields and added the approved submission-time statistics opt-out.
+- Preserved score completeness and mismatch blocking, authoritative statistics rows, and duplicate-safe submission.
+- Final automated regression: production build passed and Playwright passed 72/72.
+
+Recommended next milestone: add the post-submission traditional scorecard and statistics summary without changing scoring or finalization rules.
+
 ### Completed Milestone: Authoritative Review Synchronization
 
 Status: **COMPLETE**
@@ -34,7 +46,7 @@ Status: **COMPLETE**
 - Loaded fairway, GIR, and putt completeness into the comparison model without changing submission rules or exposing the deferred statistics-review UI.
 - Verified the real manually created `Real Test` race without refresh; final automated regression passed 69/69.
 
-Deferred milestone: expose statistics review, missing-hole guidance, the explicit statistics opt-out, and post-submission scorecard/statistics actions.
+The statistics review and opt-out are complete. The post-submission scorecard/statistics actions remain deferred.
 
 ### Completed Milestone: Shared Provenance-Aware Tournament Catalog
 

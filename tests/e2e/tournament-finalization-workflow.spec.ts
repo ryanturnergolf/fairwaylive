@@ -663,7 +663,11 @@ test("already-open phone scorecard rejects saves after remote finalization", asy
     );
 
     await gotoApp(phonePage, `/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
-    await phonePage.getByRole("button", { name: "Edit Scores" }).click();
+    const editScoresButton = phonePage.getByRole("button", { name: "Edit Scores" });
+    if (!(await editScoresButton.isVisible())) {
+      await phonePage.getByRole("button", { name: "Review & Submit Round" }).click();
+    }
+    await editScoresButton.click();
     await phonePage.getByLabel("Ava Green's Score").fill("4");
     await expect(phonePage.getByRole("button", { name: "Save Hole" })).toBeEnabled();
     await phonePage.waitForTimeout(250);

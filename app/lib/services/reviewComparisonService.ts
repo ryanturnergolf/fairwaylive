@@ -35,6 +35,11 @@ export type ReviewComparisonModel = {
   missingPuttsHoles: number[];
   scoreComparisonComplete: boolean;
   statisticsComplete: boolean;
+  fairwaysHit: number;
+  fairwaysAvailable: number;
+  greensInRegulation: number;
+  greensAvailable: number;
+  totalPutts: number;
   mismatches: ReviewScoreMismatch[];
 };
 
@@ -128,6 +133,7 @@ export const buildReviewComparisonModel = ({
       ? [{ holeNumber: hole.holeNumber, self, marker, diff: Math.abs(self - marker) }]
       : [];
   });
+  const fairwaysAvailable = holes.filter((hole) => hole.par !== 3).length;
 
   return {
     selfScores,
@@ -145,6 +151,16 @@ export const buildReviewComparisonModel = ({
       missingFairwayHoles.length === 0 &&
       missingGirHoles.length === 0 &&
       missingPuttsHoles.length === 0,
+    fairwaysHit: statistics.filter((statistic) => statistic.fairwayHit === true).length,
+    fairwaysAvailable,
+    greensInRegulation: statistics.filter(
+      (statistic) => statistic.greenInRegulation === true
+    ).length,
+    greensAvailable: holes.length,
+    totalPutts: statistics.reduce(
+      (sum, statistic) => sum + (statistic.putts ?? 0),
+      0
+    ),
     mismatches,
   };
 };

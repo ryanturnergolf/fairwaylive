@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added an end-of-round Statistics Review table with per-hole fairway, green-in-regulation, putt, and completion values plus compact round summaries.
+- Added exact missing-hole/statistic guidance and the explicit “Continue and finalize round without recording statistics” submission-time opt-out.
+- Required complete par-4/par-5 fairways, all-hole greens in regulation, and all-hole putts unless the opt-out is selected; par-3 fairways remain excluded.
 - Added a shared provenance-aware tournament catalog that reconciles mapped local IDs with Supabase UUIDs, preserves unmapped local-only entries, and returns deterministic deduplicated results.
 - Made Supabase tournament identity, status, and finalization metadata authoritative while allowing snapshots and local cache data to enrich missing presentation fields.
 - Migrated the homepage Saved Tournaments read path as the first low-risk catalog consumer and added focused identity, precedence, provenance, and ordering regressions.
@@ -19,7 +22,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 69/69.
+- Production build passed and Playwright passed 72/72.
+- Verified complete and incomplete statistics, exact missing-field warnings, par-3 fairway exclusion, summary totals, opt-out gating, mismatch protection, refresh hydration, and duplicate-row prevention.
 - Verified the real `Real Test` race condition: an initially unavailable counterpart Self card synchronized to total `72` without refresh, retained marker total `75`, and exposed the three authoritative mismatches.
 - Verified ten focused catalog cases covering Supabase-only, snapshot-backed, local-only, mapped identity, stale status/finalization precedence, cache enrichment, stale `popcorn` isolation, and deterministic ordering.
 - Verified the real finalized tournament refresh sends zero `POST /api/tournament-mutations` requests and produces zero HTTP 500 responses while desktop and signed-out mobile remain read-only.

@@ -596,7 +596,8 @@ export default function PlayerScorecardPage() {
   const [saveError, setSaveError] = useState("");
   const [reviewSyncError, setReviewSyncError] = useState("");
   const [isReviewSynchronizing, setIsReviewSynchronizing] = useState(false);
-  const [, setReviewComparison] = useState<ReviewComparisonModel | null>(null);
+  const [reviewComparison, setReviewComparison] = useState<ReviewComparisonModel | null>(null);
+  const [submitWithoutStatistics, setSubmitWithoutStatistics] = useState(false);
   const [scoreLoadError, setScoreLoadError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [scoreControlsReady, setScoreControlsReady] = useState(false);
@@ -693,6 +694,7 @@ export default function PlayerScorecardPage() {
         ? normalizeHoleScores(scorecard.initialMarkerScores, holeCount)
         : null;
       let loadedSubmissionComplete = false;
+      let loadedReviewComparison: ReviewComparisonModel | null = null;
       let remoteLoadFailed = false;
       let localStorageLoadedCount = 0;
       let supabaseLoadedCount = 0;
@@ -883,6 +885,23 @@ export default function PlayerScorecardPage() {
             loadedMarkedPlayerSelfScores = sharedMarkedPlayerSelfScores;
           }
         }
+
+        const displayedCardsComplete =
+          normalizeHoleScores(loadedSelfScores ?? undefined, holeCount).every((score) => score > 0) &&
+          normalizeHoleScores(loadedMarkerScores ?? undefined, holeCount).every((score) => score > 0);
+        if (displayedCardsComplete) {
+          loadedReviewComparison = await loadReviewComparisonModel({
+            tournamentId: sharedScoreTournamentId,
+            roundNumber,
+            shareToken: requestedShareToken || undefined,
+            markedPlayerIds: resolvedPlayerIds.markerPlayerIds,
+            markerEnteredByPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+            holes: scorecard.holes,
+            snapshotSelfScores: scorecard.initialMarkerScores,
+          });
+          loadedMarkedPlayerSelfScores = loadedReviewComparison.selfScores;
+          loadedMarkerScores = loadedReviewComparison.markerScores;
+        }
       } catch (error) {
         remoteLoadFailed = true;
         console.warn("[ScoreService] Unable to load shared score entries.", error);
@@ -917,6 +936,7 @@ export default function PlayerScorecardPage() {
           if (loadedMarkedPlayerSelfScores) {
             setMarkedPlayerSelfScores(loadedMarkedPlayerSelfScores);
           }
+          setReviewComparison(loadedReviewComparison);
           setSavedHoles(getScoredHoleNumbers(scorecard.holes, nextScores, nextMarkerScores));
 
           const firstIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, nextScores);
@@ -929,8 +949,10 @@ export default function PlayerScorecardPage() {
           } else if (firstIncompleteIndex >= 0) {
             currentHoleIndexRef.current = firstIncompleteIndex;
             setCurrentHoleIndex(firstIncompleteIndex);
-          } else {
+          } else if (loadedReviewComparison) {
             setView("review");
+          } else {
+            setView("scoring");
           }
 
           setScoresLoaded(true);
@@ -982,7 +1004,13 @@ export default function PlayerScorecardPage() {
     markerScores.length === scorecard.holes.length &&
     markerScores.every((score) => score > 0);
   const hasCompleteComparison = hasCompleteMarkedPlayerSelfScores && hasCompleteMarkerScores;
-  const canSubmitVerification = hasCompleteComparison && !hasDiscrepancies && !isTournamentFinalized;
+  const statisticsComplete = Boolean(reviewComparison?.statisticsComplete);
+  const statisticsRequirementSatisfied = statisticsComplete || submitWithoutStatistics;
+  const canSubmitVerification =
+    hasCompleteComparison &&
+    !hasDiscrepancies &&
+    statisticsRequirementSatisfied &&
+    !isTournamentFinalized;
 
   const currentHole = scorecard.holes[currentHoleIndex];
   const allHolesScored = scorecard.holes.length > 0 && scores.every((s) => s > 0);
@@ -1454,6 +1482,7 @@ export default function PlayerScorecardPage() {
       });
 
       setReviewComparison(comparison);
+      setSubmitWithoutStatistics(false);
       setMarkedPlayerSelfScores(comparison.selfScores);
       markerScoresRef.current = comparison.markerScores;
       setMarkerScores(comparison.markerScores);
@@ -1525,6 +1554,10 @@ export default function PlayerScorecardPage() {
     }
     if (hasDiscrepancies) {
       setSaveError("Resolve every scorer and marker mismatch before submitting.");
+      return;
+    }
+    if (!reviewComparison?.statisticsComplete && !submitWithoutStatistics) {
+      setSaveError("Complete every required statistic or select the statistics opt-out before submitting.");
       return;
     }
     const stableMarkerPlayerId = String(scorecard.markerPlayerId);
@@ -1651,6 +1684,25 @@ export default function PlayerScorecardPage() {
   }
 
   if (view === "review") {
+    const reviewStatistics =
+      reviewComparison?.statistics ??
+      scorecard.holes.map((hole) => ({
+        holeNumber: hole.holeNumber,
+        fairwayHit: null,
+        greenInRegulation: null,
+        putts: null,
+      }));
+    const missingStatisticDetails = scorecard.holes.flatMap((hole, index) => {
+      const statistic = reviewStatistics[index];
+      const missing = [
+        ...(hole.par !== 3 && statistic.fairwayHit === null ? ["Fairway Hit"] : []),
+        ...(statistic.greenInRegulation === null ? ["Green in Regulation"] : []),
+        ...(statistic.putts === null ? ["Putts"] : []),
+      ];
+      return missing.length > 0 ? [{ holeNumber: hole.holeNumber, fields: missing }] : [];
+    });
+    const formatBooleanStatistic = (value: boolean | null) =>
+      value === null ? "—" : value ? "Yes" : "No";
     const renderHolesTable = (holes: Hole[], startIndex: number, sectionLabel: string) => {
       return (
         <div className="mt-5">
@@ -1762,6 +1814,120 @@ export default function PlayerScorecardPage() {
             </div>
           </div>
 
+          <div className="mt-4 rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
+                  Statistics Review
+                </p>
+                <h3 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#0B3D2E]">
+                  Round Statistics
+                </h3>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] ${
+                  statisticsComplete
+                    ? "border border-[#77B98E] bg-[#ECF8EF] text-[#146233]"
+                    : "border border-amber-400 bg-amber-50 text-amber-800"
+                }`}
+              >
+                {statisticsComplete ? "Complete" : "Incomplete"}
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#51635C]">Fairways</p>
+                <p className="mt-1 text-lg font-black text-[#0B3D2E]">
+                  {reviewComparison?.fairwaysHit ?? 0}/{reviewComparison?.fairwaysAvailable ?? 0}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#51635C]">GIR</p>
+                <p className="mt-1 text-lg font-black text-[#0B3D2E]">
+                  {reviewComparison?.greensInRegulation ?? 0}/{reviewComparison?.greensAvailable ?? scorecard.holes.length}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#51635C]">Putts</p>
+                <p className="mt-1 text-lg font-black text-[#0B3D2E]">{reviewComparison?.totalPutts ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-[#E8DCC8]">
+              <table className="w-full min-w-[520px] text-[11px]">
+                <thead>
+                  <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
+                    {["Hole", "Par", "Fairway Hit", "GIR", "Putts", "Status"].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-2 py-2 text-center font-black uppercase tracking-[0.12em] text-[#51635C]"
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {scorecard.holes.map((hole, index) => {
+                    const statistic = reviewStatistics[index];
+                    const complete =
+                      (hole.par === 3 || statistic.fairwayHit !== null) &&
+                      statistic.greenInRegulation !== null &&
+                      statistic.putts !== null;
+                    return (
+                      <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
+                        <td className="px-2 py-2 text-center font-black text-[#0B3D2E]">{hole.holeNumber}</td>
+                        <td className="px-2 py-2 text-center text-[#51635C]">{hole.par}</td>
+                        <td className="px-2 py-2 text-center text-[#51635C]">
+                          {hole.par === 3 ? "N/A" : formatBooleanStatistic(statistic.fairwayHit)}
+                        </td>
+                        <td className="px-2 py-2 text-center text-[#51635C]">
+                          {formatBooleanStatistic(statistic.greenInRegulation)}
+                        </td>
+                        <td className="px-2 py-2 text-center text-[#51635C]">{statistic.putts ?? "—"}</td>
+                        <td className={`px-2 py-2 text-center font-black ${complete ? "text-green-700" : "text-amber-800"}`}>
+                          {complete ? "Complete" : "Incomplete"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {!statisticsComplete ? (
+              <div role="alert" className="mt-4 rounded-2xl border border-amber-400 bg-amber-50 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-800">
+                  Statistics Incomplete
+                </p>
+                <p className="mt-2 text-xs leading-5 text-amber-900">
+                  Complete the required statistics below or explicitly continue without recording them.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {missingStatisticDetails.map((detail) => (
+                    <li key={detail.holeNumber} className="text-xs font-semibold text-amber-900">
+                      Hole {detail.holeNumber}: {detail.fields.join(", ")}
+                    </li>
+                  ))}
+                </ul>
+                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300 bg-white/70 p-3 text-xs font-semibold leading-5 text-[#0B3D2E]">
+                  <input
+                    type="checkbox"
+                    checked={submitWithoutStatistics}
+                    onChange={(event) => setSubmitWithoutStatistics(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[#0B3D2E]"
+                  />
+                  <span>Continue and finalize round without recording statistics</span>
+                </label>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-2xl border border-[#77B98E] bg-[#ECF8EF] p-3 text-xs font-semibold text-[#146233]">
+                All required round statistics are complete.
+              </p>
+            )}
+          </div>
+
           {!showConfirm ? (
             <div className="mt-4 flex flex-col gap-3">
               <button
@@ -1785,8 +1951,10 @@ export default function PlayerScorecardPage() {
                   ? "Tournament Finalized"
                   : !hasCompleteComparison
                     ? "Complete Score Comparison to Submit"
-                    : hasDiscrepancies
+                   : hasDiscrepancies
                       ? "Fix Score Mismatches to Submit"
+                      : !statisticsRequirementSatisfied
+                        ? "Complete Statistics or Opt Out to Submit"
                       : "Submit Verification"}
               </button>
             </div>
@@ -1794,7 +1962,11 @@ export default function PlayerScorecardPage() {
             <div className="mt-4 rounded-[28px] border border-[#B8892D]/40 bg-[#B8892D]/8 p-5">
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Confirm Submission</p>
               <p className="mt-3 text-sm leading-6 text-[#0B3D2E]">
-                All scores have been verified for {scorecard.markerPlayerName || "Player"}. Please confirm to submit.
+                All scores have been verified for {scorecard.markerPlayerName || "Player"}.
+                {submitWithoutStatistics
+                  ? " You chose to continue without recording every required statistic."
+                  : " Required statistics are complete."}{" "}
+                Please confirm to submit.
               </p>
               {saveError ? (
                 <p className="mt-3 text-sm font-semibold text-red-700">{saveError}</p>
