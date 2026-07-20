@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Shared Provenance-Aware Tournament Catalog
+
+Status: **COMPLETE**
+
+- Added one typed catalog read model for Supabase, snapshot-backed, cached, and local-only tournaments.
+- Reconciled existing local-to-shared mappings so mapped local IDs and Supabase UUIDs produce one canonical entry.
+- Preserved Supabase status and finalization authority while retaining localStorage as cache/offline/local-only fallback without automatic pruning.
+- Migrated the homepage as the proof consumer without changing routes, navigation, dashboard responsibilities, or tournament workflows.
+- Added ten focused catalog regressions; final automated regression passed 67/67.
+
+Recommended next milestone: migrate one low-risk dashboard service/read helper to the shared catalog without changing route ownership or visible layouts.
+
 ### Completed Milestone: Read-Only Finalized Persistence Lifecycle
 
 Status: **COMPLETE**

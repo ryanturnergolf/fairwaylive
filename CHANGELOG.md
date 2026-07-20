@@ -2,6 +2,12 @@
 
 ## 2026-07-19
 
+### Added
+
+- Added a shared provenance-aware tournament catalog that reconciles mapped local IDs with Supabase UUIDs, preserves unmapped local-only entries, and returns deterministic deduplicated results.
+- Made Supabase tournament identity, status, and finalization metadata authoritative while allowing snapshots and local cache data to enrich missing presentation fields.
+- Migrated the homepage Saved Tournaments read path as the first low-risk catalog consumer and added focused identity, precedence, provenance, and ordering regressions.
+
 ### Fixed
 
 - Stopped routine tournament-page persistence after authoritative finalized hydration, including queued player reconciliation and snapshot synchronization work.
@@ -10,7 +16,8 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 57/57.
+- Production build passed and Playwright passed 67/67.
+- Verified ten focused catalog cases covering Supabase-only, snapshot-backed, local-only, mapped identity, stale status/finalization precedence, cache enrichment, stale `popcorn` isolation, and deterministic ordering.
 - Verified the real finalized tournament refresh sends zero `POST /api/tournament-mutations` requests and produces zero HTTP 500 responses while desktop and signed-out mobile remain read-only.
 
 ## 2026-07-18

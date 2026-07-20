@@ -4,6 +4,10 @@ Last updated: 2026-07-19
 
 ## Active Decisions
 
+### Tournament catalogs use canonical shared identity and explicit provenance
+
+When a Supabase UUID is known, it is the catalog entry's canonical identity and any mapped local ID is an alias. Supabase row metadata, status, and finalization state remain authoritative; a valid snapshot may enrich the entry, and localStorage may fill missing presentation fields without overriding authority. Unmapped local tournaments remain visible as local-only entries and are not automatically pruned.
+
 ### Finalized tournament hydration is read-only
 
 Once Supabase tournament status, finalized snapshot settings, or the finalization record establishes finalized authority, routine page persistence must stop before player reconciliation or snapshot synchronization. Queued work must recheck the latest finalized envelope before remote mutation. Only the authenticated, version-guarded finalization operation may write the final snapshot; endpoint write protection remains strict.

@@ -770,9 +770,10 @@ export const loadSharedTournaments = async (): Promise<StoredTournament[]> => {
   return rows.map(toStoredTournament);
 };
 
-export const loadSharedTournamentAggregates = async (): Promise<TournamentAggregate[]> => {
-  const rows = await listTournamentRows();
-
+export const loadSharedTournamentAggregates = async (
+  suppliedRows?: TournamentRow[]
+): Promise<TournamentAggregate[]> => {
+  const rows = suppliedRows ?? await listTournamentRows();
   return Promise.all(
     rows.map(async (row) => {
       const aggregate = await loadTournamentAggregate(row.id).catch((error) => {

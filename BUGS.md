@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Homepage catalog could duplicate or contaminate Supabase tournaments
+
+Status: resolved for the shared catalog and homepage proof consumer on 2026-07-19.
+
+Independent merge paths could treat a mapped local ID and its Supabase UUID as separate tournaments, and localStorage metadata merged after remote data could replace authoritative status or finalization fields. Historical entries such as `popcorn` could also be presented without explicit source provenance.
+
+The shared tournament catalog now uses the Supabase UUID as canonical identity when available, reconciles existing local-to-shared mappings, preserves unmapped entries as explicitly local-only, and limits snapshots and cache data to safe enrichment. The homepage consumes this model; remaining dashboard consumers are intentionally deferred to later milestones.
+
 ### Finalized tournament refresh attempted routine persistence
 
 Status: resolved and verified against real Supabase on 2026-07-19.

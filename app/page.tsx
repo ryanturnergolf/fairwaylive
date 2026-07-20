@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadTournamentList } from "./lib/services/tournamentService";
+import { loadTournamentCatalog } from "./lib/services/tournamentCatalogService";
 import { getSupabaseBrowserClient } from "./lib/supabaseClient";
 import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 
@@ -103,10 +103,10 @@ export default function Home() {
     const localTournaments = loadTournamentsFromStorage();
     setSavedTournaments(localTournaments);
 
-    void loadTournamentList(localTournaments, (tournament) => tournament)
-      .then((loadedTournaments) => {
+    void loadTournamentCatalog(localTournaments)
+      .then((catalog) => {
         if (!isCancelled) {
-          setSavedTournaments(loadedTournaments);
+          setSavedTournaments(catalog.map((entry) => entry.tournament));
         }
       })
       .catch((error) => {
