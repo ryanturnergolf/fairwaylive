@@ -2,6 +2,13 @@
 
 ## 2026-07-20
 
+### Added
+
+- Added a separate `Seed Tournament (Incomplete)` action for fast end-of-round verification without changing the existing `Seed Test Tournament` workflow.
+- Added a deterministic two-player reciprocal tournament fixture with synchronized players, one pairing, generated scorecards, and stable self/marker score and hole-entry rows through Hole 17.
+- Left Hole 18 incomplete for both self and reciprocal marker cards, kept self-owned statistics complete through Hole 17, left marker statistics null, and preserved null par-3 fairways.
+- Added focused regressions for distinct repeated creation, deterministic identities, duplicate-free stable keys, Hole 18 incompleteness, and production-path tournament/player/snapshot/score mutations.
+
 ### Fixed
 
 - Separated Review score-comparison identity from statistics identity so marked-player Self/Marker verification remains intact while `My Round Statistics` always displays the current player's self-owned fairway, GIR, and putt data.
@@ -10,6 +17,8 @@
 
 ### Verification
 
+- Production build passed and Playwright passed 82/82.
+- Verified a real authenticated incomplete seed through QR readiness and both signed-out LAN scorecards; Alex Morgan and Jordan Lee opened directly on Hole 18 with Hole 17 hydrated.
 - Production build passed and Playwright passed 79/79.
 - Verified both Real Test 2 signed-out routes: Ryan's editable statistics and Review ownership were correct, Satch's submitted scorecard retained Satch-owned statistics, snapshot marker values remained visible, and hydration issued no writes.
 - Confirmed Real Test 2 remained at 3 score rows and 54 hole-statistic rows with zero duplicate stable keys and no synthetic reciprocal marker row.

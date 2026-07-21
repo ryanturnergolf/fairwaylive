@@ -223,6 +223,7 @@ test("auth persists across homepage navigation and one seed creates and redirect
   await expect(page.getByRole("button", { name: "Coach Sign Out" })).toBeVisible();
 
   const seedButton = page.getByRole("button", { name: "Seed Test Tournament" });
+  await expect(page.getByRole("button", { name: "Seed Tournament (Incomplete)" })).toBeVisible();
   await seedButton.dblclick();
   await expect(page.getByRole("button", { name: "Seeding Tournament..." })).toBeDisabled();
   await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}$`));
@@ -234,6 +235,118 @@ test("auth persists across homepage navigation and one seed creates and redirect
   await expect(page.getByText(/Test Tournament 2026-/).first()).toBeVisible();
   await gotoApp(page, "/");
   await expect(page.getByText(/Test Tournament 2026-/).first()).toBeVisible();
+});
+
+test("incomplete seed creates authoritative scores and statistics through hole 17", async ({ page }) => {
+  const tournamentId = "88888888-8888-4888-8888-888888888888";
+  const scoreEntries: Array<Record<string, unknown>> = [];
+  const holeEntries: Array<Record<string, unknown>> = [];
+  let createCount = 0;
+  let playerReconcileCount = 0;
+  let snapshotCount = 0;
+
+  await routeAuthenticatedAuth(page);
+  await routeDashboardReads(page);
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const request = route.request().postDataJSON() as {
+      action: string;
+      input?: Record<string, unknown>;
+      rows?: Array<Record<string, unknown>>;
+    };
+    if (request.action === "createTournament") {
+      createCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: tournamentId,
+          created_by: userId,
+          owner_id: userId,
+          name: request.input?.name,
+          course: request.input?.course,
+          tournament_date: request.input?.tournamentDate,
+          number_of_rounds: 1,
+          status: "Upcoming",
+          finalized_at: null,
+          aggregate_version: 0,
+          created_at: "2026-07-20T12:00:00.000Z",
+          updated_at: "2026-07-20T12:00:00.000Z",
+        }),
+      });
+      return;
+    }
+    if (request.action === "reconcileTournamentPlayers") {
+      playerReconcileCount += 1;
+      expect(request.rows).toHaveLength(2);
+      expect(request.rows?.map((row) => row.marker_player_id).sort()).toEqual([
+        "incomplete-player-a",
+        "incomplete-player-b",
+      ]);
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+    if (request.action === "upsertTournamentStateSnapshot") {
+      snapshotCount += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+    await route.fulfill({ status: 400, body: JSON.stringify({ error: "Unexpected tournament mutation" }) });
+  });
+  await page.route("**/api/score-mutations", async (route) => {
+    const request = route.request().postDataJSON() as {
+      action: string;
+      input?: Record<string, unknown>;
+      rows?: Array<Record<string, unknown>>;
+    };
+    if (request.action === "saveScoreEntry" && request.input) {
+      scoreEntries.push(request.input);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ id: `score-${scoreEntries.length}`, ...request.input }),
+      });
+      return;
+    }
+    if (request.action === "saveScoreHoleEntries") {
+      holeEntries.push(...(request.rows ?? []));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+      return;
+    }
+    await route.fulfill({ status: 400, body: JSON.stringify({ error: "Unexpected score mutation" }) });
+  });
+
+  await gotoApp(page, "/coach-auth?next=/dashboard");
+  await page.getByLabel("Email").fill("coach@example.test");
+  await page.getByLabel("Password").fill("valid-password");
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("button", { name: "Seed Test Tournament" })).toBeVisible();
+  await page.getByRole("button", { name: "Seed Tournament (Incomplete)" }).click();
+  await expect(page.getByRole("button", { name: "Seeding Incomplete Tournament..." })).toBeDisabled();
+  await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}$`));
+
+  expect(createCount).toBe(1);
+  expect(playerReconcileCount).toBe(1);
+  expect(snapshotCount).toBe(1);
+  expect(scoreEntries).toHaveLength(4);
+  expect(new Set(scoreEntries.map((entry) => `${entry.playerId}:${entry.enteredByPlayerId}`)).size).toBe(4);
+  expect(scoreEntries.every((entry) => {
+    const scores = entry.holeScores as number[];
+    return scores.length === 18 && scores.slice(0, 17).every((score) => score > 0) && scores[17] === 0;
+  })).toBe(true);
+  expect(holeEntries).toHaveLength(68);
+  expect(new Set(holeEntries.map((entry) => `${entry.player_id}:${entry.entered_by_player_id}:${entry.hole_number}`)).size).toBe(68);
+  expect(holeEntries.some((entry) => entry.hole_number === 18)).toBe(false);
+
+  const selfRows = holeEntries.filter((entry) => entry.player_id === entry.entered_by_player_id);
+  const markerRows = holeEntries.filter((entry) => entry.player_id !== entry.entered_by_player_id);
+  expect(selfRows).toHaveLength(34);
+  expect(markerRows).toHaveLength(34);
+  expect(selfRows.every((entry) => entry.green_in_regulation !== null && entry.putts !== null)).toBe(true);
+  expect(selfRows.filter((entry) => [3, 7, 12, 16].includes(Number(entry.hole_number))).every((entry) => entry.fairway_hit === null)).toBe(true);
+  expect(selfRows.filter((entry) => ![3, 7, 12, 16].includes(Number(entry.hole_number))).every((entry) => entry.fairway_hit !== null)).toBe(true);
+  expect(markerRows.every((entry) => entry.fairway_hit === null && entry.green_in_regulation === null && entry.putts === null)).toBe(true);
 });
 
 test("seed failure displays an error and remains on the dashboard", async ({ page }) => {

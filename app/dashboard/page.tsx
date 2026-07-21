@@ -23,6 +23,11 @@ import {
   syncTournamentStateSnapshot,
 } from "../lib/services/tournamentService";
 import {
+  buildIncompleteTournamentSeed,
+  INCOMPLETE_TEST_TOURNAMENT_NAME,
+  persistIncompleteTournamentSeed,
+} from "../lib/services/incompleteTournamentSeedService";
+import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
   loadTournamentStorageEnvelope,
@@ -227,6 +232,7 @@ export default function DashboardPage() {
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isSeedingTournament, setIsSeedingTournament] = useState(false);
+  const [isSeedingIncompleteTournament, setIsSeedingIncompleteTournament] = useState(false);
   const [seedError, setSeedError] = useState("");
   const seedInFlightRef = useRef(false);
 
@@ -518,6 +524,60 @@ export default function DashboardPage() {
     } finally {
       seedInFlightRef.current = false;
       setIsSeedingTournament(false);
+    }
+  };
+
+  const handleSeedIncompleteTournament = async () => {
+    if (seedInFlightRef.current) return;
+
+    seedInFlightRef.current = true;
+    setIsSeedingIncompleteTournament(true);
+    setSeedError("");
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      if (!data.session || data.session.user.is_anonymous) {
+        throw new Error("Coach authentication is required before seeding a tournament.");
+      }
+
+      const tournamentName = `${INCOMPLETE_TEST_TOURNAMENT_NAME} ${new Date().toISOString()}`;
+      const createResult = await createTournament({
+        fallbackId: "incomplete-test-tournament",
+        name: tournamentName,
+        date: "2026-07-20",
+        course: "Westfield Golf Club",
+        city: "Westfield",
+        state: "OH",
+        rounds: "1",
+        scoringFormat: "Stroke Play",
+        status: "Upcoming",
+        settings: { rounds: 1, status: "Test" },
+      });
+      if (createResult.source !== "supabase") {
+        throw createResult.error instanceof Error
+          ? createResult.error
+          : new Error("Supabase tournament creation failed.");
+      }
+
+      const tournament = createResult.tournament as Tournament;
+      const seed = buildIncompleteTournamentSeed({ tournamentId: tournament.id, tournamentName: tournament.name });
+      await persistIncompleteTournamentSeed(seed);
+      saveTournamentStorageEnvelope(tournament.id, seed.envelope);
+      const nextTournaments = [
+        tournament,
+        ...(loadTournamentsFromStorage() as Tournament[]).filter((item) => item.id !== tournament.id),
+      ];
+      saveTournamentsToStorage(nextTournaments);
+      setTournaments(nextTournaments);
+      router.push(`/tournament/${tournament.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to seed the incomplete tournament.";
+      setSeedError(message);
+      if (/authentication|required|session/i.test(message)) router.push("/coach-auth?next=/dashboard");
+    } finally {
+      seedInFlightRef.current = false;
+      setIsSeedingIncompleteTournament(false);
     }
   };
 
@@ -868,6 +928,16 @@ export default function DashboardPage() {
                 className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSeedingTournament ? "Seeding Tournament..." : "Seed Test Tournament"}
+              </button>
+            ) : null}
+            {isClientMounted ? (
+              <button
+                type="button"
+                onClick={() => void handleSeedIncompleteTournament()}
+                disabled={isSeedingTournament || isSeedingIncompleteTournament}
+                className="rounded-full border border-[#B8892D] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSeedingIncompleteTournament ? "Seeding Incomplete Tournament..." : "Seed Tournament (Incomplete)"}
               </button>
             ) : null}
             <Link

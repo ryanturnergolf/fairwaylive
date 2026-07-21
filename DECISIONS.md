@@ -4,6 +4,10 @@ Last updated: 2026-07-20
 
 ## Active Decisions
 
+### Incomplete tournament seeds use normal authoritative persistence
+
+The incomplete end-of-round fixture is a separate authenticated seed action and does not alter the existing seed. It creates a new owned tournament, reconciles stable tournament players, saves the aggregate snapshot, and upserts stable reciprocal `score_entries` and `score_hole_entries` through Hole 17 using production repository/service paths. Hole 18 remains missing, marker statistics remain null, par-3 fairways remain null, and the fixture does not manufacture review, submission, finalization, or schema state.
+
 ### Review score ownership and statistics ownership are independent
 
 Review compares the marked player's self card with the marked score entered by the current player, while round statistics always resolve from the current player's self-owned `score_hole_entries`. Editable statistic hydration uses that same current-player identity and ignores marker rows. Marker-score resolution prefers a stable reciprocal row, then the authoritative snapshot as a non-mutating compatibility fallback, then unavailable; fallback data never creates stable rows.

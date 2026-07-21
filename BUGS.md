@@ -12,6 +12,14 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Full seed tournaments were slow for end-of-round regression testing
+
+Status: resolved and verified on 2026-07-20.
+
+The existing seed workflow required replaying a full round before Review, submission, post-round, and signed-out leaderboard checks could begin. Altering that fixture would have risked established setup and scoring coverage.
+
+A separate incomplete seed now creates two reciprocal players with authoritative stable self and marker rows plus self-owned statistics through Hole 17. Hole 18 remains genuinely absent from hole-entry persistence and zeroed in score cards, so normal mobile scoring completes the round without synthetic submission or review state. The original seed remains unchanged.
+
 ### Review reversed statistics ownership and erased snapshot marker compatibility
 
 Status: resolved and verified against `Real Test 2` on 2026-07-20.

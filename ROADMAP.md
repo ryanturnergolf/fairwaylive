@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Incomplete End-Of-Round Seed
+
+Status: **COMPLETE**
+
+- Added a second authenticated seed action while preserving the original full seed behavior.
+- Created a deterministic two-player reciprocal fixture with stable self scores, marker scores, and self-owned statistics through Hole 17.
+- Kept Hole 18 incomplete, marker statistics null, and par-3 fairways not applicable so normal QR/mobile scoring supplies the remaining data.
+- Verified ready QR sharing, both signed-out player routes opening on Hole 18, distinct repeated tournaments, and duplicate-free stable keys.
+- Final automated regression: production build passed and Playwright passed 82/82.
+
+Recommended next milestone: resume dashboard separation only as a separately scoped change.
+
 ### Completed Milestone: Reciprocal Mobile Ownership And Hydration
 
 Status: **COMPLETE**
