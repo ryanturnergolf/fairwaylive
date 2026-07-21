@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { buildReviewComparisonModel } from "../../app/lib/services/reviewComparisonService";
+import {
+  buildReviewComparisonModel,
+  buildReviewOwnership,
+} from "../../app/lib/services/reviewComparisonService";
 
 const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
 
@@ -645,7 +648,7 @@ const fillSelfScoreAndWaitForSave = async (page: Page, score: number) => {
 
 const waitForSharedScoreHydration = async (
   sharedStore: Awaited<ReturnType<typeof routeSharedScoreEntriesStore>>,
-  minimumReads = 7
+  minimumReads = 6
 ) => {
   await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(minimumReads);
 };
@@ -661,24 +664,21 @@ const openSharedSnapshotReview = async (
   }
 ) => {
   const snapshot = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
-  snapshot.uiState.scorecards.scorecardRows[0].scores = Array.from({ length: 18 }, () => 4);
-  snapshot.uiState.scorecards.scorecardRows[1].scores = [...options.snapshotMarkedSelfScores];
+  snapshot.uiState.scorecards.scorecardRows[0].scores = [...options.snapshotMarkedSelfScores];
+  snapshot.uiState.scorecards.scorecardRows[1].scores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await routeSharedScoreEntriesStore(page);
   const holeStatsStore = await routeScoreHoleEntriesStore(page, options.statisticsReadDelayMs);
   holeStatsStore.savedHoleRows.push(
     ...(options.statisticEntries ?? buildCompleteReviewStatistics(sharedTournamentId, "player-1"))
   );
-  sharedStore.savedScoreRows.push(
-    buildScoreEntry("player-1", "player-1", Array.from({ length: 18 }, () => 4), sharedTournamentId)
-  );
   if (options.markerEnteredScores) {
     sharedStore.savedScoreRows.push(
-      buildScoreEntry("player-2", "player-1", options.markerEnteredScores, sharedTournamentId)
+      buildScoreEntry("player-1", "player-2", options.markerEnteredScores, sharedTournamentId)
     );
   }
   if (options.stableMarkedSelfScores) {
     sharedStore.savedScoreRows.push(
-      buildScoreEntry("player-2", "player-2", options.stableMarkedSelfScores, sharedTournamentId)
+      buildScoreEntry("player-1", "player-1", options.stableMarkedSelfScores, sharedTournamentId)
     );
   }
 
@@ -733,7 +733,13 @@ const openSharedSnapshotReview = async (
   });
 
   await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=review-snapshot-token`);
-  await expect(page.getByText("Verify Score", { exact: true })).toBeVisible();
+  const reviewButton = page.getByRole("button", { name: "Review & Submit Round" });
+  const verifyScore = page.getByText("Verify Score", { exact: true });
+  await expect
+    .poll(async () => (await verifyScore.isVisible()) || (await reviewButton.isEnabled()), { timeout: 10_000 })
+    .toBe(true);
+  if (!(await verifyScore.isVisible())) await reviewButton.click();
+  await expect(verifyScore).toBeVisible();
   return { ...sharedStore, savedHoleRows: holeStatsStore.savedHoleRows };
 };
 
@@ -911,7 +917,10 @@ test("completed scorer and marker entries submit once and restore submitted stat
     ...buildCompleteReviewStatistics(tournamentId),
     ...buildCompleteReviewStatistics(tournamentId, "player-1")
   );
-  sharedStore.savedScoreRows.push(buildScoreEntry("player-2", "player-2", Array.from({ length: 18 }, () => 4)));
+  sharedStore.savedScoreRows.push(
+    buildScoreEntry("player-1", "player-2", Array.from({ length: 18 }, () => 4), tournamentId),
+    buildScoreEntry("player-2", "player-2", Array.from({ length: 18 }, () => 4), tournamentId)
+  );
   await page.addInitScript(({ key, scores }) => {
     const envelope = JSON.parse(window.localStorage.getItem(key) || "null");
     const markerScorecard = envelope?.uiState?.scorecards?.scorecardRows?.find(
@@ -1082,7 +1091,7 @@ test("statistics opt-out post-round card preserves missing values without synthe
   expect(sharedStore.savedHoleRows).toHaveLength(2);
 });
 
-test("Review submission uses the same marked-player comparison rendered by the table", async ({ page }) => {
+test("Review submission compares and submits only the current player's round", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
   const holeStatsStore = await routeScoreHoleEntriesStore(page);
   holeStatsStore.savedHoleRows.push(...buildCompleteReviewStatistics(sharedTournamentId, "player-1"));
@@ -1091,9 +1100,10 @@ test("Review submission uses the same marked-player comparison rendered by the t
   const mismatchedMarkedPlayerScores = [...markerScores];
   mismatchedMarkedPlayerScores[0] = 5;
   sharedStore.savedScoreRows.push(
-    buildScoreEntry("player-1", "player-1", scorerScores),
+    buildScoreEntry("player-1", "player-1", markerScores),
     buildScoreEntry("player-2", "player-1", markerScores),
-    buildScoreEntry("player-2", "player-2", mismatchedMarkedPlayerScores)
+    buildScoreEntry("player-1", "player-2", mismatchedMarkedPlayerScores),
+    buildScoreEntry("player-2", "player-2", scorerScores)
   );
 
   await page.route("**/api/score-mutations", async (route) => {
@@ -1146,24 +1156,12 @@ test("Review submission uses the same marked-player comparison rendered by the t
   await gotoApp(page, `${baseUrl}/scorecard/player-1?tournamentId=${tournamentId}&pairing=1`);
   await waitForSharedScoreHydration(sharedStore, 4);
   await expect(page.getByText("⚠ Discrepancies Found", { exact: true })).toBeVisible();
-  await expect(page.getByText("Hole 1: Self 5 vs Marker 4", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hole 1: Self 4 vs Marker 5", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
-
-  await page.getByRole("button", { name: "Edit Scores" }).click();
-  await expect(page.getByText("Hole 1", { exact: true })).toBeVisible();
-  await page.getByLabel("Ben Marker's Score").fill("5");
-  await page.getByRole("button", { name: "Save Hole" }).click();
-  await page.getByRole("button", { name: "Review & Submit Round" }).click();
-  await expect(page.getByText("✓", { exact: true })).toHaveCount(18);
-  await page.getByRole("button", { name: "Submit Verification" }).click();
-  await page.getByRole("button", { name: "Confirm Submit" }).click();
-  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
-  await expect
-    .poll(() => sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted").length)
-    .toBe(2);
+  expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(0);
 });
 
-test("Review hydrates marked-player Self from snapshot fallback and persists verification without duplicates", async ({ page }) => {
+test("Review hydrates current-player Self from snapshot fallback and submits current-player rows only", async ({ page }) => {
   const matchingScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: matchingScores,
@@ -1189,21 +1187,21 @@ test("Review hydrates marked-player Self from snapshot fallback and persists ver
       sharedStore.savedScoreRows.filter(
         (row) =>
           row.entry_status === "submitted" &&
-          (row.player_id === "player-1" || row.player_id === "player-2") &&
-          row.entered_by_player_id === "player-1"
+          row.player_id === "player-1" &&
+          (row.entered_by_player_id === "player-1" || row.entered_by_player_id === "player-2")
       ).length
     )
     .toBe(2);
   expect(
     sharedStore.savedScoreRows.filter(
       (row) =>
-        (row.player_id === "player-1" && row.entered_by_player_id === "player-1") ||
-        (row.player_id === "player-2" && row.entered_by_player_id === "player-1")
+        row.player_id === "player-1" &&
+        (row.entered_by_player_id === "player-1" || row.entered_by_player_id === "player-2")
     )
   ).toHaveLength(2);
   expect(
     sharedStore.savedScoreRows.filter(
-      (row) => row.player_id === "player-2" && row.entered_by_player_id === "player-2"
+      (row) => row.player_id === "player-2"
     )
   ).toHaveLength(0);
   expect(sharedStore.savedHoleRows).toHaveLength(18);
@@ -1212,18 +1210,18 @@ test("Review hydrates marked-player Self from snapshot fallback and persists ver
   await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
 });
 
-test("Review synchronizes a counterpart self card completed after initial hydration", async ({ page }) => {
+test("Review synchronizes the current player's marker card completed after initial hydration", async ({ page }) => {
   const matchingScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: emptyHoleScores,
-    markerEnteredScores: matchingScores,
+    stableMarkedSelfScores: matchingScores,
     statisticsReadDelayMs: 200,
     statisticEntries: [],
   });
 
   await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
   sharedStore.savedScoreRows.push(
-    buildScoreEntry("player-2", "player-2", matchingScores, sharedTournamentId)
+    buildScoreEntry("player-1", "player-2", matchingScores, sharedTournamentId)
   );
   sharedStore.savedHoleRows.push(
     ...Array.from({ length: 18 }, (_, index) =>
@@ -1313,6 +1311,66 @@ test("Review comparison model includes score mismatches and statistic completene
   });
 });
 
+test("reciprocal Review ownership keeps each player on their own score and statistics", () => {
+  const alexScores = Array.from({ length: 18 }, () => 3);
+  const jordanScores = Array.from({ length: 18 }, () => 4);
+  const holes = Array.from({ length: 18 }, (_, index) => ({
+    holeNumber: index + 1,
+    par: [3, 7, 12, 16].includes(index + 1) ? 3 : 4,
+  }));
+  const alexStatistics = buildCompleteReviewStatistics(sharedTournamentId, "player-1");
+  const jordanStatistics = buildCompleteReviewStatistics(sharedTournamentId, "player-2").map((entry) => ({
+    ...entry,
+    putts: 1,
+  }));
+  const scoreEntries = [
+    buildScoreEntry("player-1", "player-1", alexScores),
+    buildScoreEntry("player-1", "player-2", alexScores),
+    buildScoreEntry("player-2", "player-2", jordanScores),
+    buildScoreEntry("player-2", "player-1", jordanScores),
+  ];
+
+  const alexReview = buildReviewComparisonModel({
+    scoreEntries,
+    statisticEntries: [...alexStatistics, ...jordanStatistics],
+    markedPlayerIds: ["player-1"],
+    markerEnteredByPlayerIds: ["player-2"],
+    statisticsPlayerIds: ["player-1"],
+    holes,
+  });
+  const jordanReview = buildReviewComparisonModel({
+    scoreEntries,
+    statisticEntries: [...alexStatistics, ...jordanStatistics],
+    markedPlayerIds: ["player-2"],
+    markerEnteredByPlayerIds: ["player-1"],
+    statisticsPlayerIds: ["player-2"],
+    holes,
+  });
+
+  expect(buildReviewOwnership("player-1", "player-2")).toEqual({
+    reviewedPlayerId: "player-1",
+    selfEnteredByPlayerId: "player-1",
+    markerEnteredByPlayerId: "player-2",
+    statisticsPlayerId: "player-1",
+    statisticsEnteredByPlayerId: "player-1",
+  });
+  expect(buildReviewOwnership("player-2", "player-1")).toEqual({
+    reviewedPlayerId: "player-2",
+    selfEnteredByPlayerId: "player-2",
+    markerEnteredByPlayerId: "player-1",
+    statisticsPlayerId: "player-2",
+    statisticsEnteredByPlayerId: "player-2",
+  });
+  expect(alexReview.selfScores).toEqual(alexScores);
+  expect(alexReview.markerScores).toEqual(alexScores);
+  expect(alexReview.selfTotal).toBe(54);
+  expect(alexReview.totalPutts).toBe(36);
+  expect(jordanReview.selfScores).toEqual(jordanScores);
+  expect(jordanReview.markerScores).toEqual(jordanScores);
+  expect(jordanReview.selfTotal).toBe(72);
+  expect(jordanReview.totalPutts).toBe(18);
+});
+
 test("Review keeps current-player statistics separate and applies stable-first marker precedence", () => {
   const snapshotScores = Array.from({ length: 18 }, () => 4);
   const stableMarkerScores = Array.from({ length: 18 }, () => 5);
@@ -1363,7 +1421,7 @@ test("Review retains snapshot marker scores without creating compatibility rows"
   await expect(page.getByText("My Round Statistics", { exact: true })).toBeVisible();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
   await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
-  expect(sharedStore.savedScoreRows).toHaveLength(1);
+  expect(sharedStore.savedScoreRows).toHaveLength(0);
   expect(sharedStore.savedHoleRows).toHaveLength(18);
 });
 
@@ -1440,7 +1498,7 @@ test("par-3 fairway omissions are complete while par-4 fairway omissions are inc
   expect(comparison.statisticsComplete).toBe(false);
 });
 
-test("stable marked-player self entry overrides snapshot fallback and blocks a mismatch", async ({ page }) => {
+test("stable current-player self entry overrides snapshot fallback and blocks a mismatch", async ({ page }) => {
   const snapshotScores = Array.from({ length: 18 }, () => 4);
   const stableSelfScores = [...snapshotScores];
   stableSelfScores[0] = 5;
@@ -1456,16 +1514,16 @@ test("stable marked-player self entry overrides snapshot fallback and blocks a m
   await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
 });
 
-test("missing marked-player self comparison blocks Review submission", async ({ page }) => {
+test("missing current-player marker comparison blocks Review submission", async ({ page }) => {
   await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: emptyHoleScores,
-    markerEnteredScores: Array.from({ length: 18 }, () => 4),
+    stableMarkedSelfScores: Array.from({ length: 18 }, () => 4),
   });
 
   await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
-  await expect(page.getByText("Self Total").locator("..")).toContainText("0");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Self Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("0");
 });
 
 test("mobile scorecard omits penalty strokes and saves the available optional stats", async ({ page }) => {

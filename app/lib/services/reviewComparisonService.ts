@@ -22,6 +22,25 @@ export type ReviewScoreMismatch = {
   diff: number;
 };
 
+export type ReviewOwnership = {
+  reviewedPlayerId: string;
+  selfEnteredByPlayerId: string;
+  markerEnteredByPlayerId: string;
+  statisticsPlayerId: string;
+  statisticsEnteredByPlayerId: string;
+};
+
+export const buildReviewOwnership = (
+  currentPlayerId: string,
+  assignedMarkerPlayerId: string
+): ReviewOwnership => ({
+  reviewedPlayerId: currentPlayerId,
+  selfEnteredByPlayerId: currentPlayerId,
+  markerEnteredByPlayerId: assignedMarkerPlayerId,
+  statisticsPlayerId: currentPlayerId,
+  statisticsEnteredByPlayerId: currentPlayerId,
+});
+
 export type ReviewComparisonModel = {
   selfScores: number[];
   markerScores: number[];

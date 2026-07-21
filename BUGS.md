@@ -12,6 +12,12 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Review submitted the assigned marker's round instead of the current player's round
+
+Status: resolved and verified with a fresh real incomplete tournament on 2026-07-20.
+
+Review reused reciprocal score-entry identities from the scoring form, causing the open scorecard to display and submit the other player's round. Review now resolves the current player's self card, the current player's card entered by the assigned marker, and the current player's self-owned statistics as separate authoritative identities. Submission updates only the current player's stable rows and review state; the other player remains unsubmitted until completing their own Review.
+
 ### Full seed tournaments were slow for end-of-round regression testing
 
 Status: resolved and verified on 2026-07-20.

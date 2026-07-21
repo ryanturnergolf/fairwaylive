@@ -10,7 +10,7 @@ The incomplete end-of-round fixture is a separate authenticated seed action and 
 
 ### Review score ownership and statistics ownership are independent
 
-Review compares the marked player's self card with the marked score entered by the current player, while round statistics always resolve from the current player's self-owned `score_hole_entries`. Editable statistic hydration uses that same current-player identity and ignores marker rows. Marker-score resolution prefers a stable reciprocal row, then the authoritative snapshot as a non-mutating compatibility fallback, then unavailable; fallback data never creates stable rows.
+The player whose scorecard route is open owns Review and submission. Review compares that player's self-entered `score_entries` row with that same player's row entered by the assigned marker, while round statistics resolve from the current player's self-owned `score_hole_entries`. Stable score rows take precedence over non-mutating snapshot compatibility fallback, and submitting one player must not alter the assigned marker's independent submission state.
 
 ### Post-submission review stays within the share-token scoring context
 

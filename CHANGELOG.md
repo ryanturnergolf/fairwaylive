@@ -11,12 +11,16 @@
 
 ### Fixed
 
+- Corrected end-of-round Review ownership so each signed-out scorecard compares the current player's self-entered card with that same player's card entered by the assigned marker.
+- Limited verification submission and review-status updates to the current player's round while preserving current-player statistics, stable-row precedence, snapshot compatibility fallback, and the other player's independent submission state.
 - Separated Review score-comparison identity from statistics identity so marked-player Self/Marker verification remains intact while `My Round Statistics` always displays the current player's self-owned fairway, GIR, and putt data.
 - Hydrated current-player self `score_hole_entries` back into editable mobile controls without reading marker statistics or writing compatibility rows.
 - Preserved authoritative marker-score precedence as stable reciprocal `score_entries`, then snapshot compatibility, then unavailable, preventing Review synchronization from erasing valid dashboard snapshot values.
 
 ### Verification
 
+- Production build passed and Playwright passed 83/83.
+- Verified both directions with a fresh real incomplete tournament: Alex submitted only Alex's round, Jordan remained unsubmitted, then Jordan independently reviewed and submitted Jordan's round.
 - Production build passed and Playwright passed 82/82.
 - Verified a real authenticated incomplete seed through QR readiness and both signed-out LAN scorecards; Alex Morgan and Jordan Lee opened directly on Hole 18 with Hole 17 hydrated.
 - Production build passed and Playwright passed 79/79.

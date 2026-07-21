@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Current-Player Review Ownership
+
+Status: **COMPLETE**
+
+- Review now compares the current player's self card with the current player's card entered by the assigned marker.
+- `My Round Statistics` remains bound to the current player's self-owned statistics.
+- Submission updates only the current player's round and leaves the reciprocal player's state independent.
+- Stable rows continue to override snapshot compatibility data without creating fallback rows or duplicate stable keys.
+- Final automated regression: production build passed and Playwright passed 83/83; both directions passed against a fresh real incomplete tournament.
+
+Recommended next milestone: resume dashboard separation only as a separately scoped change.
+
 ### Completed Milestone: Incomplete End-Of-Round Seed
 
 Status: **COMPLETE**

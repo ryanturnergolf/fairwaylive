@@ -20,6 +20,7 @@ import {
   saveRoundHoleStatistics,
 } from "../../lib/services/statisticsService";
 import {
+  buildReviewOwnership,
   loadReviewComparisonModel,
   type ReviewComparisonModel,
 } from "../../lib/services/reviewComparisonService";
@@ -587,7 +588,8 @@ export default function PlayerScorecardPage() {
   const [markerScores, setMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const scoresRef = useRef(scores);
   const markerScoresRef = useRef(markerScores);
-  const [markedPlayerSelfScores, setMarkedPlayerSelfScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
+  const [reviewSelfScores, setReviewSelfScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
+  const [reviewMarkerScores, setReviewMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [holeStats, setHoleStats] = useState<HoleStatCapture[]>(createEmptyHoleStats(scorecard.holes.length));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const currentHoleIndexRef = useRef(0);
@@ -697,8 +699,11 @@ export default function PlayerScorecardPage() {
       let loadedMarkerScores: number[] | null = hasAnyHoleScore(scorecard.initialMarkerScores)
         ? normalizeHoleScores(scorecard.initialMarkerScores, holeCount)
         : null;
-      let loadedMarkedPlayerSelfScores: number[] | null = hasAnyHoleScore(scorecard.initialMarkerScores)
-        ? normalizeHoleScores(scorecard.initialMarkerScores, holeCount)
+      let loadedReviewSelfScores: number[] | null = hasAnyHoleScore(scorecard.initialPlayerScores)
+        ? normalizeHoleScores(scorecard.initialPlayerScores, holeCount)
+        : null;
+      let loadedReviewMarkerScores: number[] | null = hasAnyHoleScore(scorecard.initialPlayerScores)
+        ? normalizeHoleScores(scorecard.initialPlayerScores, holeCount)
         : null;
       let loadedSubmissionComplete = false;
       let loadedReviewComparison: ReviewComparisonModel | null = null;
@@ -742,20 +747,6 @@ export default function PlayerScorecardPage() {
           : hasAnyHoleScore(markerScorecardRow?.scores)
             ? normalizeHoleScores(markerScorecardRow?.scores, holeCount)
             : null;
-
-        if (resolvedPlayerIds.markerPlayerId) {
-          const markedPlayerSelf = envelope.tournament.scores.find(
-            (s) => resolvedPlayerIds.markerPlayerIds.includes(String(s.playerId)) &&
-                   s.roundId === resolvedPlayerIds.roundId &&
-                   s.enteredBy === "self"
-          );
-          if (hasAnyHoleScore(markedPlayerSelf?.holeScores)) {
-            localStorageLoadedCount += 1;
-          }
-          if (hasAnyHoleScore(markedPlayerSelf?.holeScores)) {
-            loadedMarkedPlayerSelfScores = normalizeHoleScores(markedPlayerSelf?.holeScores, holeCount);
-          }
-        }
 
         if (!isCancelled) {
           const localSelfScores = loadedSelfScores ?? normalizeHoleScores(undefined, holeCount);
@@ -812,15 +803,15 @@ export default function PlayerScorecardPage() {
             loadedMarkerScores = chooseMostCompleteScores(loadedMarkerScores, remoteMarkerScores);
           }
 
-          const remoteMarkedPlayerSelfScores = await loadRemoteScore(
-            resolvedPlayerIds.markerPlayerIds,
+          const remoteCurrentPlayerMarkerScores = await loadRemoteScore(
+            resolvedPlayerIds.selectedPlayerIds,
             resolvedPlayerIds.markerPlayerId
           );
-          if (remoteMarkedPlayerSelfScores) {
-            if (hasAnyHoleScore(remoteMarkedPlayerSelfScores)) {
+          if (remoteCurrentPlayerMarkerScores) {
+            if (hasAnyHoleScore(remoteCurrentPlayerMarkerScores)) {
               supabaseLoadedCount += 1;
             }
-            loadedMarkedPlayerSelfScores = remoteMarkedPlayerSelfScores;
+            loadedReviewMarkerScores = remoteCurrentPlayerMarkerScores;
           }
         }
 
@@ -838,8 +829,8 @@ export default function PlayerScorecardPage() {
         const markerEntrySubmitted = resolvedPlayerIds.markerPlayerId
           ? sharedScores.some(
               (entry) =>
-                resolvedPlayerIds.markerPlayerIds.includes(String(entry.player_id)) &&
-                resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
+                resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+                resolvedPlayerIds.markerPlayerIds.includes(String(entry.entered_by_player_id)) &&
                 entry.entry_status === "submitted"
             )
           : false;
@@ -883,13 +874,13 @@ export default function PlayerScorecardPage() {
           }
         }
 
-        if (!hasAnyHoleScore(loadedMarkedPlayerSelfScores)) {
-          const sharedMarkedPlayerSelfScores = getSharedScore(
-            resolvedPlayerIds.markerPlayerIds,
-            resolvedPlayerIds.markerPlayerId ? [resolvedPlayerIds.markerPlayerId] : []
+        if (!hasAnyHoleScore(loadedReviewMarkerScores)) {
+          const sharedCurrentPlayerMarkerScores = getSharedScore(
+            resolvedPlayerIds.selectedPlayerIds,
+            resolvedPlayerIds.markerPlayerId ? resolvedPlayerIds.markerPlayerIds : []
           );
-          if (hasAnyHoleScore(sharedMarkedPlayerSelfScores)) {
-            loadedMarkedPlayerSelfScores = sharedMarkedPlayerSelfScores;
+          if (hasAnyHoleScore(sharedCurrentPlayerMarkerScores)) {
+            loadedReviewMarkerScores = sharedCurrentPlayerMarkerScores;
           }
         }
 
@@ -901,15 +892,15 @@ export default function PlayerScorecardPage() {
             tournamentId: sharedScoreTournamentId,
             roundNumber,
             shareToken: requestedShareToken || undefined,
-            markedPlayerIds: resolvedPlayerIds.markerPlayerIds,
-            markerEnteredByPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+            markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+            markerEnteredByPlayerIds: resolvedPlayerIds.markerPlayerIds,
             statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
             holes: scorecard.holes,
-            snapshotSelfScores: scorecard.initialMarkerScores,
-            snapshotMarkerScores: scorecard.initialMarkerScores,
+            snapshotSelfScores: scorecard.initialPlayerScores,
+            snapshotMarkerScores: scorecard.initialPlayerScores,
           });
-          loadedMarkedPlayerSelfScores = loadedReviewComparison.selfScores;
-          loadedMarkerScores = loadedReviewComparison.markerScores;
+          loadedReviewSelfScores = loadedReviewComparison.selfScores;
+          loadedReviewMarkerScores = loadedReviewComparison.markerScores;
         }
       } catch (error) {
         remoteLoadFailed = true;
@@ -942,9 +933,8 @@ export default function PlayerScorecardPage() {
           markerScoresRef.current = nextMarkerScores;
           setScores(nextScores);
           setMarkerScores(nextMarkerScores);
-          if (loadedMarkedPlayerSelfScores) {
-            setMarkedPlayerSelfScores(loadedMarkedPlayerSelfScores);
-          }
+          if (loadedReviewSelfScores) setReviewSelfScores(loadedReviewSelfScores);
+          if (loadedReviewMarkerScores) setReviewMarkerScores(loadedReviewMarkerScores);
           setReviewComparison(loadedReviewComparison);
           setSavedHoles(getScoredHoleNumbers(scorecard.holes, nextScores, nextMarkerScores));
 
@@ -1104,8 +1094,8 @@ export default function PlayerScorecardPage() {
   const discrepancies = useMemo(() => {
     return scorecard.holes
       .map((hole, index) => {
-        const self = markedPlayerSelfScores[index];
-        const marker = markerScores[index];
+        const self = reviewSelfScores[index];
+        const marker = reviewMarkerScores[index];
         if (self > 0 && marker > 0 && self !== marker) {
           const diff = Math.abs(self - marker);
           return { holeNumber: hole.holeNumber, self, marker, diff };
@@ -1113,15 +1103,15 @@ export default function PlayerScorecardPage() {
         return null;
       })
       .filter((d) => d !== null) as Array<{ holeNumber: number; self: number; marker: number; diff: number }>;
-  }, [markedPlayerSelfScores, markerScores, scorecard.holes]);
+  }, [reviewMarkerScores, reviewSelfScores, scorecard.holes]);
 
   const hasDiscrepancies = discrepancies.length > 0;
   const hasCompleteMarkedPlayerSelfScores =
-    markedPlayerSelfScores.length === scorecard.holes.length &&
-    markedPlayerSelfScores.every((score) => score > 0);
+    reviewSelfScores.length === scorecard.holes.length &&
+    reviewSelfScores.every((score) => score > 0);
   const hasCompleteMarkerScores =
-    markerScores.length === scorecard.holes.length &&
-    markerScores.every((score) => score > 0);
+    reviewMarkerScores.length === scorecard.holes.length &&
+    reviewMarkerScores.every((score) => score > 0);
   const hasCompleteComparison = hasCompleteMarkedPlayerSelfScores && hasCompleteMarkerScores;
   const statisticsComplete = Boolean(reviewComparison?.statisticsComplete);
   const statisticsRequirementSatisfied = statisticsComplete || submitWithoutStatistics;
@@ -1155,9 +1145,9 @@ export default function PlayerScorecardPage() {
   }, [scorecard.holes, scores]);
 
   // Totals for marked player (review view)
-  const markedPlayerTotals = useMemo(() => {
-    const playedHoles = markedPlayerSelfScores.filter((score) => score > 0).length;
-    const total = markedPlayerSelfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
+  const reviewSelfTotals = useMemo(() => {
+    const playedHoles = reviewSelfScores.filter((score) => score > 0).length;
+    const total = reviewSelfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
     const parPlayed = scorecard.holes.slice(0, playedHoles).reduce((sum, hole) => sum + hole.par, 0);
 
     return {
@@ -1165,12 +1155,8 @@ export default function PlayerScorecardPage() {
       total,
       toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
     };
-  }, [scorecard.holes, markedPlayerSelfScores]);
-
-  // Front/back 9 totals for marked player
-  const markedPlayerFront9Total = markedPlayerSelfScores.slice(0, 9).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
-  const markedPlayerBack9Total = markedPlayerSelfScores.slice(9, scorecard.holes.length).reduce((sum, s) => sum + (s > 0 ? s : 0), 0);
-  const markedPlayerMarkerTotal = markerScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
+  }, [reviewSelfScores, scorecard.holes]);
+  const reviewMarkerTotal = reviewMarkerScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
 
   const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
@@ -1594,19 +1580,18 @@ export default function PlayerScorecardPage() {
         tournamentId: sharedScoreTournamentId,
         roundNumber: Number(scorecard.round) || 1,
         shareToken: requestedShareToken || undefined,
-        markedPlayerIds: resolvedPlayerIds.markerPlayerIds,
-        markerEnteredByPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+        markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+        markerEnteredByPlayerIds: resolvedPlayerIds.markerPlayerIds,
         statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
         holes: scorecard.holes,
-        snapshotSelfScores: scorecard.initialMarkerScores,
-        snapshotMarkerScores: scorecard.initialMarkerScores,
+        snapshotSelfScores: scorecard.initialPlayerScores,
+        snapshotMarkerScores: scorecard.initialPlayerScores,
       });
 
       setReviewComparison(comparison);
       setSubmitWithoutStatistics(false);
-      setMarkedPlayerSelfScores(comparison.selfScores);
-      markerScoresRef.current = comparison.markerScores;
-      setMarkerScores(comparison.markerScores);
+      setReviewSelfScores(comparison.selfScores);
+      setReviewMarkerScores(comparison.markerScores);
       setView("review");
       setShowConfirm(false);
     } catch (error) {
@@ -1647,8 +1632,8 @@ export default function PlayerScorecardPage() {
     );
     const markerAlreadySubmitted = persistedEntries.some(
       (entry) =>
-        resolvedPlayerIds?.markerPlayerIds.includes(String(entry.player_id)) &&
-        resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
+        resolvedPlayerIds?.selectedPlayerIds.includes(String(entry.player_id)) &&
+        resolvedPlayerIds.markerPlayerIds.includes(String(entry.entered_by_player_id)) &&
         entry.entry_status === "submitted"
     );
     if (scorerAlreadySubmitted && markerAlreadySubmitted) {
@@ -1682,15 +1667,16 @@ export default function PlayerScorecardPage() {
       return;
     }
     const stableMarkerPlayerId = String(scorecard.markerPlayerId);
+    const reviewOwnership = buildReviewOwnership(scorecard.playerId, stableMarkerPlayerId);
     const submittedAt = new Date().toISOString();
     try {
       await saveRound({
         tournamentId: sharedScoreTournamentId,
         roundNumber,
-        playerId: scorecard.playerId,
-        enteredByPlayerId: scorecard.playerId,
-        holeScores: [...scores],
-        total: scores.reduce((sum, score) => sum + score, 0),
+        playerId: reviewOwnership.reviewedPlayerId,
+        enteredByPlayerId: reviewOwnership.selfEnteredByPlayerId,
+        holeScores: [...reviewSelfScores],
+        total: reviewSelfScores.reduce((sum, score) => sum + score, 0),
         entryStatus: "submitted",
         submittedAt,
         shareToken: requestedShareToken || undefined,
@@ -1698,10 +1684,10 @@ export default function PlayerScorecardPage() {
       await saveRound({
         tournamentId: sharedScoreTournamentId,
         roundNumber,
-        playerId: stableMarkerPlayerId,
-        enteredByPlayerId: scorecard.playerId,
-        holeScores: [...markerScores],
-        total: markerScores.reduce((sum, score) => sum + score, 0),
+        playerId: reviewOwnership.reviewedPlayerId,
+        enteredByPlayerId: reviewOwnership.markerEnteredByPlayerId,
+        holeScores: [...reviewMarkerScores],
+        total: reviewMarkerScores.reduce((sum, score) => sum + score, 0),
         entryStatus: "submitted",
         submittedAt,
         shareToken: requestedShareToken || undefined,
@@ -1710,14 +1696,8 @@ export default function PlayerScorecardPage() {
         completeReview({
           tournamentId: sharedScoreTournamentId,
           roundNumber,
-          playerId: scorecard.playerId,
+          playerId: reviewOwnership.reviewedPlayerId,
           selfReviewComplete: true,
-          shareToken: requestedShareToken || undefined,
-        }),
-        completeReview({
-          tournamentId: sharedScoreTournamentId,
-          roundNumber,
-          playerId: stableMarkerPlayerId,
           markerReviewComplete: true,
           shareToken: requestedShareToken || undefined,
         }),
@@ -2033,8 +2013,8 @@ export default function PlayerScorecardPage() {
               <tbody>
                 {holes.map((hole, i) => {
                   const index = startIndex + i;
-                  const selfScore = markedPlayerSelfScores[index];
-                  const markerScore = markerScores[index];
+                  const selfScore = reviewSelfScores[index];
+                  const markerScore = reviewMarkerScores[index];
                   const isMatch = selfScore === markerScore;
                   const discrepancy = Math.abs(selfScore - markerScore);
 
@@ -2079,9 +2059,9 @@ export default function PlayerScorecardPage() {
           <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verify Score</p>
             <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#0B3D2E]">
-              {scorecard.markerPlayerName || "Player"}
+              {scorecard.playerName || "Player"}
             </h2>
-            <p className="mt-0.5 text-xs text-[#51635C]">{scorecard.markerTeam}</p>
+            <p className="mt-0.5 text-xs text-[#51635C]">{scorecard.team}</p>
 
             {hasDiscrepancies && (
               <div className="mt-4 rounded-2xl border border-red-500 bg-red-50 p-3">
@@ -2117,12 +2097,12 @@ export default function PlayerScorecardPage() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Self Total</p>
-                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{markedPlayerTotals.total}</p>
-                <p className="text-xs font-semibold text-[#51635C]">{markedPlayerTotals.toPar}</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{reviewSelfTotals.total}</p>
+                <p className="text-xs font-semibold text-[#51635C]">{reviewSelfTotals.toPar}</p>
               </div>
               <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Marker Total</p>
-                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{markedPlayerMarkerTotal}</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{reviewMarkerTotal}</p>
               </div>
             </div>
           </div>
