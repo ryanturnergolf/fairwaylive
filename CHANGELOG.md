@@ -1,5 +1,19 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-20
+
+### Fixed
+
+- Separated Review score-comparison identity from statistics identity so marked-player Self/Marker verification remains intact while `My Round Statistics` always displays the current player's self-owned fairway, GIR, and putt data.
+- Hydrated current-player self `score_hole_entries` back into editable mobile controls without reading marker statistics or writing compatibility rows.
+- Preserved authoritative marker-score precedence as stable reciprocal `score_entries`, then snapshot compatibility, then unavailable, preventing Review synchronization from erasing valid dashboard snapshot values.
+
+### Verification
+
+- Production build passed and Playwright passed 79/79.
+- Verified both Real Test 2 signed-out routes: Ryan's editable statistics and Review ownership were correct, Satch's submitted scorecard retained Satch-owned statistics, snapshot marker values remained visible, and hydration issued no writes.
+- Confirmed Real Test 2 remained at 3 score rows and 54 hole-statistic rows with zero duplicate stable keys and no synthetic reciprocal marker row.
+
 ## 2026-07-19
 
 ### Added

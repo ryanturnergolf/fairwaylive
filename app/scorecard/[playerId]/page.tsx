@@ -903,8 +903,10 @@ export default function PlayerScorecardPage() {
             shareToken: requestedShareToken || undefined,
             markedPlayerIds: resolvedPlayerIds.markerPlayerIds,
             markerEnteredByPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+            statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
             holes: scorecard.holes,
             snapshotSelfScores: scorecard.initialMarkerScores,
+            snapshotMarkerScores: scorecard.initialMarkerScores,
           });
           loadedMarkedPlayerSelfScores = loadedReviewComparison.selfScores;
           loadedMarkerScores = loadedReviewComparison.markerScores;
@@ -987,6 +989,52 @@ export default function PlayerScorecardPage() {
       isCancelled = true;
     };
     }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds, sharedScoreTournamentId, scorecard.holes]);
+
+  useEffect(() => {
+    if (!scoresLoaded || !sharedScoreTournamentId || !resolvedPlayerIds || submissionComplete) {
+      return;
+    }
+
+    let isCancelled = false;
+    const hydrateEditableStatistics = async () => {
+      try {
+        const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
+        const entries = await loadTournamentHoleStatistics({
+          tournamentId: sharedScoreTournamentId,
+          roundNumber,
+          shareToken: requestedShareToken || undefined,
+        });
+        const currentPlayerEntries = entries.filter(
+          (entry) =>
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id))
+        );
+        const entriesByHole = new Map(
+          currentPlayerEntries.map((entry) => [Number(entry.hole_number), entry])
+        );
+        if (!isCancelled) {
+          setHoleStats(
+            scorecard.holes.map((hole) => {
+              const entry = entriesByHole.get(hole.holeNumber);
+              return {
+                fairwayHit: hole.par === 3 ? null : entry?.fairway_hit ?? null,
+                greenInRegulation: entry?.green_in_regulation ?? null,
+                putts: entry?.putts ?? null,
+                penaltyStrokes: null,
+              };
+            })
+          );
+        }
+      } catch (error) {
+        console.warn("[StatisticsService] Unable to hydrate editable hole statistics.", error);
+      }
+    };
+
+    void hydrateEditableStatistics();
+    return () => {
+      isCancelled = true;
+    };
+  }, [requestedShareToken, resolvedPlayerIds, scorecard.holes, scoresLoaded, sharedScoreTournamentId, submissionComplete]);
 
   useEffect(() => {
     if (!submissionComplete || !sharedScoreTournamentId || !resolvedPlayerIds) {
@@ -1548,8 +1596,10 @@ export default function PlayerScorecardPage() {
         shareToken: requestedShareToken || undefined,
         markedPlayerIds: resolvedPlayerIds.markerPlayerIds,
         markerEnteredByPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+        statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
         holes: scorecard.holes,
         snapshotSelfScores: scorecard.initialMarkerScores,
+        snapshotMarkerScores: scorecard.initialMarkerScores,
       });
 
       setReviewComparison(comparison);
@@ -2081,7 +2131,7 @@ export default function PlayerScorecardPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
-                  Statistics Review
+                  My Round Statistics
                 </p>
                 <h3 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#0B3D2E]">
                   Round Statistics

@@ -1,8 +1,12 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Active Decisions
+
+### Review score ownership and statistics ownership are independent
+
+Review compares the marked player's self card with the marked score entered by the current player, while round statistics always resolve from the current player's self-owned `score_hole_entries`. Editable statistic hydration uses that same current-player identity and ignores marker rows. Marker-score resolution prefers a stable reciprocal row, then the authoritative snapshot as a non-mutating compatibility fallback, then unavailable; fallback data never creates stable rows.
 
 ### Post-submission review stays within the share-token scoring context
 

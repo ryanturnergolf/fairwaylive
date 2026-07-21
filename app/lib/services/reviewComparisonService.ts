@@ -48,8 +48,10 @@ type BuildReviewComparisonInput = {
   statisticEntries: ScoreHoleEntryRow[];
   markedPlayerIds: string[];
   markerEnteredByPlayerIds: string[];
+  statisticsPlayerIds: string[];
   holes: ReviewHole[];
   snapshotSelfScores?: number[];
+  snapshotMarkerScores?: number[];
 };
 
 type LoadReviewComparisonInput = Omit<
@@ -84,8 +86,10 @@ export const buildReviewComparisonModel = ({
   statisticEntries,
   markedPlayerIds,
   markerEnteredByPlayerIds,
+  statisticsPlayerIds,
   holes,
   snapshotSelfScores,
+  snapshotMarkerScores,
 }: BuildReviewComparisonInput): ReviewComparisonModel => {
   const stableSelfEntry = findScoreEntry(scoreEntries, markedPlayerIds, markedPlayerIds);
   const markerEntry = findScoreEntry(scoreEntries, markedPlayerIds, markerEnteredByPlayerIds);
@@ -93,11 +97,14 @@ export const buildReviewComparisonModel = ({
     stableSelfEntry?.hole_scores ?? (hasAnyScore(snapshotSelfScores) ? snapshotSelfScores : undefined),
     holes.length
   );
-  const markerScores = normalizeScores(markerEntry?.hole_scores, holes.length);
+  const markerScores = normalizeScores(
+    markerEntry?.hole_scores ?? (hasAnyScore(snapshotMarkerScores) ? snapshotMarkerScores : undefined),
+    holes.length
+  );
   const selfStatisticEntries = statisticEntries.filter(
     (entry) =>
-      markedPlayerIds.includes(String(entry.player_id)) &&
-      markedPlayerIds.includes(String(entry.entered_by_player_id))
+      statisticsPlayerIds.includes(String(entry.player_id)) &&
+      statisticsPlayerIds.includes(String(entry.entered_by_player_id))
   );
   const statisticByHole = new Map(
     selfStatisticEntries.map((entry) => [Number(entry.hole_number), entry])

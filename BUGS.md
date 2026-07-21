@@ -1,6 +1,6 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Open Bugs
 
@@ -11,6 +11,14 @@ Status: open.
 The signed-out share-token scorecard creates multiple anonymous GoTrueClient instances using the default Supabase storage key. These clients do not compete for `clubhouse-hq-coach-auth`, but the warnings and redundant clients remain to be resolved.
 
 ## Resolved
+
+### Review reversed statistics ownership and erased snapshot marker compatibility
+
+Status: resolved and verified against `Real Test 2` on 2026-07-20.
+
+Review used the marked player's identity for both score comparison and statistics even though mobile statistic inputs belong to the current player. Editable controls also did not reload existing self-owned hole statistics, and a missing reciprocal marker row caused Review synchronization to replace valid snapshot marker scores with blanks.
+
+Review now receives independent score-comparison and statistics identities, editable controls hydrate current-player self statistics only, and marker scores resolve from a stable reciprocal row before snapshot compatibility. Snapshot reads remain non-mutating, stable rows override fallback values, and par-3 fairways remain not applicable.
 
 ### Submitted rounds lacked a player-facing scorecard and statistics view
 

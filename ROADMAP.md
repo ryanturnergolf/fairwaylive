@@ -4,7 +4,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -23,6 +23,18 @@ The current architecture supports the complete coach workflow from tournament cr
 7. Dashboard readiness convergence (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
+
+### Completed Milestone: Reciprocal Mobile Ownership And Hydration
+
+Status: **COMPLETE**
+
+- Separated marked-player score comparison from current-player statistics ownership in Review.
+- Restored current-player self statistics into editable mobile controls while excluding marker-row statistics and preserving par-3 applicability.
+- Retained dashboard snapshot marker scores when no stable reciprocal row exists, with stable rows remaining authoritative and no compatibility writes.
+- Verified both Real Test 2 directions without database mutations or duplicate rows.
+- Final automated regression: production build passed and Playwright passed 79/79.
+
+Recommended next milestone: commit this scoring correction independently, then resume separately scoped product work.
 
 ### Completed Milestone: Post-Submission Scorecard And Statistics
 
