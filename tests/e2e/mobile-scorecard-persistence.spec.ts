@@ -3,6 +3,10 @@ import {
   buildReviewComparisonModel,
   buildReviewOwnership,
 } from "../../app/lib/services/reviewComparisonService";
+import {
+  buildIncompleteTournamentSeed,
+  INCOMPLETE_TEST_PLAYER_IDS,
+} from "../../app/lib/services/incompleteTournamentSeedService";
 
 const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
 
@@ -261,7 +265,14 @@ const buildCompleteReviewStatistics = (
     });
   });
 
-const routeSharedTournamentRoster = async (page: Page) => {
+const routeSharedTournamentRoster = async (
+  page: Page,
+  options?: {
+    tournamentName: string;
+    course: string;
+    players: Array<Record<string, unknown>>;
+  }
+) => {
   await page.route("**/rest/v1/tournaments?**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -269,8 +280,8 @@ const routeSharedTournamentRoster = async (page: Page) => {
       body: JSON.stringify({
         id: sharedTournamentId,
         created_by: null,
-        name: storedTournament.name,
-        course: storedTournament.course,
+        name: options?.tournamentName ?? storedTournament.name,
+        course: options?.course ?? storedTournament.course,
         tournament_date: storedTournament.date,
         number_of_rounds: 1,
         status: "test",
@@ -284,7 +295,7 @@ const routeSharedTournamentRoster = async (page: Page) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
+      body: JSON.stringify(options?.players ?? [
         {
           id: "22222222-2222-4222-8222-222222222222",
           tournament_id: sharedTournamentId,
@@ -627,8 +638,8 @@ const routeAuthenticatedTournamentSyncApi = async (
 const waitForMobileScorecardControls = async (page: Page) => {
   await expect(page.getByText("Resolving scoring link...")).toBeHidden({ timeout: 2_000 });
   await expect(page.getByText("Mobile Scorecard")).toBeVisible();
-  await expect(page.getByLabel("Ava Green's Score")).toBeEditable();
-  await expect(page.getByLabel("Ben Marker's Score")).toBeEditable();
+  await expect(page.getByLabel("Ava Green's Score")).toBeEditable({ timeout: 10_000 });
+  await expect(page.getByLabel("Ben Marker's Score")).toBeEditable({ timeout: 10_000 });
 };
 
 const fillSelfScoreAndWaitForSave = async (page: Page, score: number) => {
@@ -644,6 +655,13 @@ const fillSelfScoreAndWaitForSave = async (page: Page, score: number) => {
       };
     })
     .toEqual({ score: String(score), canSave: true });
+};
+
+const fillRequiredCurrentHoleStatistics = async (page: Page) => {
+  const fairway = page.getByRole("group", { name: "Fairway Hit" });
+  if (await fairway.isVisible()) await fairway.getByRole("button", { name: "Yes" }).click();
+  await page.getByRole("group", { name: "Green in Regulation" }).getByRole("button", { name: "Yes" }).click();
+  await page.getByRole("group", { name: "Putts" }).getByRole("button", { name: "2" }).click();
 };
 
 const waitForSharedScoreHydration = async (
@@ -783,6 +801,7 @@ test.use({
 
 test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  const holeStatsStore = await routeScoreHoleEntriesStore(page);
   await page.route("**/api/score-mutations", async (route) => {
     const body = route.request().postDataJSON() as { action: string; input: Record<string, unknown> };
     if (body.action === "saveScoreEntry") {
@@ -835,12 +854,26 @@ test("mobile scorecard saves four holes, reloads them from localStorage, and res
     await expect(page.getByText(`Hole ${index + 1}`)).toBeVisible();
     await fillSelfScoreAndWaitForSave(page, selfScore);
     await page.getByLabel("Ben Marker's Score").fill(String(markerScore));
+    await fillRequiredCurrentHoleStatistics(page);
     await expect(page.getByLabel("Ava Green's Score")).toHaveValue(String(selfScore));
     await expect(page.getByLabel("Ben Marker's Score")).toHaveValue(String(markerScore));
     await saveHoleButton.click();
   }
 
   await expect(page.getByText("Hole 5")).toBeVisible();
+  holeStatsStore.savedHoleRows.push(...[1, 2, 3, 4].map((holeNumber) => buildScoreHoleEntry({
+    tournament_id: tournamentId,
+    round_number: 1,
+    player_id: "player-1",
+    entered_by_player_id: "player-1",
+    hole_number: holeNumber,
+    strokes: sharedStore.savedScoreRows.find((row) => row.player_id === "player-1")?.hole_scores[holeNumber - 1],
+    fairway_hit: [3].includes(holeNumber) ? null : true,
+    green_in_regulation: true,
+    putts: 2,
+    entry_source: "self",
+    entry_status: "live",
+  })));
 
   const readsBeforeReload = sharedStore.getScoreReadCount();
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -855,6 +888,7 @@ test("mobile scorecard saves four holes, reloads them from localStorage, and res
 
 test("scorer and marker inputs autosave before navigation and survive refresh", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  const holeStatsStore = await routeScoreHoleEntriesStore(page);
 
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
@@ -862,6 +896,7 @@ test("scorer and marker inputs autosave before navigation and survive refresh", 
 
   await page.getByLabel("Ava Green's Score").fill("4");
   await page.getByLabel("Ben Marker's Score").fill("5");
+  await fillRequiredCurrentHoleStatistics(page);
   await page.getByRole("button", { name: "Next Hole" }).click();
 
   await expect
@@ -870,12 +905,132 @@ test("scorer and marker inputs autosave before navigation and survive refresh", 
   await expect
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2")?.hole_scores[0])
     .toBe(5);
+  holeStatsStore.savedHoleRows.push(buildScoreHoleEntry({
+    tournament_id: tournamentId,
+    round_number: 1,
+    player_id: "player-1",
+    entered_by_player_id: "player-1",
+    hole_number: 1,
+    strokes: 4,
+    fairway_hit: true,
+    green_in_regulation: true,
+    putts: 2,
+    entry_source: "self",
+    entry_status: "live",
+  }));
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitForMobileScorecardControls(page);
   await page.getByRole("button", { name: "Previous Hole" }).click();
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("5");
+});
+
+test("both incomplete-seed reciprocal scorecards resume on Hole 18 without hydration writes", async ({ browser }) => {
+  const seed = buildIncompleteTournamentSeed({ tournamentId: sharedTournamentId });
+  const players = [
+    {
+      id: "incomplete-row-a",
+      tournament_id: sharedTournamentId,
+      player_id: INCOMPLETE_TEST_PLAYER_IDS[0],
+      player_name: "Alex Morgan",
+      team_id: "incomplete-team-a",
+      team_name: "Test Team A",
+      round_number: 1,
+      group_number: 1,
+      starting_hole: 1,
+      marker_player_id: INCOMPLETE_TEST_PLAYER_IDS[1],
+      position: 1,
+      status: "active",
+    },
+    {
+      id: "incomplete-row-b",
+      tournament_id: sharedTournamentId,
+      player_id: INCOMPLETE_TEST_PLAYER_IDS[1],
+      player_name: "Jordan Lee",
+      team_id: "incomplete-team-b",
+      team_name: "Test Team B",
+      round_number: 1,
+      group_number: 1,
+      starting_hole: 1,
+      marker_player_id: INCOMPLETE_TEST_PLAYER_IDS[0],
+      position: 2,
+      status: "active",
+    },
+  ];
+
+  for (const [currentPlayerId, currentPlayerName, markedPlayerName] of [
+    [INCOMPLETE_TEST_PLAYER_IDS[0], "Alex Morgan", "Jordan Lee"],
+    [INCOMPLETE_TEST_PLAYER_IDS[1], "Jordan Lee", "Alex Morgan"],
+  ] as const) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await routeSharedTournamentRoster(page, {
+      tournamentName: seed.tournament.name,
+      course: seed.tournament.course,
+      players,
+    });
+    const scoreStore = await routeSharedScoreEntriesStore(page);
+    scoreStore.savedScoreRows.push(...seed.scoreEntries.map((entry) =>
+      buildScoreEntry(entry.playerId, entry.enteredByPlayerId, entry.holeScores, sharedTournamentId)
+    ));
+    const statisticStore = await routeScoreHoleEntriesStore(page);
+    statisticStore.savedHoleRows.push(...seed.holeEntries.map((entry) => buildScoreHoleEntry({
+      tournament_id: entry.tournamentId,
+      round_number: entry.roundNumber,
+      player_id: entry.playerId,
+      entered_by_player_id: entry.enteredByPlayerId,
+      marker_for_player_id: entry.markerForPlayerId,
+      hole_number: entry.holeNumber,
+      strokes: entry.strokes,
+      fairway_hit: entry.fairwayHit,
+      green_in_regulation: entry.greenInRegulation,
+      putts: entry.putts,
+      penalty_strokes: entry.penaltyStrokes,
+      entry_source: entry.entrySource,
+      entry_status: entry.entryStatus,
+    })));
+    await routeTournamentStateSnapshotStore(page, 201, [{
+      tournament_id: sharedTournamentId,
+      local_tournament_id: sharedTournamentId,
+      schema_version: 2,
+      state_snapshot: seed.envelope,
+    }]);
+    await page.route("**/api/share-tokens/resolve", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tournamentId: sharedTournamentId,
+        purpose: "mobile_scoring",
+        expiresAt: "2026-07-22T00:00:00.000Z",
+      }),
+    }));
+    const writeRequests: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.method() !== "GET" &&
+        (request.url().includes("/api/score-mutations") || request.url().includes("/rest/v1/score_"))
+      ) writeRequests.push(request.url());
+    });
+
+    await gotoApp(page, `${baseUrl}/scorecard/${currentPlayerId}?pairing=1&round=1&shareToken=incomplete-resume-token`);
+    await expect(page.getByText("Hole 18", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(`${currentPlayerName}'s Score`)).toHaveValue("");
+    await expect(page.getByLabel(`${markedPlayerName}'s Score`)).toHaveValue("");
+    await page.getByRole("button", { name: "Previous Hole" }).click();
+    await expect(page.getByText("Hole 17", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(`${currentPlayerName}'s Score`)).not.toHaveValue("");
+    await expect(page.getByLabel(`${markedPlayerName}'s Score`)).not.toHaveValue("");
+    await expect(page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { pressed: true })).toHaveCount(1);
+    await expect(page.getByRole("group", { name: "Green in Regulation" }).getByRole("button", { pressed: true })).toHaveCount(1);
+    await expect(page.getByRole("group", { name: "Putts" }).getByRole("button", { pressed: true })).toHaveCount(1);
+    await page.getByRole("button", { name: "Next Hole" }).click();
+    await expect(page.getByText("Hole 18", { exact: true })).toBeVisible();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Hole 18", { exact: true })).toBeVisible();
+    expect(writeRequests).toEqual([]);
+    await context.close();
+  }
 });
 
 test("rapid Save Hole actions preserve adjacent persisted hole positions", async ({ page }) => {
@@ -2320,6 +2475,7 @@ test("phone shared score save updates live scoreboard", async ({ page }) => {
 test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) => {
   await routeSharedTournamentRoster(page);
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  const holeStatsStore = await routeScoreHoleEntriesStore(page);
   await routeTournamentStateSnapshotStore(page, 201, [{
     tournament_id: sharedTournamentId,
     local_tournament_id: tournamentId,
@@ -2345,12 +2501,26 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
     await expect(page.getByText(`Hole ${index + 1}`)).toBeVisible();
     await fillSelfScoreAndWaitForSave(page, selfScore);
     await page.getByLabel("Ben Marker's Score").fill(String(markerScore));
+    await fillRequiredCurrentHoleStatistics(page);
     await page.getByRole("button", { name: "Save Hole" }).click();
   }
 
   await expect
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-1" && row.entered_by_player_id === "player-1")?.hole_scores[3])
     .toBe(4);
+  holeStatsStore.savedHoleRows.push(...[1, 2, 3, 4].map((holeNumber) => buildScoreHoleEntry({
+    tournament_id: sharedTournamentId,
+    round_number: 1,
+    player_id: "player-1",
+    entered_by_player_id: "player-1",
+    hole_number: holeNumber,
+    strokes: sharedStore.savedScoreRows.find((row) => row.player_id === "player-1")?.hole_scores[holeNumber - 1],
+    fairway_hit: holeNumber === 3 ? null : true,
+    green_in_regulation: true,
+    putts: 2,
+    entry_source: "self",
+    entry_status: "live",
+  })));
   await expect
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2" && row.entered_by_player_id === "player-1")?.hole_scores[3])
     .toBe(4);
@@ -2371,6 +2541,24 @@ test("signed-out shared scorecard hydrates legacy snapshot scores by stable Supa
   snapshotScores.uiState.scorecards.scorecardRows[0].scores = [3, 5, 4, ...Array.from({ length: 15 }, () => 0)];
   snapshotScores.uiState.scorecards.scorecardRows[1].scores = [4, 4, 5, ...Array.from({ length: 15 }, () => 0)];
   const sharedStore = await routeSharedScoreEntriesStore(page);
+  const holeStatsStore = await routeScoreHoleEntriesStore(page);
+  holeStatsStore.savedHoleRows.push(
+    ...[1, 2, 3].map((holeNumber) => buildScoreHoleEntry({
+      tournament_id: sharedTournamentId,
+      round_number: 1,
+      player_id: "player-1",
+      entered_by_player_id: "player-1",
+      marker_for_player_id: null,
+      hole_number: holeNumber,
+      strokes: snapshotScores.uiState.scorecards.scorecardRows[0].scores[holeNumber - 1],
+      fairway_hit: holeNumber === 3 ? null : true,
+      green_in_regulation: true,
+      putts: 2,
+      penalty_strokes: null,
+      entry_source: "self",
+      entry_status: "live",
+    }))
+  );
   await routeSharedTournamentRoster(page);
   await routeTournamentStateSnapshotStore(page, 201, [{
     tournament_id: sharedTournamentId,
@@ -2422,6 +2610,10 @@ test("signed-out shared scorecard hydrates legacy snapshot scores by stable Supa
   await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=secure-e2e-token`);
 
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
+  await expect(page.getByText("Hole 4", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("3");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
   await expect(page.getByRole("group", { name: "Penalty Strokes" })).toHaveCount(0);

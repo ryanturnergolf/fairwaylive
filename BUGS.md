@@ -12,6 +12,12 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### Reciprocal mobile scorecards resumed on different holes
+
+Status: resolved and verified with a fresh real incomplete tournament on 2026-07-20.
+
+Resume selection inspected only the current player's self-score array before statistics hydration, while a snapshot/no-stable-read branch could force Hole 1. The selector now waits for both current-page score directions and current-player statistics, chooses the earliest hole with required work, ignores par-3 fairways, and cannot overwrite later manual navigation. Hydration remains read-only.
+
 ### Review submitted the assigned marker's round instead of the current player's round
 
 Status: resolved and verified with a fresh real incomplete tournament on 2026-07-20.

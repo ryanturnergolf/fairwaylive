@@ -24,6 +24,18 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Deterministic Mobile Resume Hole
+
+Status: **COMPLETE**
+
+- Added one deterministic selector covering current-player self scores, marked-player scores entered by the current player, and required current-player statistics.
+- Excluded par-3 fairways, retained stable-row-over-snapshot precedence, and preserved complete-round Review/submitted restoration.
+- Removed the Hole 1 fallback for snapshot-only hydration and protected manual navigation from asynchronous resets.
+- Verified Alex and Jordan both opening and refreshing on Hole 18 with Hole 17 hydrated and zero hydration writes.
+- Final automated regression: production build passed and Playwright passed 86/86.
+
+Recommended next milestone: keep player login/code work separate from this scoring lifecycle correction.
+
 ### Completed Milestone: Current-Player Review Ownership
 
 Status: **COMPLETE**

@@ -4,6 +4,10 @@ Last updated: 2026-07-20
 
 ## Active Decisions
 
+### Mobile resume position is derived from complete current-page work
+
+Initial mobile hole selection occurs after hydrating the current player's self card, the marked-player card entered by the current player, and current-player statistics. A hole remains incomplete when either score, GIR, putts, or a par-4/5 fairway is missing; par-3 fairways are not applicable. The selector performs no writes, stable rows retain precedence over snapshot compatibility, and later hydration may not overwrite manual Previous/Next navigation.
+
 ### Incomplete tournament seeds use normal authoritative persistence
 
 The incomplete end-of-round fixture is a separate authenticated seed action and does not alter the existing seed. It creates a new owned tournament, reconciles stable tournament players, saves the aggregate snapshot, and upserts stable reciprocal `score_entries` and `score_hole_entries` through Hole 17 using production repository/service paths. Hole 18 remains missing, marker statistics remain null, par-3 fairways remain null, and the fixture does not manufacture review, submission, finalization, or schema state.

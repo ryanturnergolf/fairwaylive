@@ -25,6 +25,7 @@ import {
   type ReviewComparisonModel,
 } from "../../lib/services/reviewComparisonService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
+import { findInitialScorecardHoleIndex } from "../../lib/services/scorecardResumeService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
 import { resolveShareToken } from "../../lib/services/shareTokenService";
 import { canUseDevelopmentBrowserSupabaseWriteFallback } from "../../lib/supabaseClient";
@@ -257,16 +258,6 @@ const getScoredHoleNumbers = (holes: Hole[], ...scoreSets: number[][]) =>
   holes
     .filter((_, index) => scoreSets.some((holeScores) => (holeScores[index] ?? 0) > 0))
     .map((hole) => hole.holeNumber);
-
-const getFirstUnscoredHoleIndex = (holeCount: number, ...scoreSets: number[][]) => {
-  for (let i = 0; i < holeCount; i++) {
-    if (scoreSets.some((holeScores) => (holeScores[i] ?? 0) === 0)) {
-      return i;
-    }
-  }
-
-  return -1;
-};
 
 export default function PlayerScorecardPage() {
   const params = useParams<{ playerId: string }>();
@@ -593,6 +584,7 @@ export default function PlayerScorecardPage() {
   const [holeStats, setHoleStats] = useState<HoleStatCapture[]>(createEmptyHoleStats(scorecard.holes.length));
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const currentHoleIndexRef = useRef(0);
+  const hasManualHoleNavigationRef = useRef(false);
   const [savedHoles, setSavedHoles] = useState<number[]>([]);
   const [view, setView] = useState<"scoring" | "review" | "submitted">("scoring");
   const [showConfirm, setShowConfirm] = useState(false);
@@ -687,12 +679,16 @@ export default function PlayerScorecardPage() {
       if (scoresLoaded || !sharedScoreTournamentId || !resolvedPlayerIds) {
         return;
       }
+      const exactLocalEnvelope = loadTournamentStorageEnvelope(requestedTournamentId);
+      if (
+        !requestedShareToken &&
+        exactLocalEnvelope?.tournament.id === requestedTournamentId
+      ) {
+        setScoreControlsReady(true);
+      }
 
       const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
       const holeCount = scorecard.holes.length;
-      const hasSnapshotInitialScores =
-        hasAnyHoleScore(scorecard.initialPlayerScores) ||
-        hasAnyHoleScore(scorecard.initialMarkerScores);
       let loadedSelfScores: number[] | null = hasAnyHoleScore(scorecard.initialPlayerScores)
         ? normalizeHoleScores(scorecard.initialPlayerScores, holeCount)
         : null;
@@ -707,6 +703,7 @@ export default function PlayerScorecardPage() {
         : null;
       let loadedSubmissionComplete = false;
       let loadedReviewComparison: ReviewComparisonModel | null = null;
+      let loadedHoleStats = createEmptyHoleStats(holeCount);
       let remoteLoadFailed = false;
       let localStorageLoadedCount = 0;
       let supabaseLoadedCount = 0;
@@ -756,11 +753,6 @@ export default function PlayerScorecardPage() {
           setScores(localSelfScores);
           setMarkerScores(localMarkerScores);
           setSavedHoles(getScoredHoleNumbers(scorecard.holes, localSelfScores, localMarkerScores));
-          const firstLocalIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, localSelfScores);
-          if (firstLocalIncompleteIndex >= 0) {
-            currentHoleIndexRef.current = firstLocalIncompleteIndex;
-            setCurrentHoleIndex(firstLocalIncompleteIndex);
-          }
           setScoreControlsReady(true);
         }
       }
@@ -902,6 +894,37 @@ export default function PlayerScorecardPage() {
           loadedReviewSelfScores = loadedReviewComparison.selfScores;
           loadedReviewMarkerScores = loadedReviewComparison.markerScores;
         }
+
+        try {
+          const statisticEntries = await withTimeout(
+            loadTournamentHoleStatistics({
+              tournamentId: sharedScoreTournamentId,
+              roundNumber,
+              shareToken: requestedShareToken || undefined,
+            }),
+            SAVE_FINALIZATION_CHECK_TIMEOUT_MS
+          );
+          if (!statisticEntries) throw new Error("Statistics hydration timed out.");
+          const currentPlayerEntries = statisticEntries.filter(
+            (entry) =>
+              resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+              resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id))
+          );
+          const entriesByHole = new Map(
+            currentPlayerEntries.map((entry) => [Number(entry.hole_number), entry])
+          );
+          loadedHoleStats = scorecard.holes.map((hole) => {
+            const entry = entriesByHole.get(hole.holeNumber);
+            return {
+              fairwayHit: hole.par === 3 ? null : entry?.fairway_hit ?? null,
+              greenInRegulation: entry?.green_in_regulation ?? null,
+              putts: entry?.putts ?? null,
+              penaltyStrokes: null,
+            };
+          });
+        } catch (error) {
+          console.warn("[StatisticsService] Unable to hydrate editable hole statistics.", error);
+        }
       } catch (error) {
         remoteLoadFailed = true;
         console.warn("[ScoreService] Unable to load shared score entries.", error);
@@ -936,18 +959,22 @@ export default function PlayerScorecardPage() {
           if (loadedReviewSelfScores) setReviewSelfScores(loadedReviewSelfScores);
           if (loadedReviewMarkerScores) setReviewMarkerScores(loadedReviewMarkerScores);
           setReviewComparison(loadedReviewComparison);
+          setHoleStats(loadedHoleStats);
           setSavedHoles(getScoredHoleNumbers(scorecard.holes, nextScores, nextMarkerScores));
 
-          const firstIncompleteIndex = getFirstUnscoredHoleIndex(holeCount, nextScores);
-          if (requestedShareToken && hasSnapshotInitialScores && supabaseLoadedCount === 0) {
-            currentHoleIndexRef.current = 0;
-            setCurrentHoleIndex(0);
-            setView("scoring");
-          } else if (loadedSubmissionComplete) {
+          const firstIncompleteIndex = findInitialScorecardHoleIndex({
+            holes: scorecard.holes,
+            selfScores: nextScores,
+            markedPlayerScores: nextMarkerScores,
+            statistics: loadedHoleStats,
+          });
+          if (loadedSubmissionComplete) {
             setView("submitted");
           } else if (firstIncompleteIndex >= 0) {
-            currentHoleIndexRef.current = firstIncompleteIndex;
-            setCurrentHoleIndex(firstIncompleteIndex);
+            if (!hasManualHoleNavigationRef.current) {
+              currentHoleIndexRef.current = firstIncompleteIndex;
+              setCurrentHoleIndex(firstIncompleteIndex);
+            }
           } else if (loadedReviewComparison) {
             setView("review");
           } else {
@@ -957,6 +984,10 @@ export default function PlayerScorecardPage() {
           setScoresLoaded(true);
           setScoreControlsReady(
             !remoteLoadFailed ||
+              Boolean(
+                !requestedShareToken &&
+                envelope?.tournament.id === requestedTournamentId
+              ) ||
               hasAnyHoleScore(nextScores) ||
               hasAnyHoleScore(nextMarkerScores)
           );
@@ -979,52 +1010,6 @@ export default function PlayerScorecardPage() {
       isCancelled = true;
     };
     }, [scoresLoaded, requestedTournamentId, resolvedPlayerIds, sharedScoreTournamentId, scorecard.holes]);
-
-  useEffect(() => {
-    if (!scoresLoaded || !sharedScoreTournamentId || !resolvedPlayerIds || submissionComplete) {
-      return;
-    }
-
-    let isCancelled = false;
-    const hydrateEditableStatistics = async () => {
-      try {
-        const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
-        const entries = await loadTournamentHoleStatistics({
-          tournamentId: sharedScoreTournamentId,
-          roundNumber,
-          shareToken: requestedShareToken || undefined,
-        });
-        const currentPlayerEntries = entries.filter(
-          (entry) =>
-            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
-            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id))
-        );
-        const entriesByHole = new Map(
-          currentPlayerEntries.map((entry) => [Number(entry.hole_number), entry])
-        );
-        if (!isCancelled) {
-          setHoleStats(
-            scorecard.holes.map((hole) => {
-              const entry = entriesByHole.get(hole.holeNumber);
-              return {
-                fairwayHit: hole.par === 3 ? null : entry?.fairway_hit ?? null,
-                greenInRegulation: entry?.green_in_regulation ?? null,
-                putts: entry?.putts ?? null,
-                penaltyStrokes: null,
-              };
-            })
-          );
-        }
-      } catch (error) {
-        console.warn("[StatisticsService] Unable to hydrate editable hole statistics.", error);
-      }
-    };
-
-    void hydrateEditableStatistics();
-    return () => {
-      isCancelled = true;
-    };
-  }, [requestedShareToken, resolvedPlayerIds, scorecard.holes, scoresLoaded, sharedScoreTournamentId, submissionComplete]);
 
   useEffect(() => {
     if (!submissionComplete || !sharedScoreTournamentId || !resolvedPlayerIds) {
@@ -1551,6 +1536,7 @@ export default function PlayerScorecardPage() {
   const handlePreviousHole = async () => {
     if (isSavingHoleRef.current) return;
     await scoreSaveQueueRef.current;
+    hasManualHoleNavigationRef.current = true;
     const next = Math.max(currentHoleIndexRef.current - 1, 0);
     currentHoleIndexRef.current = next;
     setCurrentHoleIndex(next);
@@ -1559,6 +1545,7 @@ export default function PlayerScorecardPage() {
   const handleNextHole = async () => {
     if (isSavingHoleRef.current) return;
     await scoreSaveQueueRef.current;
+    hasManualHoleNavigationRef.current = true;
     const next = Math.min(currentHoleIndexRef.current + 1, scorecard.holes.length - 1);
     currentHoleIndexRef.current = next;
     setCurrentHoleIndex(next);

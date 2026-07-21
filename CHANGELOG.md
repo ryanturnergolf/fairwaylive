@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Unified mobile resume-hole selection across reciprocal scorecards so the earliest missing self score, marked-player score, GIR, putts, or applicable fairway determines the opening hole after authoritative hydration.
+- Removed the snapshot/no-stable-read Hole 1 reset and protected manual Previous/Next navigation from later hydration updates without introducing hydration writes.
 - Corrected end-of-round Review ownership so each signed-out scorecard compares the current player's self-entered card with that same player's card entered by the assigned marker.
 - Limited verification submission and review-status updates to the current player's round while preserving current-player statistics, stable-row precedence, snapshot compatibility fallback, and the other player's independent submission state.
 - Separated Review score-comparison identity from statistics identity so marked-player Self/Marker verification remains intact while `My Round Statistics` always displays the current player's self-owned fairway, GIR, and putt data.
@@ -19,6 +21,8 @@
 
 ### Verification
 
+- Production build passed and Playwright passed 86/86.
+- Verified a fresh real incomplete tournament on both signed-out scorecards: Alex Morgan and Jordan Lee opened and refreshed on Hole 18, Hole 17 remained fully hydrated, and opening/navigation/refresh issued no scoring writes.
 - Production build passed and Playwright passed 83/83.
 - Verified both directions with a fresh real incomplete tournament: Alex submitted only Alex's round, Jordan remained unsubmitted, then Jordan independently reviewed and submitted Jordan's round.
 - Production build passed and Playwright passed 82/82.
