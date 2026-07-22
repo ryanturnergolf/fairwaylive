@@ -96,6 +96,42 @@ export const ensureTeamTournamentCodes = async (assignments: TeamCodeAssignment[
   return (await response.json()) as { assignments: TeamCodeAssignment[] };
 };
 
+const runTeamCodeStaffAction = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const accessToken = await getSupabaseAuthAccessToken();
+  if (!accessToken) throw new Error("Coach authentication is required to manage team tournament codes.");
+  const response = await fetch("/api/tournament-mutations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
+  if (!response.ok) throw new Error(result?.error || "Unable to manage team tournament codes.");
+  return result as T;
+};
+
+export const loadTeamTournamentCodes = async (tournamentId: string) => {
+  const accessToken = await getSupabaseAuthAccessToken();
+  if (!accessToken) throw new Error("Coach authentication is required to view team tournament codes.");
+  const response = await fetch(`/api/team-tournament-codes?tournamentId=${encodeURIComponent(tournamentId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const result = (await response.json().catch(() => null)) as { assignments?: TeamCodeAssignment[]; error?: string } | null;
+  if (!response.ok) throw new Error(result?.error || "Unable to load team tournament codes.");
+  return { assignments: result?.assignments ?? [] };
+};
+
+export const createTeamTournamentCodeAssignment = async (input: Omit<TeamCodeAssignment, "code">) =>
+  runTeamCodeStaffAction<{ assignment: TeamCodeAssignment }>({
+    action: "generateTeamTournamentCode",
+    input,
+  });
+
+export const regenerateTeamTournamentCode = async (input: Pick<TeamCodeAssignment, "tournamentId" | "teamId">) =>
+  runTeamCodeStaffAction<{ assignment: TeamCodeAssignment }>({
+    action: "regenerateTeamTournamentCode",
+    input,
+  });
+
 export const resolveTeamTournamentCode = async (code: string): Promise<TeamTournamentLoginResult> => {
   const normalizedCode = normalizeTeamTournamentCode(code);
   if (normalizedCode.length !== TEAM_TOURNAMENT_CODE_LENGTH) {

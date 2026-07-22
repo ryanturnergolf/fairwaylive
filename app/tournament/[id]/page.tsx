@@ -1522,6 +1522,8 @@ export default function TournamentPage() {
                 onRefreshReadiness={refreshTournamentReadiness}
                 onValidateQrReadiness={validateQrReadiness}
                 isReadinessRefreshing={isReadinessRefreshing}
+                isCoachAuthenticated={isCoachAuthenticated}
+                teams={teams}
               >
                 {({ onPrintTournamentScorecards, onOpenQrModal, onOpenPrintScorecardModal }) =>
                   activeTab === "Live Scoring" ? (

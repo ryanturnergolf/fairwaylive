@@ -53,6 +53,14 @@ type MutationBody =
       }>;
     }
   | {
+      action: "generateTeamTournamentCode";
+      input: { tournamentId: string; teamId: string; teamName: string };
+    }
+  | {
+      action: "regenerateTeamTournamentCode";
+      input: { tournamentId: string; teamId: string };
+    }
+  | {
       action: "finalizeTournament";
       input: {
         tournamentId: string;
@@ -101,6 +109,12 @@ const getAuthenticatedClient = async (request: Request) => {
 class AuthenticationError extends Error {}
 class AuthorizationError extends Error {}
 class MutationConflictError extends Error {}
+
+const teamCodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const createRandomTeamCode = () => {
+  const values = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(values, (value) => teamCodeAlphabet[value % teamCodeAlphabet.length]).join("");
+};
 
 const extractErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -308,6 +322,68 @@ export async function POST(request: Request) {
           teamName: row.team_name,
           code: row.code,
         })),
+      });
+    }
+
+    if (body.action === "generateTeamTournamentCode" || body.action === "regenerateTeamTournamentCode") {
+      const { tournamentId, teamId } = body.input;
+      const { data: tournament, error: tournamentError } = await supabase
+        .from("tournaments")
+        .select("id")
+        .eq("id", tournamentId)
+        .maybeSingle();
+      if (tournamentError) throw tournamentError;
+      if (!tournament) throw new AuthorizationError("You are not authorized to manage this tournament.");
+
+      const { data: existing, error: existingError } = await supabase
+        .from("team_tournament_codes")
+        .select("team_name,code")
+        .eq("tournament_id", tournamentId)
+        .eq("team_id", teamId)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (body.action === "regenerateTeamTournamentCode" && !existing) {
+        throw new MutationConflictError("This team does not have a code to regenerate.");
+      }
+      if (body.action === "generateTeamTournamentCode" && existing) {
+        return NextResponse.json({ assignment: { tournamentId, teamId, teamName: existing.team_name, code: existing.code } });
+      }
+      if (body.action === "generateTeamTournamentCode") {
+        const { data: participatingTeam, error: teamError } = await supabase
+          .from("tournament_players")
+          .select("team_id")
+          .eq("tournament_id", tournamentId)
+          .eq("team_id", teamId)
+          .limit(1)
+          .maybeSingle();
+        if (teamError) throw teamError;
+        if (!participatingTeam) throw new AuthorizationError("This team is not participating in the tournament.");
+      }
+
+      let assignment: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < 12 && !assignment; attempt += 1) {
+        const code = createRandomTeamCode();
+        const query = body.action === "generateTeamTournamentCode"
+          ? supabase.from("team_tournament_codes").insert({
+              tournament_id: tournamentId,
+              team_id: teamId,
+              team_name: body.input.teamName.trim(),
+              code,
+            })
+          : supabase.from("team_tournament_codes").update({ code }).eq("tournament_id", tournamentId).eq("team_id", teamId);
+        const { data, error } = await query.select("tournament_id,team_id,team_name,code").maybeSingle();
+        if (error && error.code === "23505") continue;
+        if (error) throw error;
+        assignment = data;
+      }
+      if (!assignment) throw new MutationConflictError("Unable to create a unique team code. Please try again.");
+      return NextResponse.json({
+        assignment: {
+          tournamentId: assignment.tournament_id,
+          teamId: assignment.team_id,
+          teamName: assignment.team_name,
+          code: assignment.code,
+        },
       });
     }
 

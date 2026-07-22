@@ -407,3 +407,84 @@ test("Non-ready tournaments are blocked from QR sharing and show readiness detai
   await readinessDialog.getByRole("button", { name: "Refresh Readiness" }).click();
   await expect(readinessDialog).toBeVisible();
 });
+
+test("authorized Tournament Director manages, copies, confirms, and prints team scoring codes", async ({ page }) => {
+  await seedTournamentStorage(page);
+  await routeReadinessSupabase(page, "ready");
+  let code = "BX7KM2";
+  let regenerateCount = 0;
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: (value: string) => { (window as Window & { __copied?: string }).__copied = value; return Promise.resolve(); } },
+    });
+    window.print = () => { (window as Window & { __printed?: boolean }).__printed = true; };
+  });
+  await page.route("**/api/team-tournament-codes?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ assignments: [{ tournamentId: sharedTournamentId, teamId: "1", teamName: "Ready State", code }] }),
+  }));
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action: string; input?: { teamId?: string } };
+    if (body.action === "regenerateTeamTournamentCode") {
+      regenerateCount += 1;
+      code = "Q9TRF3";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assignment: { tournamentId: sharedTournamentId, teamId: body.input?.teamId, teamName: "Ready State", code } }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await expect(page.getByRole("heading", { name: "Team Scoring Codes" })).toBeVisible();
+  await expect(page.getByLabel("Ready State team scoring code")).toHaveText("BX7KM2");
+  await page.getByRole("button", { name: "Copy Code" }).click();
+  await expect(page.getByText("Code copied")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __copied?: string }).__copied)).toBe("BX7KM2");
+
+  await page.getByRole("button", { name: "Regenerate Code" }).click();
+  const dialog = page.getByRole("dialog", { name: /Regenerate Ready State/ });
+  await expect(dialog).toContainText("old code will stop working immediately");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  expect(regenerateCount).toBe(0);
+  await expect(page.getByLabel("Ready State team scoring code")).toHaveText("BX7KM2");
+
+  await page.getByRole("button", { name: "Regenerate Code" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Regenerate Code" }).click();
+  await expect(page.getByLabel("Ready State team scoring code")).toHaveText("Q9TRF3");
+  expect(regenerateCount).toBe(1);
+  await expect(page.getByText(/previous code is now invalid/i)).toBeVisible();
+
+  await page.getByRole("button", { name: "Print Team Codes" }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __printed?: boolean }).__printed)).toBe(true);
+  await expect(page.locator(".print\\:block").first()).toContainText("Readiness Share Invitational");
+  await expect(page.locator(".print\\:block").first()).not.toContainText(sharedTournamentId);
+  await expect(page.locator(".print\\:block").first()).not.toContainText("shareToken");
+});
+
+test("signed-out tournament visitors never receive Team Scoring Codes controls", async ({ page }) => {
+  await page.addInitScript(
+    ({ tournamentStorageKey, sharedTournamentStorageKey, tournamentEnvelope, sharedTournamentId }) => {
+      window.localStorage.setItem(tournamentStorageKey, JSON.stringify(tournamentEnvelope));
+      window.localStorage.setItem(sharedTournamentStorageKey, sharedTournamentId);
+    },
+    { tournamentStorageKey, sharedTournamentStorageKey, tournamentEnvelope, sharedTournamentId }
+  );
+  await routeReadinessSupabase(page, "ready");
+  let managementRequests = 0;
+  await page.route("**/api/team-tournament-codes?**", async (route) => {
+    managementRequests += 1;
+    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Coach authentication is required." }) });
+  });
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action: string };
+    if (body.action.includes("TeamTournamentCode")) managementRequests += 1;
+    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Coach authentication is required." }) });
+  });
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
+  await page.getByRole("button", { name: "Live Scoring" }).click();
+  await expect(page.getByRole("heading", { name: "Team Scoring Codes" })).toHaveCount(0);
+  expect(managementRequests).toBe(0);
+});

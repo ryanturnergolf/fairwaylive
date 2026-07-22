@@ -4,6 +4,10 @@ Last updated: 2026-07-21
 
 ## Active Decisions
 
+### Team code rotation is an authenticated single-assignment mutation
+
+Tournament staff load code assignments only through the authenticated tournament mutation boundary and table RLS. Generation and regeneration operate on one tournament/team assignment, retry database uniqueness collisions, and never alter pairings, scores, snapshots, or share tokens. Rotation invalidates the previous login code immediately, while already-open scorecards retain their independently scoped share token.
+
 ### Player Tournament Login retains team resolution only in page memory
 
 The public code-entry page calls only the narrow Team Tournament Login endpoint and renders only its team-scoped response. Changing codes clears the prior resolution before another lookup. Raw codes, share tokens, internal player IDs, pairing IDs, and tournament UUIDs are never displayed or logged; selection validates team membership and navigates through the existing QR scorecard-path builder without introducing another scorecard implementation.

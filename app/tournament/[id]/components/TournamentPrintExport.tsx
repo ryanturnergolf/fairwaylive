@@ -25,6 +25,7 @@ import type {
 } from "../../../lib/services/tournamentReadinessService";
 import { createShareToken } from "../../../lib/services/shareTokenService";
 import type { ScorecardRow } from "./LiveScoringLeaderboard";
+import TeamScoringCodes from "./TeamScoringCodes";
 
 export type ClippdExportState = {
   tournamentId: string;
@@ -85,6 +86,8 @@ type TournamentPrintExportProps = {
   onRefreshReadiness: () => Promise<TournamentReadiness | null>;
   onValidateQrReadiness: () => Promise<string | null>;
   isReadinessRefreshing: boolean;
+  isCoachAuthenticated: boolean;
+  teams: Array<{ id: string | number; name?: string; schoolName?: string; shortName?: string }>;
   children: (controls: PrintExportControls) => ReactNode;
 };
 
@@ -116,6 +119,8 @@ export default function TournamentPrintExport({
   onRefreshReadiness,
   onValidateQrReadiness,
   isReadinessRefreshing,
+  isCoachAuthenticated,
+  teams,
   children,
 }: TournamentPrintExportProps) {
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
@@ -415,11 +420,16 @@ export default function TournamentPrintExport({
           </div>
         </div>
       ) : (
-        children({
-          onPrintTournamentScorecards: handlePrintTournamentScorecards,
-          onOpenQrModal: openQrModal,
-          onOpenPrintScorecardModal: openPrintScorecardModal,
-        })
+        <>
+          {isCoachAuthenticated && sharedTournamentId ? (
+            <TeamScoringCodes tournamentId={sharedTournamentId} tournamentName={tournament.name} teams={teams} />
+          ) : null}
+          {children({
+            onPrintTournamentScorecards: handlePrintTournamentScorecards,
+            onOpenQrModal: openQrModal,
+            onOpenPrintScorecardModal: openPrintScorecardModal,
+          })}
+        </>
       )}
 
       {isScoreboardImportModalOpen ? (

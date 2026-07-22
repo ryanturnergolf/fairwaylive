@@ -8,7 +8,7 @@ Last updated: 2026-07-21
 
 Status: planned follow-up, not a defect in this foundation milestone.
 
-The storage, generation, lookup, homepage entry, and signed-out player-selection flow now exist, but no Tournament Director provisioning/printing controls are connected yet. Code management remains a separately scoped follow-up; QR and player code entry both use the same mobile scorecard implementation.
+The storage, generation, lookup, homepage entry, signed-out player selection, and Tournament Director code-management/printing controls now exist. QR and player code entry continue to use the same mobile scorecard implementation.
 
 ### Multiple anonymous GoTrueClient warnings
 

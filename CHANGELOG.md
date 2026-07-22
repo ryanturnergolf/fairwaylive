@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added authenticated Tournament Director Team Scoring Codes management beside Live Scoring readiness tools, including team-scoped loading, copy fallback, explicit-confirmation regeneration, missing-code generation, and a black-and-white print sheet.
+- Added server-authorized single-team code generation and regeneration through the existing tournament mutation boundary; rotations invalidate only the selected code while preserving existing scorecard share tokens and tournament data.
 - Added a prominent signed-out `Player Tournament Login` homepage entry and a mobile-first `/player-tournament-login` code-entry and team-scoped player-selection flow.
 - Reused the existing Team Tournament Login lookup and QR scorecard-path builder so selected players open the existing scorecard with scoped round, pairing, and share-token context.
 - Added uppercase normalization, space/hyphen removal, keyboard submit, duplicate-submit protection, focused retry states, Change Code isolation, and small-screen accessibility coverage.
