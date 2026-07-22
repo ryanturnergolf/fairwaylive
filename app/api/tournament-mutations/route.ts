@@ -44,6 +44,15 @@ type MutationBody =
       };
     }
   | {
+      action: "ensureTeamTournamentCodes";
+      assignments: Array<{
+        tournamentId: string;
+        teamId: string;
+        teamName: string;
+        code: string;
+      }>;
+    }
+  | {
       action: "finalizeTournament";
       input: {
         tournamentId: string;
@@ -266,6 +275,40 @@ export async function POST(request: Request) {
 
       if (error) throw error;
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "ensureTeamTournamentCodes") {
+      if (body.assignments.length === 0) {
+        return NextResponse.json({ assignments: [] });
+      }
+      const assignments = body.assignments.map((assignment) => ({
+        tournament_id: assignment.tournamentId,
+        team_id: assignment.teamId,
+        team_name: assignment.teamName.trim(),
+        code: assignment.code.trim().toUpperCase(),
+      }));
+      if (assignments.some((assignment) => !/^[A-HJ-KM-NP-Z2-9]{6}$/.test(assignment.code))) {
+        throw new Error("Team Tournament Codes must contain six supported uppercase characters.");
+      }
+      const { error } = await supabase
+        .from("team_tournament_codes")
+        .upsert(assignments, { onConflict: "tournament_id,team_id", ignoreDuplicates: true })
+        .select("id");
+      if (error) throw error;
+      const tournamentIds = [...new Set(assignments.map((assignment) => assignment.tournament_id))];
+      const { data, error: readError } = await supabase
+        .from("team_tournament_codes")
+        .select("tournament_id,team_id,team_name,code")
+        .in("tournament_id", tournamentIds);
+      if (readError) throw readError;
+      return NextResponse.json({
+        assignments: (data ?? []).map((row) => ({
+          tournamentId: row.tournament_id,
+          teamId: row.team_id,
+          teamName: row.team_name,
+          code: row.code,
+        })),
+      });
     }
 
     if (body.action === "finalizeTournament") {

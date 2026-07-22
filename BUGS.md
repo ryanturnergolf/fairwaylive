@@ -1,8 +1,14 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## Open Bugs
+
+### Team Tournament Codes are not yet provisioned by tournament UI
+
+Status: planned follow-up, not a defect in this foundation milestone.
+
+The storage, generation, lookup, and scorecard destination services exist, but no homepage entry, player-selection screen, or Tournament Director provisioning/printing controls are connected yet. Until that separately scoped UI milestone, QR remains the visible guest scoring entry method.
 
 ### Multiple anonymous GoTrueClient warnings
 

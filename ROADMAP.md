@@ -4,7 +4,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -23,6 +23,18 @@ The current architecture supports the complete coach workflow from tournament cr
 7. Dashboard readiness convergence (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
+
+### Team Tournament Login Foundation
+
+Status: **IMPLEMENTED, UI CONNECTION DEFERRED**
+
+- Added deterministic, human-friendly team code generation and RLS-protected Supabase storage with duplicate prevention.
+- Added a signed-out lookup boundary returning one tournament, one team, only that team's players, current pairing context, and a fresh scoped mobile-scoring share token.
+- Reused the QR mobile destination builder so both entry methods converge on the same `/scorecard/[playerId]` route.
+- Deferred the homepage button, player selection interface, Tournament Director management/printing, and regeneration controls.
+- Final automated regression: production build passed and Playwright passed 90/90.
+
+Recommended next milestone: connect the existing lookup service to a focused guest code-entry and player-selection route without changing the scorecard.
 
 ### Completed Milestone: Deterministic Mobile Resume Hole
 

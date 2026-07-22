@@ -1,5 +1,22 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-21
+
+### Added
+
+- Added the Team Tournament Login foundation: deterministic six-character team codes, authenticated code persistence, a signed-out code lookup boundary, team-scoped player results, and current-pairing context.
+- Added a secure code exchange that issues a fresh existing-purpose `mobile_scoring` share token and resolves player selection through the same `buildMobileScorecardPath` helper used by QR scoring.
+- Added focused coverage for deterministic code rules, collision handling, invalid codes, team isolation, and identical QR/Team Code scorecard destinations.
+
+### Scope
+
+- No homepage/player-selection UI or Tournament Director code-management UI was added.
+- QR, mobile scoring, persistence, Review, submission, leaderboard, finalization, and dashboard behavior remain unchanged.
+
+### Verification
+
+- Production build passed and Playwright passed 90/90.
+
 ## 2026-07-20
 
 ### Added

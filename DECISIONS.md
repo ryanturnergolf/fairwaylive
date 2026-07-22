@@ -1,8 +1,12 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## Active Decisions
+
+### Team Tournament Login exchanges codes for existing mobile-scoring authorization
+
+Team Tournament Codes are six-character uppercase credentials generated deterministically from tournament/team identity with confusing characters excluded and database uniqueness enforced. Codes live in a dedicated RLS-protected relation rather than snapshots. A narrowly scoped signed-out lookup returns only that team's players and current pairing identifiers, issues a fresh expiring `mobile_scoring` share token, and uses the existing QR scorecard-path builder. Team Code access does not introduce player accounts or a second scorecard implementation.
 
 ### Mobile resume position is derived from complete current-page work
 
