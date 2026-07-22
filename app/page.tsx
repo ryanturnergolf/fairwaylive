@@ -227,10 +227,13 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <a className="rounded-full bg-[#F6F1E6] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1" href="#">
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <Link className="rounded-full bg-[#F0C96A] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.18em] text-[#0B3D2E] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1" href="/player-tournament-login">
+                    Player Tournament Login
+                  </Link>
+                  <Link className="rounded-full bg-[#F6F1E6] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1" href="/live">
                     View Live Scores
-                  </a>
+                  </Link>
                   <a className="rounded-full border border-[#F0C96A]/60 px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] transition duration-300 hover:bg-[#F0C96A]/10" href="#">
                     Host a Tournament
                   </a>

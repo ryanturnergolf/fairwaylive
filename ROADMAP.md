@@ -26,15 +26,16 @@ The MVST regression baseline covers tournament creation, teams, players, cross-t
 
 ### Team Tournament Login Foundation
 
-Status: **IMPLEMENTED, UI CONNECTION DEFERRED**
+Status: **IMPLEMENTED, DIRECTOR MANAGEMENT DEFERRED**
 
 - Added deterministic, human-friendly team code generation and RLS-protected Supabase storage with duplicate prevention.
 - Added a signed-out lookup boundary returning one tournament, one team, only that team's players, current pairing context, and a fresh scoped mobile-scoring share token.
 - Reused the QR mobile destination builder so both entry methods converge on the same `/scorecard/[playerId]` route.
-- Deferred the homepage button, player selection interface, Tournament Director management/printing, and regeneration controls.
-- Final automated regression: production build passed and Playwright passed 90/90.
+- Added the prominent homepage entry plus mobile-first code input, team-only player selection, error/retry behavior, and existing-scorecard navigation.
+- Deferred Tournament Director management/printing and regeneration controls.
+- Final automated regression: production build passed and Playwright passed 98/98.
 
-Recommended next milestone: connect the existing lookup service to a focused guest code-entry and player-selection route without changing the scorecard.
+Recommended next milestone: add Tournament Director provisioning and printing controls without changing code generation or player scoring.
 
 ### Completed Milestone: Deterministic Mobile Resume Hole
 

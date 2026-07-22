@@ -4,6 +4,10 @@ Last updated: 2026-07-21
 
 ## Active Decisions
 
+### Player Tournament Login retains team resolution only in page memory
+
+The public code-entry page calls only the narrow Team Tournament Login endpoint and renders only its team-scoped response. Changing codes clears the prior resolution before another lookup. Raw codes, share tokens, internal player IDs, pairing IDs, and tournament UUIDs are never displayed or logged; selection validates team membership and navigates through the existing QR scorecard-path builder without introducing another scorecard implementation.
+
 ### Team Tournament Login exchanges codes for existing mobile-scoring authorization
 
 Team Tournament Codes are six-character uppercase credentials generated deterministically from tournament/team identity with confusing characters excluded and database uniqueness enforced. Codes live in a dedicated RLS-protected relation rather than snapshots. A narrowly scoped signed-out lookup returns only that team's players and current pairing identifiers, issues a fresh expiring `mobile_scoring` share token, and uses the existing QR scorecard-path builder. Team Code access does not introduce player accounts or a second scorecard implementation.

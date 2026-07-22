@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added a prominent signed-out `Player Tournament Login` homepage entry and a mobile-first `/player-tournament-login` code-entry and team-scoped player-selection flow.
+- Reused the existing Team Tournament Login lookup and QR scorecard-path builder so selected players open the existing scorecard with scoped round, pairing, and share-token context.
+- Added uppercase normalization, space/hyphen removal, keyboard submit, duplicate-submit protection, focused retry states, Change Code isolation, and small-screen accessibility coverage.
 - Added the Team Tournament Login foundation: deterministic six-character team codes, authenticated code persistence, a signed-out code lookup boundary, team-scoped player results, and current-pairing context.
 - Added a secure code exchange that issues a fresh existing-purpose `mobile_scoring` share token and resolves player selection through the same `buildMobileScorecardPath` helper used by QR scoring.
 - Added focused coverage for deterministic code rules, collision handling, invalid codes, team isolation, and identical QR/Team Code scorecard destinations.
