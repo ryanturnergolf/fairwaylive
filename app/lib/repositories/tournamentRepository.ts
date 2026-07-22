@@ -20,6 +20,7 @@ export type TournamentRow = {
 };
 
 export type CreateTournamentRowInput = {
+  idempotencyKey: string;
   name: string;
   course: string;
   tournamentDate: string;
@@ -183,6 +184,7 @@ export const createTournamentRow = async (
       tournament_date: input.tournamentDate || null,
       number_of_rounds: input.numberOfRounds,
       status: input.status,
+      creation_key: input.idempotencyKey,
     })
     .select(tournamentColumns)
     .single();

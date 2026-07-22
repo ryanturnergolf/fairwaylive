@@ -8,6 +8,7 @@ type MutationBody =
   | {
       action: "createTournament";
       input: {
+        idempotencyKey: string;
         name: string;
         course: string;
         tournamentDate: string;
@@ -149,53 +150,32 @@ export async function POST(request: Request) {
     const { supabase, coachId } = await getAuthenticatedClient(request);
 
     if (body.action === "createTournament") {
-      // Use INSERT (Prefer: return=minimal) then a separate SELECT to avoid a timing issue
-      // where PostgREST's RETURNING clause evaluates the SELECT RLS policy before the AFTER
-      // trigger has inserted the required tournament_memberships row.
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      const authorization = request.headers.get("authorization") ?? "";
-      const rawAccessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
-
-      const insertResp = await fetch(`${supabaseUrl}/rest/v1/tournaments`, {
-        method: "POST",
-        headers: {
-          "apikey": supabaseAnonKey ?? "",
-          "Authorization": `Bearer ${rawAccessToken}`,
-          "Content-Type": "application/json",
-          "Prefer": "return=minimal",
-        },
-        body: JSON.stringify({
+      const idempotencyKey = body.input.idempotencyKey?.trim() ?? "";
+      if (!/^[A-Za-z0-9:_-]{8,128}$/.test(idempotencyKey)) {
+        throw new Error("A valid tournament creation idempotency key is required.");
+      }
+      const { error: createError } = await supabase
+        .from("tournaments")
+        .insert({
           name: body.input.name,
           course: body.input.course,
           tournament_date: body.input.tournamentDate || null,
           number_of_rounds: body.input.numberOfRounds,
           status: body.input.status,
           owner_id: coachId,
-        }),
-      });
-
-      if (!insertResp.ok) {
-        const errBody = await insertResp.json().catch(() => null) as { message?: string } | null;
-        throw Object.assign(new Error(errBody?.message ?? "Tournament insert failed."), {
-          code: insertResp.status === 403 ? "42501" : "ERROR",
+          creation_key: idempotencyKey,
         });
-      }
+      if (createError && createError.code !== "23505") throw createError;
 
-      // Now SELECT the newly created tournament (membership exists now, SELECT RLS passes)
-      const selectResp = await fetch(
-        `${supabaseUrl}/rest/v1/tournaments?owner_id=eq.${coachId}&order=created_at.desc&limit=1&select=${tournamentColumns}`,
-        {
-          headers: {
-            "apikey": supabaseAnonKey ?? "",
-            "Authorization": `Bearer ${rawAccessToken}`,
-          },
-        }
-      );
-      const rows = await selectResp.json() as Array<Record<string, unknown>>;
-      const inserted = rows[0];
-      if (!inserted) throw new Error("Tournament was created but could not be retrieved.");
-      return NextResponse.json(inserted, { status: 201 });
+      const { data: existing, error: readError } = await supabase
+        .from("tournaments")
+        .select(tournamentColumns)
+        .eq("owner_id", coachId)
+        .eq("creation_key", idempotencyKey)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!existing) throw new Error("Tournament creation could not be resolved by its idempotency key.");
+      return NextResponse.json(existing, { status: createError ? 200 : 201 });
     }
 
     if (body.action === "reconcileTournamentPlayers") {

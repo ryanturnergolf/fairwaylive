@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+### Fixed
+
+- Made tournament creation server-idempotent with a client-generated logical-action key and an owner-scoped database uniqueness constraint.
+- Removed latest-owner tournament resolution: successful inserts return the row resolved by the exact creation key, while concurrent retries return that same UUID.
+- Preserved creation keys across dashboard remounts, auth refreshes, and failed requests for complete seeds, incomplete seeds, and manual creation.
+
 ### Added
 
 - Added authenticated Tournament Director Team Scoring Codes management beside Live Scoring readiness tools, including team-scoped loading, copy fallback, explicit-confirmation regeneration, missing-code generation, and a black-and-white print sheet.
@@ -20,7 +26,7 @@
 
 ### Verification
 
-- Production build passed and Playwright passed 90/90.
+- Tournament creation certification produced 25 unique tournament rows from 25 consecutive incomplete-seed actions; concurrent same-key requests and a later retry returned one UUID, while a different key returned a different UUID.
 
 ## 2026-07-20
 

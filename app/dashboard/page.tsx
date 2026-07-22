@@ -57,6 +57,23 @@ const formatOptions = [
 
 const eventTypeOptions = ["Team Event", "Individual Event", "Both"];
 const steps = ["Basic Information", "Format", "Round Setup", "Integrations", "Review"];
+const creationKeyStoragePrefix = "clubhouse-hq-tournament-creation-key:";
+
+const acquireTournamentCreationKey = (scope: string) => {
+  const storageKey = `${creationKeyStoragePrefix}${scope}`;
+  const existing = window.sessionStorage.getItem(storageKey);
+  if (existing) return existing;
+  const key = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join("-")}`;
+  window.sessionStorage.setItem(storageKey, key);
+  return key;
+};
+
+const releaseTournamentCreationKey = (scope: string, key: string) => {
+  const storageKey = `${creationKeyStoragePrefix}${scope}`;
+  if (window.sessionStorage.getItem(storageKey) === key) window.sessionStorage.removeItem(storageKey);
+};
 
 const emptyDirectorReadModel: DirectorDashboardReadModel = {
   generatedAt: "",
@@ -452,6 +469,8 @@ export default function DashboardPage() {
     setIsSeedingTournament(true);
     setSeedError("");
 
+    const creationScope = "complete-seed";
+    const idempotencyKey = acquireTournamentCreationKey(creationScope);
     try {
       const supabase = getSupabaseBrowserClient();
       const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
@@ -477,6 +496,7 @@ export default function DashboardPage() {
         scoringFormat: localSeed.scoringFormat,
         status: "Upcoming",
         settings: localSeed.settings,
+        idempotencyKey,
       });
       if (createResult.source !== "supabase") {
         throw createResult.error instanceof Error
@@ -512,6 +532,7 @@ export default function DashboardPage() {
       saveTournamentsToStorage(nextTournaments);
       window.localStorage.removeItem(getTournamentStateStorageKey(TEST_TOURNAMENT_ID));
       setTournaments(nextTournaments);
+      releaseTournamentCreationKey(creationScope, idempotencyKey);
       router.push(`/tournament/${tournament.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Tournament seeding failed.";
@@ -534,6 +555,8 @@ export default function DashboardPage() {
     setIsSeedingIncompleteTournament(true);
     setSeedError("");
 
+    const creationScope = "incomplete-seed";
+    const idempotencyKey = acquireTournamentCreationKey(creationScope);
     try {
       const supabase = getSupabaseBrowserClient();
       const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
@@ -553,6 +576,7 @@ export default function DashboardPage() {
         scoringFormat: "Stroke Play",
         status: "Upcoming",
         settings: { rounds: 1, status: "Test" },
+        idempotencyKey,
       });
       if (createResult.source !== "supabase") {
         throw createResult.error instanceof Error
@@ -570,6 +594,7 @@ export default function DashboardPage() {
       ];
       saveTournamentsToStorage(nextTournaments);
       setTournaments(nextTournaments);
+      releaseTournamentCreationKey(creationScope, idempotencyKey);
       router.push(`/tournament/${tournament.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to seed the incomplete tournament.";
@@ -696,6 +721,8 @@ export default function DashboardPage() {
     );
 
     let createResult;
+    const creationScope = "manual";
+    const idempotencyKey = acquireTournamentCreationKey(creationScope);
     try {
       createResult = await createTournament({
       fallbackId: nextId,
@@ -708,9 +735,21 @@ export default function DashboardPage() {
       scoringFormat: normalizedFormState.scoringFormat,
       status: "Upcoming",
       settings: normalizedFormState,
+      idempotencyKey,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Tournament creation failed.";
+      setCreationError(message);
+      setIsCreatingTournament(false);
+      if (/authentication|required|session/i.test(message)) {
+        router.push("/coach-auth?next=/dashboard");
+      }
+      return;
+    }
+    if (createResult.source !== "supabase") {
+      const message = createResult.error instanceof Error
+        ? createResult.error.message
+        : "Supabase tournament creation failed.";
       setCreationError(message);
       setIsCreatingTournament(false);
       if (/authentication|required|session/i.test(message)) {
@@ -778,6 +817,7 @@ export default function DashboardPage() {
     }
 
     saveTournaments((current) => [newTournament, ...current]);
+    releaseTournamentCreationKey(creationScope, idempotencyKey);
     void refreshDirectorReadModel([newTournament, ...tournaments]);
     setIsCreatingTournament(false);
     closeModal();

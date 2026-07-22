@@ -24,6 +24,10 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Milestone: Server-Idempotent Tournament Creation
+
+Tournament creation now uses owner-scoped idempotency keys across manual, complete-seed, and incomplete-seed workflows. Duplicate HTTP requests and retries resolve to one authoritative Supabase row without latest-row lookup; independent keys continue to create independent tournaments.
+
 ### Team Tournament Login Foundation
 
 Status: **IMPLEMENTED**

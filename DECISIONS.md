@@ -4,6 +4,10 @@ Last updated: 2026-07-21
 
 ## Active Decisions
 
+### Tournament creation is idempotent at the database boundary
+
+Every complete seed, incomplete seed, and manual creation action acquires a client-generated key that survives remounts and auth refreshes until the full workflow succeeds. The authenticated API inserts with that key and relies on the unique `(owner_id, creation_key)` constraint for concurrency safety. A uniqueness conflict is resolved by the exact owner/key pair; latest-owner queries and client locks are never correctness boundaries.
+
 ### Team code rotation is an authenticated single-assignment mutation
 
 Tournament staff load code assignments only through the authenticated tournament mutation boundary and table RLS. Generation and regeneration operate on one tournament/team assignment, retry database uniqueness collisions, and never alter pairings, scores, snapshots, or share tokens. Rotation invalidates the previous login code immediately, while already-open scorecards retain their independently scoped share token.

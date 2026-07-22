@@ -37,6 +37,7 @@ import { legacyUiStateToTournamentModel } from "../tournamentModel";
 
 export type CreateTournamentInput = Omit<StoredTournament, "id"> & {
   fallbackId: string;
+  idempotencyKey?: string;
 };
 
 export type CreateTournamentResult = {
@@ -465,6 +466,7 @@ const toRoundCount = (rounds: string) => {
 };
 
 const toTournamentRowInput = (input: CreateTournamentInput): CreateTournamentRowInput => ({
+  idempotencyKey: input.idempotencyKey || `shared:${input.fallbackId}`,
   name: input.name,
   course: input.course,
   tournamentDate: input.date,
@@ -476,7 +478,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 
 const isUuid = (value: string) => uuidPattern.test(value);
 
-export const createTournament = async (
+const createTournamentOnce = async (
   input: CreateTournamentInput
 ): Promise<CreateTournamentResult> => {
   const localTournament: StoredTournament = {
@@ -514,6 +516,20 @@ export const createTournament = async (
       error,
     };
   }
+};
+
+const tournamentCreationRequests = new Map<string, Promise<CreateTournamentResult>>();
+
+export const createTournament = async (input: CreateTournamentInput): Promise<CreateTournamentResult> => {
+  const requestKey = input.idempotencyKey || `shared:${input.fallbackId}`;
+  const inFlightOrCompleted = tournamentCreationRequests.get(requestKey);
+  if (inFlightOrCompleted) return inFlightOrCompleted;
+
+  const request = createTournamentOnce({ ...input, idempotencyKey: requestKey });
+  tournamentCreationRequests.set(requestKey, request);
+  const result = await request;
+  if (result.source !== "supabase") tournamentCreationRequests.delete(requestKey);
+  return result;
 };
 
 export const ensureSharedTournament = async (

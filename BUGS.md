@@ -18,6 +18,12 @@ The signed-out share-token scorecard creates multiple anonymous GoTrueClient ins
 
 ## Resolved
 
+### One logical tournament action could create duplicate Supabase rows
+
+Status: resolved and verified against real Supabase on 2026-07-21.
+
+Tournament creation had only an in-component client lock and resolved success by querying the owner's latest tournament. Concurrent or retried requests could therefore insert multiple rows and converge on the newest UUID, leaving an orphan. Creation now carries a durable logical-action key, the database uniquely constrains `(owner_id, creation_key)`, and the API resolves only that exact key. Failed or interrupted UI attempts retain the key for safe retry.
+
 ### Reciprocal mobile scorecards resumed on different holes
 
 Status: resolved and verified with a fresh real incomplete tournament on 2026-07-20.

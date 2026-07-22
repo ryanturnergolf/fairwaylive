@@ -242,11 +242,22 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
   const scoreEntries: Array<Record<string, unknown>> = [];
   const holeEntries: Array<Record<string, unknown>> = [];
   let createCount = 0;
+  const creationKeys: string[] = [];
+  let createdTournamentRow: Record<string, unknown> | null = null;
   let playerReconcileCount = 0;
   let snapshotCount = 0;
 
   await routeAuthenticatedAuth(page);
   await routeDashboardReads(page);
+  await page.route("**/rest/v1/tournaments?**", async (route) => {
+    const url = new URL(route.request().url());
+    const isExactCreatedTournamentRead = url.searchParams.get("id") === `eq.${tournamentId}`;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(isExactCreatedTournamentRead && createdTournamentRow ? [createdTournamentRow] : []),
+    });
+  });
   await page.route("**/api/tournament-mutations", async (route) => {
     const request = route.request().postDataJSON() as {
       action: string;
@@ -255,24 +266,26 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
     };
     if (request.action === "createTournament") {
       createCount += 1;
+      creationKeys.push(String(request.input?.idempotencyKey ?? ""));
       await new Promise((resolve) => setTimeout(resolve, 100));
+      createdTournamentRow = {
+        id: tournamentId,
+        created_by: userId,
+        owner_id: userId,
+        name: request.input?.name,
+        course: request.input?.course,
+        tournament_date: request.input?.tournamentDate,
+        number_of_rounds: 1,
+        status: "Upcoming",
+        finalized_at: null,
+        aggregate_version: 0,
+        created_at: "2026-07-20T12:00:00.000Z",
+        updated_at: "2026-07-20T12:00:00.000Z",
+      };
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          id: tournamentId,
-          created_by: userId,
-          owner_id: userId,
-          name: request.input?.name,
-          course: request.input?.course,
-          tournament_date: request.input?.tournamentDate,
-          number_of_rounds: 1,
-          status: "Upcoming",
-          finalized_at: null,
-          aggregate_version: 0,
-          created_at: "2026-07-20T12:00:00.000Z",
-          updated_at: "2026-07-20T12:00:00.000Z",
-        }),
+        body: JSON.stringify(createdTournamentRow),
       });
       return;
     }
@@ -326,6 +339,7 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
   await expect(page.getByRole("button", { name: "Seeding Incomplete Tournament..." })).toBeDisabled();
   await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}$`));
 
+  expect(creationKeys).toEqual([creationKeys[0]]);
   expect(createCount).toBe(1);
   expect(playerReconcileCount).toBe(1);
   expect(snapshotCount).toBe(1);
@@ -368,4 +382,43 @@ test("seed failure displays an error and remains on the dashboard", async ({ pag
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByText("Seed service unavailable.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Seed Test Tournament" })).toBeEnabled();
+});
+
+test("a failed creation retry reuses its idempotency key after dashboard remount and auth refresh", async ({ page }) => {
+  const creationKeys: string[] = [];
+  await routeAuthenticatedAuth(page);
+  await routeDashboardReads(page);
+  await page.route("**/api/tournament-mutations", async (route) => {
+    const request = route.request().postDataJSON() as {
+      action: string;
+      input?: Record<string, unknown>;
+    };
+    if (request.action !== "createTournament") {
+      await route.fulfill({ status: 400, body: JSON.stringify({ error: "Unexpected mutation" }) });
+      return;
+    }
+    creationKeys.push(String(request.input?.idempotencyKey ?? ""));
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "The create response was interrupted." }),
+    });
+  });
+
+  await gotoApp(page, "/coach-auth?next=/dashboard");
+  await page.getByLabel("Email").fill("coach@example.test");
+  await page.getByLabel("Password").fill("valid-password");
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.getByRole("button", { name: "Seed Tournament (Incomplete)" }).click();
+  await expect(page.getByText("The create response was interrupted.", { exact: true })).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("button", { name: "Seed Tournament (Incomplete)" })).toBeVisible();
+  await page.getByRole("button", { name: "Seed Tournament (Incomplete)" }).click();
+  await expect(page.getByText("The create response was interrupted.", { exact: true })).toBeVisible();
+
+  expect(creationKeys).toHaveLength(2);
+  expect(creationKeys[0]).toMatch(/^[A-Za-z0-9:_-]{8,128}$/);
+  expect(creationKeys[1]).toBe(creationKeys[0]);
 });
