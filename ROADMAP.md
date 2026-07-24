@@ -4,7 +4,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-21
+Last updated: 2026-07-23
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -23,6 +23,10 @@ The current architecture supports the complete coach workflow from tournament cr
 7. Dashboard readiness convergence (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
+
+### Completed Certification Fix: Bounded Team Login Token Exchange
+
+Repeated Team Tournament Code resolution now reuses one active token per tournament/team under database concurrency control. Expiration creates exactly one replacement, code regeneration preserves already-open scorecards, and QR token issuance remains independent.
 
 ### Completed Milestone: Server-Idempotent Tournament Creation
 

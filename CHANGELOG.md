@@ -1,5 +1,17 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-23
+
+### Fixed
+
+- Bounded Team Tournament Login token issuance to one reusable active `mobile_scoring` token per tournament/team.
+- Serialized simultaneous valid-code exchanges at the database boundary and replaced only expired or revoked Team Login tokens.
+- Kept Team Login token material in a private, non-API schema while preserving existing scorecard URLs, QR tokens, team isolation, and code-regeneration behavior.
+
+### Verification
+
+- Real two-team Supabase verification confirmed zero token-row growth across 25 repeated resolutions and two simultaneous resolutions, separate team scopes, deterministic expired-token replacement, unchanged QR tokens, and unchanged scoring, player/pairing, and snapshot state.
+
 ## 2026-07-21
 
 ### Fixed

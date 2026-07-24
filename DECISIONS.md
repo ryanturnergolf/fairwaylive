@@ -1,8 +1,12 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-21
+Last updated: 2026-07-23
 
 ## Active Decisions
+
+### Team Tournament Login reuses one active token per tournament and team
+
+Team-code exchange stores its reusable raw bearer token only in a private non-API schema linked to the existing hashed `tournament_share_tokens` row. The `(tournament_id, team_id)` identity and a transaction advisory lock serialize concurrent resolution. Active tokens survive browser refresh, multiple players/devices, and code regeneration so already-open scorecards remain valid. Expired or revoked tokens are replaced once and the superseded row is revoked. QR-issued tokens have no Team Login exchange record and remain untouched.
 
 ### Tournament creation is idempotent at the database boundary
 

@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildTeamCodeAssignments,
   generateTeamTournamentCode,
@@ -111,4 +113,88 @@ test("team selection and QR generation resolve the identical scorecard destinati
   expect(teamCodePath).toBe(qrPath);
   expect(teamCodePath).toBe("/scorecard/player-a?pairing=4&round=1&shareToken=team-code-issued-mobile-token");
   expect(resolveTeamPlayerScorecardPath(resolution, "other-team-player")).toBe("");
+});
+
+test("team login token exchange is private, team-scoped, active-only, and concurrency-safe", () => {
+  const migration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260723000000_bound_team_login_share_tokens.sql"),
+    "utf8"
+  );
+
+  expect(migration).toContain("create schema if not exists private");
+  expect(migration).toContain("primary key (tournament_id, team_id)");
+  expect(migration).toContain("references public.team_tournament_codes(tournament_id, team_id)");
+  expect(migration).toContain("pg_advisory_xact_lock");
+  expect(migration).toContain("token.purpose = 'mobile_scoring'");
+  expect(migration).toContain("token.revoked_at is null");
+  expect(migration).toContain("token.expires_at > now()");
+  expect(migration).toContain("set revoked_at = coalesce(revoked_at, now())");
+  expect(migration).not.toContain("update public.team_tournament_codes");
+});
+
+test("repeated team resolutions can reuse one token while other teams remain isolated", async () => {
+  const originalFetch = global.fetch;
+  const teamBResolution: TeamTournamentLoginResolution = {
+    ...resolution,
+    team: { id: "team-b", name: "Hawks", code: "Q9TRF6" },
+    players: [{
+      playerId: "player-c",
+      playerName: "Casey Smith",
+      teamId: "team-b",
+      teamName: "Hawks",
+      roundNumber: 1,
+      groupNumber: 6,
+      markerPlayerId: "player-a",
+    }],
+    pairings: [{
+      groupNumber: 6,
+      teeTime: "",
+      startingHole: "1",
+      players: [{ playerId: "player-c", playerName: "Casey Smith", teamName: "Hawks" }],
+    }],
+    shareToken: "team-b-issued-mobile-token",
+  };
+  const otherTournamentResolution: TeamTournamentLoginResolution = {
+    ...resolution,
+    tournament: { id: "22222222-2222-4222-8222-222222222222", name: "Other Invitational", status: "live" },
+    team: { ...resolution.team, code: "H6WPC2" },
+    shareToken: "other-tournament-team-a-token",
+  };
+  let requestCount = 0;
+  global.fetch = async (_input, init) => {
+    requestCount += 1;
+    const code = String((JSON.parse(String(init?.body)) as { code: string }).code);
+    const body = code === resolution.team.code
+      ? resolution
+      : code === teamBResolution.team.code
+        ? teamBResolution
+        : otherTournamentResolution;
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const repeated = await Promise.all(
+      Array.from({ length: 10 }, () => resolveTeamTournamentCode(resolution.team.code))
+    );
+    const returnedTokens = repeated.map((result) => result.ok ? result.resolution.shareToken : "");
+    expect(new Set(returnedTokens)).toEqual(new Set([resolution.shareToken]));
+
+    const teamBResult = await resolveTeamTournamentCode(teamBResolution.team.code);
+    expect(teamBResult.ok).toBe(true);
+    if (!teamBResult.ok) return;
+    expect(teamBResult.resolution.shareToken).not.toBe(resolution.shareToken);
+    expect(teamBResult.resolution.players.every((player) => player.teamId === "team-b")).toBe(true);
+
+    const otherTournamentResult = await resolveTeamTournamentCode(otherTournamentResolution.team.code);
+    expect(otherTournamentResult.ok).toBe(true);
+    if (!otherTournamentResult.ok) return;
+    expect(otherTournamentResult.resolution.shareToken).not.toBe(resolution.shareToken);
+    expect(otherTournamentResult.resolution.tournament.id).not.toBe(resolution.tournament.id);
+    expect(requestCount).toBe(12);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

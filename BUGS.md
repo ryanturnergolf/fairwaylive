@@ -1,6 +1,6 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-21
+Last updated: 2026-07-23
 
 ## Open Bugs
 
@@ -17,6 +17,12 @@ Status: open.
 The signed-out share-token scorecard creates multiple anonymous GoTrueClient instances using the default Supabase storage key. These clients do not compete for `clubhouse-hq-coach-auth`, but the warnings and redundant clients remain to be resolved.
 
 ## Resolved
+
+### Valid Team Tournament Code lookup created unbounded share-token rows
+
+Status: resolved and verified against a real two-team Supabase tournament on 2026-07-23.
+
+The public code resolver generated and inserted a new 14-day `mobile_scoring` token for every successful lookup. It now reuses one active token per tournament/team through a private exchange record and database advisory lock. Expired or revoked Team Login tokens are replaced once and marked revoked; unrelated QR tokens are never selected, updated, or revoked.
 
 ### One logical tournament action could create duplicate Supabase rows
 
