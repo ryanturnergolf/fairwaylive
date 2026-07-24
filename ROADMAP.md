@@ -24,6 +24,10 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Certification Fix: Team Login Brute-Force Protection
+
+Public Team Tournament Login resolution now has concurrency-safe sliding-window limits by hashed client IP and normalized code. Invalid and throttled attempts share one generic response, while valid team isolation, reusable tokens, and QR scoring remain unchanged.
+
 ### Completed Certification Fix: Bounded Team Login Token Exchange
 
 Repeated Team Tournament Code resolution now reuses one active token per tournament/team under database concurrency control. Expiration creates exactly one replacement, code regeneration preserves already-open scorecards, and QR token issuance remains independent.

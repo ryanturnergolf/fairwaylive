@@ -132,6 +132,35 @@ test("team login token exchange is private, team-scoped, active-only, and concur
   expect(migration).not.toContain("update public.team_tournament_codes");
 });
 
+test("public team login resolution is protected by a concurrent sliding-window rate limit", () => {
+  const migration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260724000000_rate_limit_team_tournament_login.sql"),
+    "utf8"
+  );
+  const route = readFileSync(
+    join(process.cwd(), "app/api/team-tournament-login/resolve/route.ts"),
+    "utf8"
+  );
+
+  expect(migration).toContain("private.team_tournament_login_attempts");
+  expect(migration).toContain("attempted_at > window_started_at");
+  expect(migration).toContain("interval '60 seconds'");
+  expect(migration).toContain("ip_attempt_count >= 30");
+  expect(migration).toContain("code_attempt_count >= 12");
+  expect(migration).toContain("pg_advisory_xact_lock");
+  expect(migration).toContain("'team-login:ip:' || input_ip_hash");
+  expect(migration).toContain("'team-login:code:' || code_key_hash");
+  expect(migration).toContain("code_key_hash text := encode(digest");
+  expect(migration).toContain("revoke execute on function public.resolve_team_tournament_code(text) from anon, authenticated");
+  expect(migration).toContain("return public.resolve_team_tournament_code(normalized_code)");
+  expect(route).toContain('supabase.rpc("resolve_team_tournament_code_rate_limited"');
+  expect(route).toContain('createHash("sha256")');
+  expect(route).not.toContain("input_code_hash");
+  expect(route).toContain('request.headers.get("x-real-ip")');
+  expect(route).toContain('request.headers.get("x-forwarded-for")');
+  expect(route).not.toContain("console.");
+});
+
 test("repeated team resolutions can reuse one token while other teams remain isolated", async () => {
   const originalFetch = global.fetch;
   const teamBResolution: TeamTournamentLoginResolution = {

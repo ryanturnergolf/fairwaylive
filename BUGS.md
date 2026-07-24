@@ -10,6 +10,12 @@ Status: planned follow-up, not a defect in this foundation milestone.
 
 The storage, generation, lookup, homepage entry, signed-out player selection, and Tournament Director code-management/printing controls now exist. QR and player code entry continue to use the same mobile scorecard implementation.
 
+## Resolved Bugs
+
+### Public Team Tournament Login allowed unbounded code guessing
+
+The public resolver now records only hashed IP and normalized-code keys in a private 60-second sliding-window ledger. Database advisory locks serialize concurrent count-and-record operations, invalid and throttled requests return the same generic response, and anonymous callers can no longer execute the unrestricted code resolver directly.
+
 ### Multiple anonymous GoTrueClient warnings
 
 Status: open.

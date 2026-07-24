@@ -4,6 +4,10 @@ Last updated: 2026-07-23
 
 ## Active Decisions
 
+### Team Tournament Login rate limits are database-authoritative
+
+Public code resolution uses a private sliding-window attempt ledger keyed by hashed client IP and normalized code. Transaction advisory locks make the decision consistent across concurrent requests and multiple application instances. The public response intentionally does not reveal whether a code was invalid or a limit was exhausted, and the unrestricted resolver is not executable by anonymous clients.
+
 ### Team Tournament Login reuses one active token per tournament and team
 
 Team-code exchange stores its reusable raw bearer token only in a private non-API schema linked to the existing hashed `tournament_share_tokens` row. The `(tournament_id, team_id)` identity and a transaction advisory lock serialize concurrent resolution. Active tokens survive browser refresh, multiple players/devices, and code regeneration so already-open scorecards remain valid. Expired or revoked tokens are replaced once and the superseded row is revoked. QR-issued tokens have no Team Login exchange record and remain untouched.

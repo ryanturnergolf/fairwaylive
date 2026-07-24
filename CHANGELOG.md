@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Added database-backed sliding-window limits to public Team Tournament Login resolution by hashed client IP and normalized code.
+- Made concurrent limit checks atomic with PostgreSQL advisory locks, removed anonymous access to the unrestricted resolver, and kept invalid and throttled responses indistinguishable.
 - Bounded Team Tournament Login token issuance to one reusable active `mobile_scoring` token per tournament/team.
 - Serialized simultaneous valid-code exchanges at the database boundary and replaced only expired or revoked Team Login tokens.
 - Kept Team Login token material in a private, non-API schema while preserving existing scorecard URLs, QR tokens, team isolation, and code-regeneration behavior.
