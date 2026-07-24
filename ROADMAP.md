@@ -4,7 +4,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -23,6 +23,10 @@ The current architecture supports the complete coach workflow from tournament cr
 7. Dashboard readiness convergence (`650cc7a3ccea792ce4f727cf577d41d77b2938d7`).
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
+
+### Completed Certification Fix: Atomic Save Hole Persistence
+
+Save Hole now waits for the self score, entered current-player statistics, and reciprocal marker score before navigation. Required-write failures remain retryable on the same hole, stable upsert keys prevent duplicates, and immediate refresh after observable completion preserves the complete hole. Real Supabase verification passed and the final automated regression passed 106/106.
 
 ### Completed Certification Fix: Team Login Brute-Force Protection
 

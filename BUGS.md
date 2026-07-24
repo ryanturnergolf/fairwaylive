@@ -1,6 +1,6 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## Open Bugs
 
@@ -11,6 +11,14 @@ Status: planned follow-up, not a defect in this foundation milestone.
 The storage, generation, lookup, homepage entry, signed-out player selection, and Tournament Director code-management/printing controls now exist. QR and player code entry continue to use the same mobile scorecard implementation.
 
 ## Resolved Bugs
+
+### Save Hole could report completion before statistics persisted
+
+Status: resolved and verified against real Supabase on 2026-07-24.
+
+The mobile scorecard awaited aggregate score persistence but launched hole-statistics persistence as detached work. Immediate refresh, navigation, or browser closure could therefore preserve the self and marker scores while losing entered Fairway, GIR, and Putts.
+
+Save Hole now treats entered current-player statistics as a required awaited write, blocks hole navigation until self score, statistics, and reciprocal marker score persistence complete, and remains on the same hole with a retry action when a required write fails. Retries retain the existing stable upsert keys and do not create duplicate score or hole-entry rows.
 
 ### Public Team Tournament Login allowed unbounded code guessing
 

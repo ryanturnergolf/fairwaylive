@@ -1,5 +1,17 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-24
+
+### Fixed
+
+- Made Save Hole await current-player statistics persistence alongside the self score and reciprocal marker score before navigation or success.
+- Kept failed required-statistics saves on the current hole with a retryable error while preserving stable upsert identities and the existing score-only offline fallback.
+
+### Verification
+
+- Real Supabase verification confirmed an immediate post-save refresh retained the Hole 18 self score, reciprocal marker score, Fairway, GIR, and Putts with no duplicate stable keys.
+- Production build passed and Playwright passed 106/106.
+
 ## 2026-07-23
 
 ### Fixed

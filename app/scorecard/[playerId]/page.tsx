@@ -1282,74 +1282,70 @@ export default function PlayerScorecardPage() {
       }));
     }
 
-    let saved = false;
-    await serviceSave({
-      tournamentId: sharedScoreTournamentId,
-      roundNumber,
-      playerId,
-      enteredByPlayerId,
-      holeScores: [...holeScores],
-      total: holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0),
-      entryStatus,
-      submittedAt: null,
-      shareToken: requestedShareToken || undefined,
-    })
-      .then((result) => {
-        saved = true;
-        if (isDevelopment) {
-          setScoreDiagnostics((current) => ({
-            ...current,
-            supabaseSaveResult: `ok ${result.id}`,
-          }));
-        }
+    try {
+      const result = await serviceSave({
+        tournamentId: sharedScoreTournamentId,
+        roundNumber,
+        playerId,
+        enteredByPlayerId,
+        holeScores: [...holeScores],
+        total: holeScores.reduce((sum, score) => sum + (Number.isFinite(score) ? score : 0), 0),
+        entryStatus,
+        submittedAt: null,
+        shareToken: requestedShareToken || undefined,
+      });
 
-        return result;
-      })
-      .then((result) => {
-        void (async () => {
-          try {
-            if (!saveStatistics) {
-              return;
+      if (saveStatistics) {
+        try {
+          if (scope === "hole") {
+            const strokes = Number(holeScores[currentHoleIndex]) || 0;
+            if (strokes > 0) {
+              await saveHoleStatistics(
+                buildScoreHoleEntryInput({
+                  tournamentId: sharedScoreTournamentId,
+                  roundNumber,
+                  playerId,
+                  enteredByPlayerId,
+                  holeNumber: currentHole.holeNumber,
+                  strokes,
+                  fairwayHit: stats?.fairwayHit ?? null,
+                  greenInRegulation: stats?.greenInRegulation ?? null,
+                  putts: stats?.putts ?? null,
+                  penaltyStrokes: null,
+                  entryStatus,
+                  shareToken: requestedShareToken || undefined,
+                })
+              );
             }
-            if (scope === "hole") {
-              const strokes = Number(holeScores[currentHoleIndex]) || 0;
-              if (strokes > 0) {
-                await saveHoleStatistics(
-                  buildScoreHoleEntryInput({
-                    tournamentId: sharedScoreTournamentId,
-                    roundNumber,
-                    playerId,
-                    enteredByPlayerId,
-                    holeNumber: currentHole.holeNumber,
-                    strokes,
-                    fairwayHit: stats?.fairwayHit ?? null,
-                    greenInRegulation: stats?.greenInRegulation ?? null,
-                    putts: stats?.putts ?? null,
-                    penaltyStrokes: null,
-                    entryStatus,
-                    shareToken: requestedShareToken || undefined,
-                  })
-                );
-              }
-            } else {
-              await saveRoundHoleStatistics({
-                tournamentId: sharedScoreTournamentId,
-                roundNumber,
-                playerId,
-                enteredByPlayerId,
-                holeScores: [...holeScores],
-                entryStatus,
-                shareToken: requestedShareToken || undefined,
-              });
-            }
-          } catch (error) {
-            console.warn("[StatisticsService] Unable to save hole statistics.", error);
+          } else {
+            await saveRoundHoleStatistics({
+              tournamentId: sharedScoreTournamentId,
+              roundNumber,
+              playerId,
+              enteredByPlayerId,
+              holeScores: [...holeScores],
+              entryStatus,
+              shareToken: requestedShareToken || undefined,
+            });
           }
-        })();
+        } catch (error) {
+          const hasRequiredStatistics =
+            stats?.fairwayHit != null || stats?.greenInRegulation != null || stats?.putts != null;
+          if (hasRequiredStatistics) {
+            throw error;
+          }
+          console.warn("[StatisticsService] Unable to save optional empty hole statistics.", error);
+        }
+      }
 
-        return result;
-      })
-      .catch((error) => {
+      if (isDevelopment) {
+        setScoreDiagnostics((current) => ({
+          ...current,
+          supabaseSaveResult: `ok ${result.id}`,
+        }));
+      }
+      return true;
+    } catch (error) {
       console.error("[ScoreService] Unable to save score entry.", error);
       if (isDevelopment) {
         setScoreDiagnostics((current) => ({
@@ -1358,8 +1354,9 @@ export default function PlayerScorecardPage() {
           lastSaveError: getErrorMessage(error),
         }));
       }
-    });
-    return saved;
+      setSaveError("Unable to save this hole. Check your connection and try Save Hole again.");
+      return false;
+    }
   };
 
   const queueImmediateScoreSave = (kind: "self" | "marker", nextScores: number[]) => {
@@ -1478,6 +1475,10 @@ export default function PlayerScorecardPage() {
           putts: selectedStats.putts,
           penaltyStrokes: null,
         };
+        const hasEnteredStatistics =
+          targetHoleStats.fairwayHit != null ||
+          targetHoleStats.greenInRegulation != null ||
+          targetHoleStats.putts != null;
         const stableSelfPlayerId = String(scorecard.playerId);
         const stableMarkerPlayerId = isValidPlayerId(scorecard.markerPlayerId) ? String(scorecard.markerPlayerId) : "";
         const localSelfPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.selectedPlayerIds ?? [stableSelfPlayerId], stableSelfPlayerId);
@@ -1501,14 +1502,33 @@ export default function PlayerScorecardPage() {
           ? mergeTournamentScoreSubmission(requestedTournamentId, localSelfPlayerId, roundId, nextScores, "self")
           : true;
         let markerScoreSaved = false;
-        await saveScoreThroughService(stableSelfPlayerId, stableSelfPlayerId, parsedRoundNumber, nextScores, "hole", targetHoleStats);
+        const selfSaveCompleted = await saveScoreThroughService(
+          stableSelfPlayerId,
+          stableSelfPlayerId,
+          parsedRoundNumber,
+          nextScores,
+          "hole",
+          targetHoleStats
+        );
+        if (!selfSaveCompleted && (Boolean(requestedShareToken) || hasEnteredStatistics || !selfScoreSaved)) {
+          return;
+        }
 
         // Save marker score only if markerPlayerId is valid
         if (stableMarkerPlayerId && hasAnyHoleScore(nextMarkerScores)) {
           markerScoreSaved = requestedTournamentId
             ? mergeTournamentScoreSubmission(requestedTournamentId, localMarkerPlayerId, roundId, nextMarkerScores, "marker")
             : true;
-          await saveScoreThroughService(stableMarkerPlayerId, stableSelfPlayerId, parsedRoundNumber, nextMarkerScores, "hole");
+          const markerSaveCompleted = await saveScoreThroughService(
+            stableMarkerPlayerId,
+            stableSelfPlayerId,
+            parsedRoundNumber,
+            nextMarkerScores,
+            "hole"
+          );
+          if (!markerSaveCompleted && (Boolean(requestedShareToken) || !markerScoreSaved)) {
+            return;
+          }
         }
         if (isDevelopment) {
           setScoreDiagnostics((current) => ({
