@@ -8,6 +8,12 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q3A - Relational Participants and Groups
+
+Status: **COMPLETE**
+
+Qualifying draft players, groups, and ordered membership are now owner-scoped relational authority. The atomic save validates roster consistency, uniqueness, non-empty groups, and exactly-one-group membership. The two Q2 drafts were idempotently backfilled and retain their original player/group counts, schedules, scoring modes, and visual session summaries. JSON remains a temporary fallback only for drafts without relational rows. No Tournament Engine tables are written.
+
 ### Qualifying Milestone Q2 — Coach Creation Workflow
 
 Status: **COMPLETE**

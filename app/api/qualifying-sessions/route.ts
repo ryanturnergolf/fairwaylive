@@ -45,17 +45,71 @@ export async function GET(request: Request) {
     if (sessionError) throw sessionError;
 
     const sessionIds = (sessions ?? []).map((session) => String(session.id));
-    const { data: days, error: dayError } = sessionIds.length > 0
-      ? await supabase
+    const [{ data: days, error: dayError }, { data: participants, error: participantError }, { data: groups, error: groupError }] = sessionIds.length > 0
+      ? await Promise.all([
+        supabase
           .from("qualifying_days")
           .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,created_at,updated_at")
           .in("qualifying_session_id", sessionIds)
-          .order("day_number")
-      : { data: [], error: null };
+          .order("day_number"),
+        supabase
+          .from("qualifying_participants")
+          .select("id,qualifying_session_id,player_id,player_name,roster_type,display_order")
+          .in("qualifying_session_id", sessionIds)
+          .order("display_order"),
+        supabase
+          .from("qualifying_groups")
+          .select("id,qualifying_session_id,group_number,display_order")
+          .in("qualifying_session_id", sessionIds)
+          .order("display_order"),
+      ])
+      : [
+        { data: [], error: null },
+        { data: [], error: null },
+        { data: [], error: null },
+      ];
     if (dayError) throw dayError;
+    if (participantError) throw participantError;
+    if (groupError) throw groupError;
+
+    const groupIds = (groups ?? []).map((group) => String(group.id));
+    const { data: members, error: memberError } = groupIds.length > 0
+      ? await supabase
+          .from("qualifying_group_members")
+          .select("qualifying_group_id,qualifying_participant_id,member_order")
+          .in("qualifying_group_id", groupIds)
+          .order("member_order")
+      : { data: [], error: null };
+    if (memberError) throw memberError;
 
     return NextResponse.json({
-      sessions: (sessions ?? []).map((session) => ({
+      sessions: (sessions ?? []).map((session) => {
+        const relationalParticipants = (participants ?? [])
+          .filter((participant) => participant.qualifying_session_id === session.id);
+        const relationalGroups = (groups ?? [])
+          .filter((group) => group.qualifying_session_id === session.id);
+        const participantById = new Map(
+          relationalParticipants.map((participant) => [participant.id, participant])
+        );
+        const selectedPlayers = relationalParticipants.length > 0
+          ? relationalParticipants.map((participant) => ({
+              id: participant.player_id,
+              name: participant.player_name,
+              rosterType: participant.roster_type,
+              classYear: "",
+            }))
+          : session.selected_players;
+        const mappedGroups = relationalGroups.length > 0
+          ? relationalGroups.map((group) => ({
+              id: group.id,
+              name: `Group ${group.group_number}`,
+              playerIds: (members ?? [])
+                .filter((member) => member.qualifying_group_id === group.id)
+                .map((member) => participantById.get(member.qualifying_participant_id)?.player_id)
+                .filter((playerId): playerId is string => Boolean(playerId)),
+            }))
+          : session.groups;
+        return {
         session: {
           id: session.id,
           tournamentId: session.tournament_id,
@@ -64,8 +118,8 @@ export async function GET(request: Request) {
           rosterType: session.roster_type,
           scoringMode: session.scoring_mode,
           status: session.status,
-          selectedPlayers: session.selected_players,
-          groups: session.groups,
+          selectedPlayers,
+          groups: mappedGroups,
           createdAt: session.created_at,
           updatedAt: session.updated_at,
         },
@@ -85,7 +139,8 @@ export async function GET(request: Request) {
           })),
         rounds: [],
         scorerAssignments: [],
-      })),
+      };
+      }),
     });
   } catch (error) {
     return errorResponse(error);

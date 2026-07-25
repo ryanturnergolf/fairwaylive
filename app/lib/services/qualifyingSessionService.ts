@@ -5,10 +5,14 @@ import type {
 import {
   getQualifyingSessionRow,
   listQualifyingDays,
+  listQualifyingGroupMembers,
+  listQualifyingGroups,
+  listQualifyingParticipants,
   listQualifyingRoundMappings,
   listQualifyingScorerAssignments,
 } from "../repositories/qualifyingRepository";
 import { getSupabaseAuthAccessToken } from "../supabaseClient";
+import { resolveQualifyingParticipantGroupConfiguration } from "./qualifyingParticipantGroupService";
 
 export const loadQualifyingSessionFoundation = async (
   sessionId: string
@@ -16,13 +20,28 @@ export const loadQualifyingSessionFoundation = async (
   const session = await getQualifyingSessionRow(sessionId);
   if (!session) return null;
 
-  const [days, rounds, scorerAssignments] = await Promise.all([
+  const [days, rounds, scorerAssignments, participants, groups] = await Promise.all([
     listQualifyingDays(sessionId),
     listQualifyingRoundMappings(sessionId),
     session.scoringMode === "designated_scorer"
       ? listQualifyingScorerAssignments(sessionId)
       : Promise.resolve([]),
+    listQualifyingParticipants(sessionId),
+    listQualifyingGroups(sessionId),
   ]);
+
+  if (participants.length > 0 || groups.length > 0) {
+    const members = await listQualifyingGroupMembers(groups.map((group) => group.id));
+    const configuration = resolveQualifyingParticipantGroupConfiguration({
+      participants,
+      groups,
+      members,
+      legacyPlayers: session.selectedPlayers,
+      legacyGroups: session.groups,
+    });
+    session.selectedPlayers = configuration.selectedPlayers;
+    session.groups = configuration.groups;
+  }
 
   return {
     session,

@@ -32,6 +32,34 @@ export type QualifyingGroup = {
   playerIds: string[];
 };
 
+export type QualifyingParticipant = {
+  id: string;
+  qualifyingSessionId: string;
+  playerId: string;
+  playerName: string;
+  rosterType: QualifyingRosterType;
+  displayOrder: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type QualifyingGroupRecord = {
+  id: string;
+  qualifyingSessionId: string;
+  groupNumber: number;
+  displayOrder: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type QualifyingGroupMember = {
+  qualifyingGroupId: string;
+  qualifyingParticipantId: string;
+  memberOrder: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export type QualifyingDay = {
   id: string;
   qualifyingSessionId: string;

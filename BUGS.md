@@ -4,6 +4,12 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+### Qualifying JSON remains as a temporary compatibility fallback
+
+Status: expected Q3A migration boundary, not a production defect.
+
+New Qualifying saves and reads use relational participants, groups, and memberships as authority. The Q2 `selected_players` and `groups` JSON remains readable only for a legacy session with no relational rows and is not removed in Q3A.
+
 ### Qualifying Q2 creates configuration drafts only
 
 Status: expected milestone boundary, not a production defect.

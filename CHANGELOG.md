@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Q3A owner-scoped relational Qualifying participants, groups, and group membership with transactional draft persistence and deterministic ordering.
+- Added an idempotent backfill for Q2 JSON drafts and relational-first reads with JSON retained only as a temporary no-relational-row fallback.
 - Added the authenticated six-step Qualifying coach creation wizard for roster selection, multi-day course setup, deterministic hole mapping, group assignment, scoring-mode configuration, review, and draft reload.
 - Added atomic owner-scoped Qualifying draft persistence that writes only `qualifying_sessions` and `qualifying_days`, leaving Tournament Engine objects untouched.
 - Added the Qualifying Q1 data foundation with RLS-protected sessions, days, designated-scorer assignments, and relational tournament-round mappings.
@@ -19,6 +21,8 @@
 
 ### Verification
 
+- Applied the Q3A migration to Supabase; verified the existing men's draft retained 6 players/2 groups and the women's draft retained 5 players/2 groups, with unique membership and unchanged schedules/modes.
+- Verified a new relational draft writes participants/groups/members atomically while tournament, round, player, score, snapshot, and share-token counts remain unchanged.
 - Applied the Q2 draft migration to Supabase and verified real Men’s/Reciprocal and Women’s/Designated-Scorer drafts, exact reload, 9/18/27/36-hole persistence, and zero tournament, round, scorecard, snapshot, player, score, or share-token changes.
 - Production build passed and Playwright passed 116/116 for the Qualifying coach creation workflow.
 - Applied the additive Qualifying migration to the connected Supabase project, confirmed no pending migrations, and passed the production build and Playwright 111/111.

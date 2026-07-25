@@ -1,6 +1,9 @@
 import { getSupabaseBrowserClient } from "../supabaseClient";
 import type {
   QualifyingDay,
+  QualifyingGroupMember,
+  QualifyingGroupRecord,
+  QualifyingParticipant,
   QualifyingRoundMapping,
   QualifyingScorerAssignment,
   QualifyingSession,
@@ -52,6 +55,34 @@ type QualifyingScorerAssignmentRow = {
   tournament_round_id: string;
   group_number: number;
   scorer_player_id: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type QualifyingParticipantRow = {
+  id: string;
+  qualifying_session_id: string;
+  player_id: string;
+  player_name: string;
+  roster_type: QualifyingParticipant["rosterType"];
+  display_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type QualifyingGroupRow = {
+  id: string;
+  qualifying_session_id: string;
+  group_number: number;
+  display_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type QualifyingGroupMemberRow = {
+  qualifying_group_id: string;
+  qualifying_participant_id: string;
+  member_order: number;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -113,6 +144,73 @@ const mapAssignment = (
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const mapParticipant = (row: QualifyingParticipantRow): QualifyingParticipant => ({
+  id: row.id,
+  qualifyingSessionId: row.qualifying_session_id,
+  playerId: row.player_id,
+  playerName: row.player_name,
+  rosterType: row.roster_type,
+  displayOrder: row.display_order,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const mapGroup = (row: QualifyingGroupRow): QualifyingGroupRecord => ({
+  id: row.id,
+  qualifyingSessionId: row.qualifying_session_id,
+  groupNumber: row.group_number,
+  displayOrder: row.display_order,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const mapGroupMember = (row: QualifyingGroupMemberRow): QualifyingGroupMember => ({
+  qualifyingGroupId: row.qualifying_group_id,
+  qualifyingParticipantId: row.qualifying_participant_id,
+  memberOrder: row.member_order,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const listQualifyingParticipants = async (
+  sessionId: string
+): Promise<QualifyingParticipant[]> => {
+  const { data, error } = await getClient()
+    .from("qualifying_participants")
+    .select("id,qualifying_session_id,player_id,player_name,roster_type,display_order,created_at,updated_at")
+    .eq("qualifying_session_id", sessionId)
+    .order("display_order")
+    .order("player_id");
+  if (error) throw error;
+  return (data ?? []).map((row) => mapParticipant(row as QualifyingParticipantRow));
+};
+
+export const listQualifyingGroups = async (
+  sessionId: string
+): Promise<QualifyingGroupRecord[]> => {
+  const { data, error } = await getClient()
+    .from("qualifying_groups")
+    .select("id,qualifying_session_id,group_number,display_order,created_at,updated_at")
+    .eq("qualifying_session_id", sessionId)
+    .order("display_order")
+    .order("group_number");
+  if (error) throw error;
+  return (data ?? []).map((row) => mapGroup(row as QualifyingGroupRow));
+};
+
+export const listQualifyingGroupMembers = async (
+  groupIds: string[]
+): Promise<QualifyingGroupMember[]> => {
+  if (groupIds.length === 0) return [];
+  const { data, error } = await getClient()
+    .from("qualifying_group_members")
+    .select("qualifying_group_id,qualifying_participant_id,member_order,created_at,updated_at")
+    .in("qualifying_group_id", groupIds)
+    .order("member_order");
+  if (error) throw error;
+  return (data ?? []).map((row) => mapGroupMember(row as QualifyingGroupMemberRow));
+};
 
 export const getQualifyingSessionRow = async (
   sessionId: string

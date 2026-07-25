@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying participants and groups are relational authority
+
+Q3A stores selected players as immutable per-draft identity/name snapshots and represents groups plus ordered membership relationally. A participant is unique per session and may have exactly one membership; the atomic draft RPC rejects wrong-roster players, duplicates, missing membership, and empty groups before commit. Q2 JSON remains untouched as a temporary fallback only when no relational participant/group rows exist. This milestone does not create or modify Tournament Engine objects.
+
 ### Qualifying coach creation persists drafts without Tournament Engine objects
 
 Q2 draft creation is an authenticated atomic database operation over `qualifying_sessions` and `qualifying_days`. Selected roster players and manual groups are configuration JSON on the owned session; scheduled days remain relational. A draft has a null `tournament_id` until a later explicit activation milestone. Creation must not insert tournaments, tournament rounds, pairings, scorecards, scores, snapshots, share tokens, or scorer assignments. Reciprocal and Designated Group Scorer choices are stored only as configuration in Q2.
