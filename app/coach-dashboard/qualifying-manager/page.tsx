@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
+import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
 import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingSessionService";
 
 export default function QualifyingSessionsPage() {
   const [sessions, setSessions] = useState<QualifyingSessionFoundation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [provisioningId, setProvisioningId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +28,36 @@ export default function QualifyingSessionsPage() {
       cancelled = true;
     };
   }, []);
+
+  const handleProvision = async (qualifyingSessionId: string) => {
+    setError("");
+    setProvisioningId(qualifyingSessionId);
+    try {
+      const result = await provisionQualifyingSession(qualifyingSessionId);
+      setSessions((current) =>
+        current.map((foundation) =>
+          foundation.session.id === qualifyingSessionId
+            ? {
+                ...foundation,
+                session: {
+                  ...foundation.session,
+                  tournamentId: result.tournamentId,
+                  status: result.status,
+                },
+              }
+            : foundation
+        )
+      );
+    } catch (provisionError) {
+      setError(
+        provisionError instanceof Error
+          ? provisionError.message
+          : "Unable to provision qualifying."
+      );
+    } finally {
+      setProvisioningId("");
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
@@ -74,9 +106,30 @@ export default function QualifyingSessionsPage() {
                         {session.rosterType === "men" ? "Men's" : "Women's"} · {session.selectedPlayers.length} players · {days.length} {days.length === 1 ? "day" : "days"}
                       </p>
                     </div>
-                    <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-xs font-black uppercase">
-                      {session.status}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {session.tournamentId ? (
+                        <Link
+                          href={`/tournament/${session.tournamentId}`}
+                          className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
+                        >
+                          Open Tournament
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={provisioningId === session.id}
+                          onClick={() => void handleProvision(session.id)}
+                          className="rounded-lg bg-[#0B3D2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"
+                        >
+                          {provisioningId === session.id
+                            ? "Provisioning..."
+                            : "Provision Tournament"}
+                        </button>
+                      )}
+                      <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-xs font-black uppercase">
+                        {session.status}
+                      </span>
+                    </div>
                   </div>
                 </article>
               ))}

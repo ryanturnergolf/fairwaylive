@@ -8,6 +8,12 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q3B - Tournament Engine Provisioning
+
+Status: **COMPLETE**
+
+Validated Qualifying drafts can now provision one idempotent Tournament Engine tournament through a locked, transactional orchestration boundary. Relational participants synchronize into every deterministic engine round, and 9/18/27/36-hole days map to 9, 18, 18+9, and 18+18 rounds. Concurrent calls and retries reuse the same tournament. Real rollback verification confirmed no partial engine rows, and prohibited pairing, scorecard, access, score, review, snapshot, and statistics writes remain absent.
+
 ### Qualifying Milestone Q3A - Relational Participants and Groups
 
 Status: **COMPLETE**

@@ -4,6 +4,12 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+### Qualifying provisioning intentionally stops before player access
+
+Status: expected Q3B milestone boundary, not a production defect.
+
+Provisioned Qualifying sessions now have a real draft tournament, synchronized players, and mapped rounds. Pairings, scorecards, QR/share tokens, Team Login, qualifying codes, scoring, and snapshots remain absent until later explicit milestones.
+
 ### Qualifying JSON remains as a temporary compatibility fallback
 
 Status: expected Q3A migration boundary, not a production defect.

@@ -3,7 +3,13 @@ export const qualifyingHoleOptions = [9, 18, 27, 36] as const;
 export type QualifyingHolesPerDay = (typeof qualifyingHoleOptions)[number];
 export type QualifyingRosterType = "men" | "women";
 export type QualifyingScoringMode = "reciprocal" | "designated_scorer";
-export type QualifyingSessionStatus = "draft" | "scheduled" | "active" | "complete";
+export type QualifyingSessionStatus =
+  | "draft"
+  | "provisioning"
+  | "provisioned"
+  | "scheduled"
+  | "active"
+  | "complete";
 
 export type QualifyingSession = {
   id: string;
@@ -117,4 +123,14 @@ export type CreateQualifyingSessionInput = {
     teeName: string;
     startingHole: number;
   }>;
+};
+
+export type QualifyingProvisioningResult = {
+  qualifyingSessionId: string;
+  tournamentId: string;
+  status: "provisioned";
+  participantCount: number;
+  roundCount: number;
+  tournamentPlayerCount: number;
+  reusedTournament: boolean;
 };

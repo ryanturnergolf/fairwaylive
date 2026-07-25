@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying provisioning composes Tournament Engine services transactionally
+
+Q3B acquires a per-session PostgreSQL advisory lock and composes the certified idempotent tournament-creation function with reusable tournament-player synchronization and tournament-round provisioning functions inside one database transaction. The deterministic creation key is `qualifying:<session UUID>`. A session moves from Draft through Provisioning to Provisioned atomically; failures roll back to Draft, while concurrent calls and retries return the same tournament. Qualifying never inserts engine objects from its TypeScript coordinator and does not create pairings, scorecards, access tokens, scores, statistics, reviews, or snapshots.
+
 ### Qualifying participants and groups are relational authority
 
 Q3A stores selected players as immutable per-draft identity/name snapshots and represents groups plus ordered membership relationally. A participant is unique per session and may have exactly one membership; the atomic draft RPC rejects wrong-roster players, duplicates, missing membership, and empty groups before commit. Q2 JSON remains untouched as a temporary fallback only when no relational participant/group rows exist. This milestone does not create or modify Tournament Engine objects.

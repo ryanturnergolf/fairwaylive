@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Q3B transactional Qualifying provisioning that composes idempotent tournament creation, reusable player synchronization, and durable round provisioning behind an advisory lock.
+- Added a coach provisioning action that converts a validated draft into a real Tournament Engine tournament and reuses the existing tournament on concurrent calls or retries.
 - Added Q3A owner-scoped relational Qualifying participants, groups, and group membership with transactional draft persistence and deterministic ordering.
 - Added an idempotent backfill for Q2 JSON drafts and relational-first reads with JSON retained only as a temporary no-relational-row fallback.
 - Added the authenticated six-step Qualifying coach creation wizard for roster selection, multi-day course setup, deterministic hole mapping, group assignment, scoring-mode configuration, review, and draft reload.
@@ -21,6 +23,8 @@
 
 ### Verification
 
+- Verified real concurrent Q3B provisioning returned one tournament UUID, produced deterministic 9/18/27/36-hole round mappings, synchronized unique player/round rows, and created no pairings, scores, reviews, snapshots, share tokens, or scorer assignments.
+- Verified a failed real provisioning transaction retained Draft status and produced no partial tournament, round, or player rows; authenticated UI provisioning and reload also passed without console/network errors.
 - Applied the Q3A migration to Supabase; verified the existing men's draft retained 6 players/2 groups and the women's draft retained 5 players/2 groups, with unique membership and unchanged schedules/modes.
 - Verified a new relational draft writes participants/groups/members atomically while tournament, round, player, score, snapshot, and share-token counts remain unchanged.
 - Applied the Q2 draft migration to Supabase and verified real Men’s/Reciprocal and Women’s/Designated-Scorer drafts, exact reload, 9/18/27/36-hole persistence, and zero tournament, round, scorecard, snapshot, player, score, or share-token changes.
