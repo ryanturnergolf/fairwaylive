@@ -8,6 +8,12 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q1 — Data Foundation
+
+Status: **COMPLETE**
+
+Qualifying now has additive RLS-protected session, day, designated-scorer assignment, and tournament-round mapping storage. Read-only domain, repository, session-loading, and deterministic schedule-planning services cover 9-, 18-, 27-, and 36-hole days and multi-day round numbering. The migration is applied to Supabase with no pending migrations; the production build and Playwright 111/111 passed. No Qualifying UI, tournament creation, player access, or scoring integration is included.
+
 ### Minimum Viable Stable Tournament
 
 Status: **COMPLETE**

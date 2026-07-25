@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying reuses Tournament Engine rounds
+
+Qualifying is an additive orchestration domain over the certified Tournament Engine. A qualifying session references one existing tournament, qualifying days describe the schedule, and relational tournament-round records identify the qualifying day and segment. A separate qualifying-round-segments table and a second scoring engine are prohibited. The Q1 repository and services are read-only; existing tournament, scoring, Review, leaderboard, QR, Team Login, and finalization paths do not consume this foundation yet.
+
 ### Official discrepancy resolution is a shared read-time projection
 
 Accept Player Score, Accept Marker Score, and Coach Override persist an official `score_hole_entries` decision while retaining the original self and marker values for audit. A shared resolver selects the latest valid official entry for a player/hole and projects that value onto both sides of score comparison. Mobile Review, Tournament Director verification, Review Queue, submission eligibility, and finalization readiness must consume this rule instead of independently suppressing mismatches or rewriting historical rows.

@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+### Added
+
+- Added the Qualifying Q1 data foundation with RLS-protected sessions, days, designated-scorer assignments, and relational tournament-round mappings.
+- Added deterministic read-only schedule planning for 9-, 18-, 27-, and 36-hole qualifying days without connecting Qualifying to tournament creation or scoring behavior.
+
 ### Fixed
 
 - Converged Tournament Director discrepancy decisions across mobile Review, dashboard verification, Review Queue, submission eligibility, and finalization readiness through one shared official-score resolver.
@@ -12,6 +17,7 @@
 
 ### Verification
 
+- Applied the additive Qualifying migration to the connected Supabase project, confirmed no pending migrations, and passed the production build and Playwright 111/111.
 - Real Supabase flows verified all three discrepancy decisions, current-player submission, zero unresolved queue entries, converged Director totals, preserved audit rows, unique stable keys, and finalization eligibility.
 - Production build passed and Playwright passed 107/107 for official discrepancy convergence.
 - Real Supabase verification confirmed an immediate post-save refresh retained the Hole 18 self score, reciprocal marker score, Fairway, GIR, and Putts with no duplicate stable keys.

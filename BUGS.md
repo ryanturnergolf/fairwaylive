@@ -4,6 +4,12 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+### Qualifying Q1 is a data foundation only
+
+Status: expected milestone boundary, not a production defect.
+
+Qualifying sessions, days, tournament-round mappings, and designated-scorer assignments now have additive RLS-protected storage and read-only services. No creation UI, tournament creation integration, player access, or scoring behavior is enabled until later milestones.
+
 ### Team Tournament Codes are not yet provisioned by tournament UI
 
 Status: planned follow-up, not a defect in this foundation milestone.
