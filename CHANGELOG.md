@@ -4,11 +4,16 @@
 
 ### Fixed
 
+- Converged Tournament Director discrepancy decisions across mobile Review, dashboard verification, Review Queue, submission eligibility, and finalization readiness through one shared official-score resolver.
+- Preserved original self and marker hole rows for audit while applying Accept Player Score, Accept Marker Score, or Coach Override as the authoritative comparison value.
+- Made finished-round review status player-specific and corrected submission confirmation to name the current player.
 - Made Save Hole await current-player statistics persistence alongside the self score and reciprocal marker score before navigation or success.
 - Kept failed required-statistics saves on the current hole with a retryable error while preserving stable upsert identities and the existing score-only offline fallback.
 
 ### Verification
 
+- Real Supabase flows verified all three discrepancy decisions, current-player submission, zero unresolved queue entries, converged Director totals, preserved audit rows, unique stable keys, and finalization eligibility.
+- Production build passed and Playwright passed 107/107 for official discrepancy convergence.
 - Real Supabase verification confirmed an immediate post-save refresh retained the Hole 18 self score, reciprocal marker score, Fairway, GIR, and Putts with no duplicate stable keys.
 - Production build passed and Playwright passed 106/106.
 

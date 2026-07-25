@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Official discrepancy resolution is a shared read-time projection
+
+Accept Player Score, Accept Marker Score, and Coach Override persist an official `score_hole_entries` decision while retaining the original self and marker values for audit. A shared resolver selects the latest valid official entry for a player/hole and projects that value onto both sides of score comparison. Mobile Review, Tournament Director verification, Review Queue, submission eligibility, and finalization readiness must consume this rule instead of independently suppressing mismatches or rewriting historical rows.
+
 ### Save Hole completion includes entered statistics
 
 For share-token mobile scoring, Save Hole is not successful until the current player's self score, entered Fairway/GIR/Putts, and reciprocal marker score have completed their existing persistence operations. Navigation remains locked during that observable save. A required statistics failure leaves the scorer on the same hole and reuses the stable tournament, round, player, entered-by, and hole upsert identity on retry. Score-only local offline fallback remains available when no statistics were entered.

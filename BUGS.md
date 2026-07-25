@@ -12,6 +12,14 @@ The storage, generation, lookup, homepage entry, signed-out player selection, an
 
 ## Resolved Bugs
 
+### Official discrepancy decisions did not converge across tournament views
+
+Status: resolved and verified against real Supabase on 2026-07-24.
+
+Tournament Director resolution marked a `score_hole_entries` row official, but mobile Review and dashboard verification continued comparing unresolved aggregate `score_entries`. Review Queue independently skipped official holes and used group-wide submission status, so mobile submission, Director totals, queue counts, and finalization readiness could disagree.
+
+A shared official-score resolver now selects the latest valid official value per player/hole and projects it onto both comparison sides without changing the original audit rows. Mobile Review, Director verification, Review Queue, submission eligibility, and readiness consume that rule. Finished-round review status is evaluated per player, and confirmation names the current player.
+
 ### Save Hole could report completion before statistics persisted
 
 Status: resolved and verified against real Supabase on 2026-07-24.

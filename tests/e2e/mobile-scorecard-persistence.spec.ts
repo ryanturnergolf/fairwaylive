@@ -1466,6 +1466,57 @@ test("Review comparison model includes score mismatches and statistic completene
   });
 });
 
+test("official discrepancy resolutions converge Review without mutating the audit inputs", () => {
+  const holes = Array.from({ length: 18 }, (_, index) => ({
+    holeNumber: index + 1,
+    par: 4,
+  }));
+  const selfScores = Array.from({ length: 18 }, () => 4);
+  const markerScores = [...selfScores];
+  markerScores[0] = 5;
+
+  [
+    { reviewStatus: "official_player_accepted", officialScore: 4 },
+    { reviewStatus: "official_marker_accepted", officialScore: 5 },
+    { reviewStatus: "official_coach_override", officialScore: 6 },
+  ].forEach(({ reviewStatus, officialScore }) => {
+    const comparison = buildReviewComparisonModel({
+      scoreEntries: [
+        buildScoreEntry("player-1", "player-1", selfScores),
+        buildScoreEntry("player-1", "player-2", markerScores),
+      ],
+      statisticEntries: [
+        ...buildCompleteReviewStatistics(sharedTournamentId, "player-1"),
+        buildScoreHoleEntry({
+          tournament_id: sharedTournamentId,
+          round_number: 1,
+          player_id: "player-1",
+          entered_by_player_id: reviewStatus === "official_coach_override" ? "coach" : "player-1",
+          hole_number: 1,
+          strokes: officialScore,
+          entry_source: reviewStatus === "official_coach_override" ? "coach" : "self",
+          entry_status: "official",
+          review_status: reviewStatus,
+          is_official: true,
+          official_at: "2026-07-24T12:00:00.000Z",
+          official_by: "Tournament Director",
+        }),
+      ],
+      markedPlayerIds: ["player-1"],
+      markerEnteredByPlayerIds: ["player-2"],
+      statisticsPlayerIds: ["player-1"],
+      holes,
+    });
+
+    expect(comparison.selfScores[0]).toBe(officialScore);
+    expect(comparison.markerScores[0]).toBe(officialScore);
+    expect(comparison.mismatches).toEqual([]);
+  });
+
+  expect(selfScores[0]).toBe(4);
+  expect(markerScores[0]).toBe(5);
+});
+
 test("reciprocal Review ownership keeps each player on their own score and statistics", () => {
   const alexScores = Array.from({ length: 18 }, () => 3);
   const jordanScores = Array.from({ length: 18 }, () => 4);

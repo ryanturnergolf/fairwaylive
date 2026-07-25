@@ -620,6 +620,7 @@ test("coach resolves self marker discrepancy and marks the hole official", async
 
   await gotoApp(page, "/dashboard");
   await expect(page.getByText("No groups need review.").first()).toBeVisible();
+  await expect(page.getByText(/Scorer 73.*Marker 73.*Match/).first()).toBeVisible();
 });
 
 test("already-open phone scorecard rejects saves after remote finalization", async ({ browser }) => {

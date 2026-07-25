@@ -2262,7 +2262,7 @@ export default function PlayerScorecardPage() {
             <div className="mt-4 rounded-[28px] border border-[#B8892D]/40 bg-[#B8892D]/8 p-5">
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Confirm Submission</p>
               <p className="mt-3 text-sm leading-6 text-[#0B3D2E]">
-                All scores have been verified for {scorecard.markerPlayerName || "Player"}.
+                All scores have been verified for {scorecard.playerName || "Player"}.
                 {submitWithoutStatistics
                   ? " You chose to continue without recording every required statistic."
                   : " Required statistics are complete."}{" "}

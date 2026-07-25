@@ -11,6 +11,11 @@ import {
 import type { LegacyPairingGroup, TournamentStorageEnvelope } from "../tournamentModel";
 import { loadComparisonScores } from "./scoreService";
 import {
+  applyOfficialScoreResolutions,
+  buildOfficialScoreResolutionMap,
+  type OfficialScoreResolution,
+} from "./officialScoreResolutionService";
+import {
   getTournamentAggregate,
   loadSharedTournamentAggregates,
   type TournamentAggregate,
@@ -341,7 +346,8 @@ const getTournamentReviewHref = (tournamentId: string, groupNumber: number) => {
 const buildScoreVerification = (
   groups: DirectorGroupStatus[],
   scores: ScoreLike[],
-  holeCount: number
+  holeCount: number,
+  officialResolutions = new Map<string, OfficialScoreResolution>()
 ): DirectorReviewPlayerScore[] => {
   const scoresByPlayerId = new Map<string, ScoreLike[]>();
   scores.forEach((score) => scoresByPlayerId.set(score.playerId, [...(scoresByPlayerId.get(score.playerId) ?? []), score]));
@@ -352,13 +358,19 @@ const buildScoreVerification = (
     const markerScore = getBestScore(getScoresByKind(persistedScores, "marker"));
     const scorerComplete = Boolean(scorerScore && hasFinishedScore(scorerScore, holeCount));
     const markerComplete = Boolean(markerScore && hasFinishedScore(markerScore, holeCount));
-    const scorerTotal = scorerScore ? scorerScore.holeScores.slice(0, holeCount).reduce((sum, score) => sum + score, 0) : null;
-    const markerTotal = markerScore ? markerScore.holeScores.slice(0, holeCount).reduce((sum, score) => sum + score, 0) : null;
+    const scorerScores = scorerScore
+      ? applyOfficialScoreResolutions(scorerScore.holeScores, player.playerId, holeCount, officialResolutions)
+      : null;
+    const markerScores = markerScore
+      ? applyOfficialScoreResolutions(markerScore.holeScores, player.playerId, holeCount, officialResolutions)
+      : null;
+    const scorerTotal = scorerScores ? scorerScores.reduce((sum, score) => sum + score, 0) : null;
+    const markerTotal = markerScores ? markerScores.reduce((sum, score) => sum + score, 0) : null;
     const matchStatus: DirectorReviewPlayerScore["matchStatus"] = !scorerScore
       ? "Missing scorer"
       : !markerScore
         ? "Missing marker"
-        : scorerTotal !== markerTotal || scoreArraysConflict(scorerScore.holeScores, markerScore.holeScores)
+        : scorerTotal !== markerTotal || scoreArraysConflict(scorerScores ?? [], markerScores ?? [])
           ? "Mismatch"
           : !scorerComplete || !markerComplete
             ? "Incomplete"
@@ -374,7 +386,8 @@ const buildReviewQueue = (
   holeCount: number,
   tournamentId: string,
   sharedTournamentId: string,
-  officialHoleSet = new Set<string>()
+  officialHoleSet = new Set<string>(),
+  officialResolutions = new Map<string, OfficialScoreResolution>()
 ): DirectorReviewQueueItem[] => {
   const scoresByPlayerId = new Map<string, ScoreLike[]>();
   scores.forEach((score) => {
@@ -400,8 +413,14 @@ const buildReviewQueue = (
         const playerScoresForReview = scoresByPlayerId.get(player.playerId) ?? [];
         const selfScore = getBestScore(getScoresByKind(playerScoresForReview, "self"));
         const markerScore = getBestScore(getScoresByKind(playerScoresForReview, "marker"));
-        const selfHasAny = hasAnyHoleScore(selfScore);
-        const markerHasAny = hasAnyHoleScore(markerScore);
+        const selfScores = selfScore
+          ? applyOfficialScoreResolutions(selfScore.holeScores, player.playerId, holeCount, officialResolutions)
+          : [];
+        const markerScores = markerScore
+          ? applyOfficialScoreResolutions(markerScore.holeScores, player.playerId, holeCount, officialResolutions)
+          : [];
+        const selfHasAny = selfScores.some((score) => score > 0);
+        const markerHasAny = markerScores.some((score) => score > 0);
 
         if (!selfHasAny && markerHasAny) {
           addReviewReason(reasons, "Missing player score");
@@ -411,7 +430,7 @@ const buildReviewQueue = (
           addReviewReason(reasons, "Missing marker score");
         }
 
-        if (selfScore && markerScore && scoreArraysConflict(selfScore.holeScores, markerScore.holeScores, player.playerId, officialHoleSet)) {
+        if (selfScore && markerScore && scoreArraysConflict(selfScores, markerScores)) {
           addReviewReason(reasons, "Self score \u2260 Marker score");
         }
 
@@ -420,27 +439,26 @@ const buildReviewQueue = (
             continue;
           }
 
-          const selfHoleScore = Number(selfScore?.holeScores[index]) || 0;
-          const markerHoleScore = Number(markerScore?.holeScores[index]) || 0;
+          const selfHoleScore = Number(selfScores[index]) || 0;
+          const markerHoleScore = Number(markerScores[index]) || 0;
           if ((selfHoleScore > 0 || markerHoleScore > 0) && (selfHoleScore === 0 || markerHoleScore === 0)) {
             addReviewReason(reasons, "Incomplete hole");
             break;
           }
         }
+        const hasSubmittedOrVerifiedScore = playerScoresForReview.some((score) =>
+          ["submitted", "verified", "official"].includes(score.status)
+        );
+        if (groupFinished && !hasSubmittedOrVerifiedScore) {
+          addReviewReason(reasons, "Round finished but not verified");
+        }
       });
-
-      const hasSubmittedOrVerifiedScore = playerScores.some((score) =>
-        ["submitted", "verified", "official"].includes(score.status)
-      );
-      if (groupFinished && !hasSubmittedOrVerifiedScore) {
-        addReviewReason(reasons, "Round finished but not verified");
-      }
 
       if (reasons.size === 0) {
         return null;
       }
 
-      const scoreVerification = buildScoreVerification([group], scores, holeCount);
+      const scoreVerification = buildScoreVerification([group], scores, holeCount, officialResolutions);
 
       return {
         id: `${tournamentId || sharedTournamentId}-group-${group.groupNumber}`,
@@ -666,7 +684,9 @@ export const buildDirectorTournamentSummary = async ({
     (localEnvelope?.tournament.rounds ?? []).find((round) => round.roundNumber === roundNumber)?.name ||
     `Round ${roundNumber}`;
   const scoreEntries = await loadScoreEntries(sharedTournamentId, roundNumber);
-  const officialHoleSet = buildOfficialHoleSet(await loadOfficialHoleEntries(sharedTournamentId, roundNumber));
+  const officialHoleEntries = await loadOfficialHoleEntries(sharedTournamentId, roundNumber);
+  const officialHoleSet = buildOfficialHoleSet(officialHoleEntries);
+  const officialResolutions = buildOfficialScoreResolutionMap(officialHoleEntries);
   const scores = scoreEntries.map(scoreEntryToScoreLike);
   const holeCount = getHoleCount(aggregate, localEnvelope);
   const groupSummary = summarizeGroups(
@@ -683,7 +703,8 @@ export const buildDirectorTournamentSummary = async ({
     holeCount,
     localTournamentId || sharedTournamentId,
     sharedTournamentId,
-    officialHoleSet
+    officialHoleSet,
+    officialResolutions
   );
 
   return {
@@ -697,7 +718,7 @@ export const buildDirectorTournamentSummary = async ({
     completion: buildCompletion(groupSummary.groups, scores, holeCount, reviewQueue),
     ...groupSummary,
     reviewQueue,
-    scoreVerification: buildScoreVerification(groupSummary.groups, scores, holeCount),
+    scoreVerification: buildScoreVerification(groupSummary.groups, scores, holeCount, officialResolutions),
     lastScoreReceivedAt: getLatestTimestamp(scores.map((score) => score.receivedAt)),
     lastSnapshotAt: aggregate?.snapshotUpdatedAt ?? null,
     lastPlayerSyncAt: getLatestTimestamp(

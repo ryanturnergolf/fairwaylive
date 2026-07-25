@@ -24,6 +24,10 @@ The current architecture supports the complete coach workflow from tournament cr
 
 The MVST regression baseline covers tournament creation, teams, players, cross-tab refresh, pairings, scorecards, QR links, signed-out reciprocal scoring, review, readiness, finalization, Supabase reload, and read-only historical access.
 
+### Completed Certification Fix: Official Discrepancy Convergence
+
+Tournament Director decisions now flow through one official-score projection used by mobile Review, Director verification, Review Queue, submission eligibility, and finalization readiness. Accept Player, Accept Marker, and Coach Override preserve original audit rows, converge scorer/marker totals, and retain per-player submission state. Real Supabase verification passed all three paths and the final automated regression passed 107/107.
+
 ### Completed Certification Fix: Atomic Save Hole Persistence
 
 Save Hole now waits for the self score, entered current-player statistics, and reciprocal marker score before navigation. Required-write failures remain retryable on the same hole, stable upsert keys prevent duplicates, and immediate refresh after observable completion preserves the complete hole. Real Supabase verification passed and the final automated regression passed 106/106.

@@ -2,6 +2,7 @@ import type { ScoreEntryRow } from "../repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
 import { loadComparisonScores } from "./scoreService";
 import { loadTournamentHoleStatistics } from "./statisticsService";
+import { resolveOfficialScoreComparison } from "./officialScoreResolutionService";
 
 export type ReviewHole = {
   holeNumber: number;
@@ -112,14 +113,22 @@ export const buildReviewComparisonModel = ({
 }: BuildReviewComparisonInput): ReviewComparisonModel => {
   const stableSelfEntry = findScoreEntry(scoreEntries, markedPlayerIds, markedPlayerIds);
   const markerEntry = findScoreEntry(scoreEntries, markedPlayerIds, markerEnteredByPlayerIds);
-  const selfScores = normalizeScores(
+  const unresolvedSelfScores = normalizeScores(
     stableSelfEntry?.hole_scores ?? (hasAnyScore(snapshotSelfScores) ? snapshotSelfScores : undefined),
     holes.length
   );
-  const markerScores = normalizeScores(
+  const unresolvedMarkerScores = normalizeScores(
     markerEntry?.hole_scores ?? (hasAnyScore(snapshotMarkerScores) ? snapshotMarkerScores : undefined),
     holes.length
   );
+  const reviewedPlayerId = markedPlayerIds[0] ?? "";
+  const { selfScores, markerScores } = resolveOfficialScoreComparison({
+    playerId: reviewedPlayerId,
+    selfScores: unresolvedSelfScores,
+    markerScores: unresolvedMarkerScores,
+    holeCount: holes.length,
+    officialEntries: statisticEntries,
+  });
   const selfStatisticEntries = statisticEntries.filter(
     (entry) =>
       statisticsPlayerIds.includes(String(entry.player_id)) &&
