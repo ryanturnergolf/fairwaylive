@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added the authenticated six-step Qualifying coach creation wizard for roster selection, multi-day course setup, deterministic hole mapping, group assignment, scoring-mode configuration, review, and draft reload.
+- Added atomic owner-scoped Qualifying draft persistence that writes only `qualifying_sessions` and `qualifying_days`, leaving Tournament Engine objects untouched.
 - Added the Qualifying Q1 data foundation with RLS-protected sessions, days, designated-scorer assignments, and relational tournament-round mappings.
 - Added deterministic read-only schedule planning for 9-, 18-, 27-, and 36-hole qualifying days without connecting Qualifying to tournament creation or scoring behavior.
 
@@ -17,6 +19,8 @@
 
 ### Verification
 
+- Applied the Q2 draft migration to Supabase and verified real Men’s/Reciprocal and Women’s/Designated-Scorer drafts, exact reload, 9/18/27/36-hole persistence, and zero tournament, round, scorecard, snapshot, player, score, or share-token changes.
+- Production build passed and Playwright passed 116/116 for the Qualifying coach creation workflow.
 - Applied the additive Qualifying migration to the connected Supabase project, confirmed no pending migrations, and passed the production build and Playwright 111/111.
 - Real Supabase flows verified all three discrepancy decisions, current-player submission, zero unresolved queue entries, converged Director totals, preserved audit rows, unique stable keys, and finalization eligibility.
 - Production build passed and Playwright passed 107/107 for official discrepancy convergence.

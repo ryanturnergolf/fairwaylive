@@ -285,9 +285,9 @@ const buildQuickActions = (): CoachDashboardAction[] => [
   { label: "Create Tournament", href: "/dashboard", detail: "Open tournament setup", enabled: true },
   { label: "Practice Planner", href: "/coach-dashboard/practice-planner", detail: "Organize upcoming practices", enabled: true },
   {
-    label: "Qualifying Manager",
+    label: "Create Qualifying",
     href: "/coach-dashboard/qualifying-manager",
-    detail: "Review qualifying sessions",
+    detail: "Open qualifying sessions and creation",
     enabled: true,
   },
   {

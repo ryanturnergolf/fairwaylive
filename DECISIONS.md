@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying coach creation persists drafts without Tournament Engine objects
+
+Q2 draft creation is an authenticated atomic database operation over `qualifying_sessions` and `qualifying_days`. Selected roster players and manual groups are configuration JSON on the owned session; scheduled days remain relational. A draft has a null `tournament_id` until a later explicit activation milestone. Creation must not insert tournaments, tournament rounds, pairings, scorecards, scores, snapshots, share tokens, or scorer assignments. Reciprocal and Designated Group Scorer choices are stored only as configuration in Q2.
+
 ### Qualifying reuses Tournament Engine rounds
 
 Qualifying is an additive orchestration domain over the certified Tournament Engine. A qualifying session references one existing tournament, qualifying days describe the schedule, and relational tournament-round records identify the qualifying day and segment. A separate qualifying-round-segments table and a second scoring engine are prohibited. The Q1 repository and services are read-only; existing tournament, scoring, Review, leaderboard, QR, Team Login, and finalization paths do not consume this foundation yet.

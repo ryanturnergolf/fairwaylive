@@ -7,14 +7,29 @@ export type QualifyingSessionStatus = "draft" | "scheduled" | "active" | "comple
 
 export type QualifyingSession = {
   id: string;
-  tournamentId: string;
+  tournamentId: string | null;
   ownerId: string;
   name: string;
   rosterType: QualifyingRosterType;
   scoringMode: QualifyingScoringMode;
   status: QualifyingSessionStatus;
+  selectedPlayers: QualifyingRosterPlayer[];
+  groups: QualifyingGroup[];
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type QualifyingRosterPlayer = {
+  id: string;
+  name: string;
+  rosterType: QualifyingRosterType;
+  classYear: string;
+};
+
+export type QualifyingGroup = {
+  id: string;
+  name: string;
+  playerIds: string[];
 };
 
 export type QualifyingDay = {
@@ -58,4 +73,20 @@ export type QualifyingSessionFoundation = {
   days: QualifyingDay[];
   rounds: QualifyingRoundMapping[];
   scorerAssignments: QualifyingScorerAssignment[];
+};
+
+export type CreateQualifyingSessionInput = {
+  name: string;
+  rosterType: QualifyingRosterType;
+  scoringMode: QualifyingScoringMode;
+  selectedPlayers: QualifyingRosterPlayer[];
+  groups: QualifyingGroup[];
+  days: Array<{
+    dayNumber: number;
+    playDate: string;
+    holesTotal: QualifyingHolesPerDay;
+    courseName: string;
+    teeName: string;
+    startingHole: number;
+  }>;
 };

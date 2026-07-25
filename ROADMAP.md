@@ -8,6 +8,12 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q2 — Coach Creation Workflow
+
+Status: **COMPLETE**
+
+The Coach Dashboard now opens an authenticated six-step Qualifying wizard for Men’s/Women’s roster selection, individual player selection, multi-day 9/18/27/36-hole configuration, manual or auto-balanced groups, scoring-mode selection, and final review. Saving atomically persists only an owner-scoped draft session and its days. Real Supabase verification confirmed exact reload and no tournament, round, scorecard, player, score, snapshot, pairing, QR, or share-token mutations. The production build and Playwright 116/116 passed.
+
 ### Qualifying Milestone Q1 — Data Foundation
 
 Status: **COMPLETE**
