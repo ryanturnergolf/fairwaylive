@@ -341,6 +341,12 @@ export const reconcileSnapshotWithDurableTournamentState = ({
     .reduce((total, pairing) => total + pairing.players.length, 0);
   const expectedScorecardCount =
     durableScorecards.length > 0 ? durableScorecards.length : roundPlayerRows.length;
+  const expectedScorecardPlayerIds = new Set(roundPlayerRows.map((row) => row.player_id));
+  const durableScorecardPlayerIds = new Set(durableScorecards.map((scorecard) => scorecard.player_id));
+  const durableScorecardCoverageComplete =
+    expectedScorecardPlayerIds.size > 0 &&
+    durableScorecardPlayerIds.size === expectedScorecardPlayerIds.size &&
+    [...expectedScorecardPlayerIds].every((playerId) => durableScorecardPlayerIds.has(playerId));
   const snapshotCollectionsComplete =
     envelope.tournament.players.length >= roundPlayerRows.length &&
     snapshotPairedPlayerCount >= durablePairedPlayerCount &&
@@ -353,8 +359,14 @@ export const reconcileSnapshotWithDurableTournamentState = ({
   const scorecardsIncomplete =
     durableScorecards.length > 0 &&
     !hasEveryDurableScorecard(envelope, roundPlayerRows, durableScorecards);
+  const scorecardReadinessIncomplete =
+    durableScorecardCoverageComplete &&
+    (
+      !envelope.uiState.scorecards.scorecardsGenerated ||
+      !getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated
+    );
 
-  if (!playersIncomplete && !pairingsIncomplete && !scorecardsIncomplete) {
+  if (!playersIncomplete && !pairingsIncomplete && !scorecardsIncomplete && !scorecardReadinessIncomplete) {
     return envelope;
   }
 
@@ -443,12 +455,11 @@ export const reconcileSnapshotWithDurableTournamentState = ({
   const roundStates = {
     ...(getRoundStateMap(envelope.tournament.settings) ?? {}),
     [String(roundNumber)]: {
-      scorecardsGenerated:
-        getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated ??
-        (
-          envelope.uiState.scorecards.scorecardsGenerated ||
-          durableScorecards.length === roundPlayerRows.length
-        ),
+      scorecardsGenerated: Boolean(
+        getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated ||
+        envelope.uiState.scorecards.scorecardsGenerated ||
+        durableScorecardCoverageComplete
+      ),
     },
   };
   const roundSetups = {
@@ -512,7 +523,7 @@ export const reconcileSnapshotWithDurableTournamentState = ({
         roundSetup,
         scorecardsGenerated:
           envelope.uiState.scorecards.scorecardsGenerated ||
-          durableScorecards.length === roundPlayerRows.length,
+          durableScorecardCoverageComplete,
         scorecardRows: scorecardsIncomplete
           ? durableScorecardRows
           : envelope.uiState.scorecards.scorecardRows,

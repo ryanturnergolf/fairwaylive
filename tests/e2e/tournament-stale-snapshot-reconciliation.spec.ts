@@ -231,6 +231,116 @@ test("complete snapshot presentation and saved scores remain unchanged", () => {
   expect(second?.uiState.scorecards.scorecardRows[0].scores[0]).toBe(3);
 });
 
+test("durable scorecard coverage repairs stale generated flags without replacing presentation rows", () => {
+  const snapshot = emptySnapshot();
+  snapshot.tournament.settings.roundStates = {
+    "1": { scorecardsGenerated: false },
+  };
+  snapshot.tournament.players = [
+    {
+      id: "legacy-alex",
+      firstName: "Alex",
+      lastName: "Morgan",
+      teamId: "team-1",
+      isIndividual: false,
+      statistics: { teamName: "Durable University" },
+    },
+    {
+      id: "legacy-jordan",
+      firstName: "Jordan",
+      lastName: "Lee",
+      teamId: "team-1",
+      isIndividual: false,
+      statistics: { teamName: "Durable University" },
+    },
+  ];
+  snapshot.tournament.pairings = [
+    {
+      id: "presentation-pairing",
+      roundId: "round-1",
+      groupNumber: 1,
+      teeTime: "8:17 AM",
+      startingHole: "1",
+      players: [
+        {
+          playerId: "player-alex",
+          playerName: "Alex Morgan",
+          teamName: "Durable University",
+        },
+        {
+          playerId: "player-jordan",
+          playerName: "Jordan Lee",
+          teamName: "Durable University",
+        },
+      ],
+    },
+  ];
+  snapshot.uiState.players = [
+    {
+      id: 41,
+      firstName: "Alex",
+      lastName: "Morgan",
+      teamId: "team-1",
+      teamName: "Durable University",
+      handicap: "0",
+      email: "",
+    },
+    {
+      id: 42,
+      firstName: "Jordan",
+      lastName: "Lee",
+      teamId: "team-1",
+      teamName: "Durable University",
+      handicap: "0",
+      email: "",
+    },
+  ];
+  snapshot.uiState.pairings = [
+    {
+      groupNumber: 1,
+      teeTime: "8:17 AM",
+      startingHole: "1",
+      players: snapshot.tournament.pairings[0].players,
+    },
+  ];
+  snapshot.uiState.scorecards.scorecardRows = [
+    {
+      id: 41,
+      playerName: "Alex Morgan",
+      team: "Durable University",
+      scores: [3, ...Array.from({ length: 17 }, () => 4)],
+    },
+    {
+      id: 42,
+      playerName: "Jordan Lee",
+      team: "Durable University",
+      scores: Array.from({ length: 18 }, () => 5),
+    },
+  ];
+  const originalPlayers = structuredClone(snapshot.uiState.players);
+  const originalPairings = structuredClone(snapshot.uiState.pairings);
+  const originalScorecards = structuredClone(snapshot.uiState.scorecards.scorecardRows);
+  const rows = playerRows().map((row) => ({
+    ...row,
+    team_name: "Durable University",
+  }));
+
+  const reconciled = reconcileSnapshotWithDurableTournamentState({
+    envelope: snapshot,
+    tournament,
+    roundNumber: 1,
+    playerRows: rows,
+    durableRound: durableRound(),
+    durableScorecards: durableScorecards(),
+  });
+
+  expect(reconciled?.uiState.scorecards.scorecardsGenerated).toBe(true);
+  expect(reconciled?.tournament.settings.roundStates?.["1"]?.scorecardsGenerated).toBe(true);
+  expect(reconciled?.uiState.players).toEqual(originalPlayers);
+  expect(reconciled?.uiState.pairings).toEqual(originalPairings);
+  expect(reconciled?.uiState.scorecards.scorecardRows).toEqual(originalScorecards);
+});
+
 test("legacy snapshot IDs remain complete when durable identities match by name and team", () => {
   const snapshot = emptySnapshot();
   snapshot.tournament.players = [
