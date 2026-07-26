@@ -29,11 +29,14 @@ export type ImportedPlayerPreview = {
 
 export const normalizePlayerIdentityPart = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 
-export const buildPlayerIdentity = (playerName: string, teamName: string) =>
-  `${normalizePlayerIdentityPart(playerName)}::${normalizePlayerIdentityPart(teamName)}`;
+export const normalizePlayerTeamIdentityPart = (value: string | null | undefined) =>
+  normalizePlayerIdentityPart(value?.trim() || "Unassigned");
+
+export const buildPlayerIdentity = (playerName: string, teamName: string | null | undefined) =>
+  `${normalizePlayerIdentityPart(playerName)}::${normalizePlayerTeamIdentityPart(teamName)}`;
 
 export const getRosterPlayerIdentity = (player: LegacyPlayer) =>
-  buildPlayerIdentity(`${player.firstName} ${player.lastName}`, player.teamName || "Unassigned");
+  buildPlayerIdentity(`${player.firstName} ${player.lastName}`, player.teamName);
 
 export const hasDuplicateRosterIdentity = (players: LegacyPlayer[]) => {
   const identities = new Set<string>();
@@ -79,7 +82,7 @@ export const validatePairingIntegrity = (pairings: LegacyPairingGroup[], players
   for (const pairing of pairings) {
     const groupIdentities = new Set<string>();
     for (const player of pairing.players) {
-      const identity = buildPlayerIdentity(player.playerName, player.teamName || "Unassigned");
+      const identity = buildPlayerIdentity(player.playerName, player.teamName);
       if (!rosterIdentities.has(identity) || groupIdentities.has(identity) || pairedIdentities.has(identity)) {
         return false;
       }
@@ -115,16 +118,36 @@ export const generateScorecardRowsFromPairings = (
   players: LegacyPlayer[],
   holeCount: number
 ): LegacyScorecardRow[] => {
-  if (!validatePairingIntegrity(pairings, players)) return [];
+  if (pairings.length === 0 || players.length === 0 || hasDuplicateRosterIdentity(players)) return [];
 
   const rosterByIdentity = new Map(players.map((player) => [getRosterPlayerIdentity(player), player]));
+  for (const pairing of pairings) {
+    for (const pairedPlayer of pairing.players) {
+      const identity = buildPlayerIdentity(pairedPlayer.playerName, pairedPlayer.teamName);
+      if (!rosterByIdentity.has(identity)) {
+        const team = pairedPlayer.teamName?.trim() || "Unassigned";
+        throw new Error(
+          `Unable to generate scorecard: paired player "${pairedPlayer.playerName}" on team "${team}" was not found in the tournament roster.`
+        );
+      }
+    }
+  }
+
+  if (!validatePairingIntegrity(pairings, players)) return [];
+
   return pairings.flatMap((pairing) =>
     pairing.players.map((pairedPlayer) => {
       const player = rosterByIdentity.get(buildPlayerIdentity(pairedPlayer.playerName, pairedPlayer.teamName));
+      if (!player) {
+        const team = pairedPlayer.teamName?.trim() || "Unassigned";
+        throw new Error(
+          `Unable to generate scorecard: paired player "${pairedPlayer.playerName}" on team "${team}" was not found in the tournament roster.`
+        );
+      }
       return {
-        id: player!.id,
+        id: player.id,
         playerName: pairedPlayer.playerName,
-        team: pairedPlayer.teamName || "Unassigned",
+        team: pairedPlayer.teamName?.trim() ? pairedPlayer.teamName : "Unassigned",
         scores: Array.from({ length: holeCount }, () => 0),
       };
     })

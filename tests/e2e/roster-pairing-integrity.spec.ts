@@ -87,6 +87,44 @@ test("scorecards are generated only from complete validated pairings", () => {
   expect(validateScorecardIntegrity(rows.slice(0, 1), pairings, players)).toBe(false);
 });
 
+test("individual scorecard identities normalize null, blank, and whitespace teams consistently", () => {
+  const individualPlayers = [
+    { ...players[0], id: 11, teamId: "", teamName: null },
+    { ...players[1], id: 12, teamId: "", teamName: "   " },
+  ] as unknown as LegacyPlayer[];
+  const individualPairings = [
+    {
+      id: 1,
+      groupNumber: 1,
+      teeTime: "8:00 AM",
+      startingHole: 1,
+      players: [
+        { playerId: "11", playerName: "Verification Player 1", teamName: "" },
+        { playerId: "12", playerName: "Verification Player 2", teamName: "  " },
+      ],
+    },
+  ];
+
+  expect(validatePairingIntegrity(individualPairings, individualPlayers)).toBe(true);
+  expect(generateScorecardRowsFromPairings(individualPairings, individualPlayers, 9)).toEqual([
+    expect.objectContaining({ id: 11, playerName: "Verification Player 1", team: "Unassigned" }),
+    expect.objectContaining({ id: 12, playerName: "Verification Player 2", team: "Unassigned" }),
+  ]);
+});
+
+test("scorecard generation identifies a paired player that is absent from the roster", () => {
+  const pairings = generatePairings(players);
+  pairings[0].players[0] = {
+    ...pairings[0].players[0],
+    playerName: "Missing Player",
+    teamName: "",
+  };
+
+  expect(() => generateScorecardRowsFromPairings(pairings, players, 18)).toThrow(
+    'Unable to generate scorecard: paired player "Missing Player" on team "Unassigned" was not found in the tournament roster.'
+  );
+});
+
 test("reconciliation identifies stale IDs only inside the requested tournament and round", () => {
   const rows = [
     { tournament_id: "current", round_number: 1, player_id: "current-1" },
