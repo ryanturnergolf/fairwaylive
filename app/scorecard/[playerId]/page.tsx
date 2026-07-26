@@ -24,6 +24,7 @@ import {
   loadReviewComparisonModel,
   type ReviewComparisonModel,
 } from "../../lib/services/reviewComparisonService";
+import { resolveReciprocalScoringAssignments } from "../../lib/services/reciprocalScoringAssignmentService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 import { findInitialScorecardHoleIndex } from "../../lib/services/scorecardResumeService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
@@ -49,6 +50,8 @@ type PlayerScorecard = {
   markerTeam?: string;
   playerScoreIds?: string[];
   markerScoreIds?: string[];
+  assignedMarkerPlayerId?: string;
+  assignedMarkerScoreIds?: string[];
   initialPlayerScores?: number[];
   initialMarkerScores?: number[];
 };
@@ -481,15 +484,14 @@ function ReciprocalPlayerScorecardPage() {
             ? pairing.players.length === 1 ? pairing.players[0] : undefined
             : routeMatchedPairingPlayers.length === 1 ? routeMatchedPairingPlayers[0] : undefined;
 
-        const selectedIndex = selectedPlayer ? pairing.players.indexOf(selectedPlayer) : -1;
-        const synchronizedMarkerId = selectedPlayer?.markerPlayerId;
-        const markerPlayer = synchronizedMarkerId
-          ? pairing.players.find((player) => player.playerId === synchronizedMarkerId)
-          : selectedIndex >= 0 && pairing.players.length > 1
-            ? pairing.players[(selectedIndex + 1) % pairing.players.length]
-            : undefined;
+        const reciprocalAssignments = selectedPlayer
+          ? resolveReciprocalScoringAssignments(pairing.players, selectedPlayer)
+          : null;
+        const markerPlayer = reciprocalAssignments?.markedPlayer;
+        const assignedMarkerPlayer = reciprocalAssignments?.assignedMarkerPlayer;
         const selectedPlayerIds = selectedPlayer ? getIdCandidates(selectedPlayer) : [];
         const markerPlayerIds = markerPlayer ? getIdCandidates(markerPlayer) : [];
+        const assignedMarkerPlayerIds = assignedMarkerPlayer ? getIdCandidates(assignedMarkerPlayer) : [];
         const selectedPlayerId =
           selectedPlayer?.playerId ||
           (routePlayerId && !routePlayerId.startsWith("group-") ? routePlayerId : "") ||
@@ -498,6 +500,9 @@ function ReciprocalPlayerScorecardPage() {
         const markerPlayerId =
           markerPlayer?.playerId ||
           markerPlayerIds[0];
+        const assignedMarkerPlayerId =
+          assignedMarkerPlayer?.playerId ||
+          assignedMarkerPlayerIds[0];
 
         if (!selectedPlayer) {
           finishResolution({ error: "Invalid scoring link. Please request a new mobile scoring link." });
@@ -505,6 +510,15 @@ function ReciprocalPlayerScorecardPage() {
         }
 
         if (!markerPlayer || !markerPlayerId || String(markerPlayerId) === String(selectedPlayerId)) {
+          finishResolution({ error: "Marker assignment is incomplete. Ask the coach to regenerate QR access." });
+          return;
+        }
+
+        if (
+          !assignedMarkerPlayer ||
+          !assignedMarkerPlayerId ||
+          String(assignedMarkerPlayerId) === String(selectedPlayerId)
+        ) {
           finishResolution({ error: "Marker assignment is incomplete. Ask the coach to regenerate QR access." });
           return;
         }
@@ -529,6 +543,8 @@ function ReciprocalPlayerScorecardPage() {
           markerTeam: markerPlayer?.teamName,
           playerScoreIds: selectedPlayerIds,
           markerScoreIds: markerPlayerIds,
+          assignedMarkerPlayerId,
+          assignedMarkerScoreIds: assignedMarkerPlayerIds,
           initialPlayerScores: selectedSnapshotScorecard?.scores,
           initialMarkerScores: markerSnapshotScorecard?.scores,
         });
@@ -551,14 +567,20 @@ function ReciprocalPlayerScorecardPage() {
     }
     return {
       selectedPlayerId: qrResolvedScorecard.playerId,
-      markerPlayerId: qrResolvedScorecard.markerPlayerId,
+      markedPlayerId: qrResolvedScorecard.markerPlayerId,
+      assignedMarkerPlayerId: qrResolvedScorecard.assignedMarkerPlayerId,
       selectedPlayerIds: qrResolvedScorecard.playerScoreIds?.length
         ? qrResolvedScorecard.playerScoreIds
         : [qrResolvedScorecard.playerId],
-      markerPlayerIds: qrResolvedScorecard.markerScoreIds?.length
+      markedPlayerIds: qrResolvedScorecard.markerScoreIds?.length
         ? qrResolvedScorecard.markerScoreIds
         : qrResolvedScorecard.markerPlayerId
           ? [qrResolvedScorecard.markerPlayerId]
+          : [],
+      assignedMarkerPlayerIds: qrResolvedScorecard.assignedMarkerScoreIds?.length
+        ? qrResolvedScorecard.assignedMarkerScoreIds
+        : qrResolvedScorecard.assignedMarkerPlayerId
+          ? [qrResolvedScorecard.assignedMarkerPlayerId]
           : [],
       roundId: `round-${String(Number(qrResolvedScorecard.round) || 1)}`,
     };
@@ -715,7 +737,7 @@ function ReciprocalPlayerScorecardPage() {
           (row) => resolvedPlayerIds.selectedPlayerIds.includes(String(row.id)) && hasAnyHoleScore(row.scores)
         );
         const markerScorecardRow = scorecardRows.find(
-          (row) => resolvedPlayerIds.markerPlayerIds.includes(String(row.id)) && hasAnyHoleScore(row.scores)
+          (row) => resolvedPlayerIds.markedPlayerIds.includes(String(row.id)) && hasAnyHoleScore(row.scores)
         );
 
         const selfScore = envelope.tournament.scores.find(
@@ -733,7 +755,7 @@ function ReciprocalPlayerScorecardPage() {
             : null;
 
         const markerScore = envelope.tournament.scores.find(
-          (s) => resolvedPlayerIds.markerPlayerIds.includes(String(s.playerId)) &&
+          (s) => resolvedPlayerIds.markedPlayerIds.includes(String(s.playerId)) &&
                  s.roundId === resolvedPlayerIds.roundId &&
                  s.enteredBy === "marker"
         );
@@ -786,9 +808,9 @@ function ReciprocalPlayerScorecardPage() {
           loadedSelfScores = chooseMostCompleteScores(loadedSelfScores, remoteSelfScores);
         }
 
-        if (resolvedPlayerIds.markerPlayerId) {
+        if (resolvedPlayerIds.markedPlayerId && resolvedPlayerIds.assignedMarkerPlayerId) {
           const remoteMarkerScores = await loadRemoteScore(
-            resolvedPlayerIds.markerPlayerIds,
+            resolvedPlayerIds.markedPlayerIds,
             resolvedPlayerIds.selectedPlayerId
           );
           if (hasAnyHoleScore(remoteMarkerScores)) {
@@ -798,7 +820,7 @@ function ReciprocalPlayerScorecardPage() {
 
           const remoteCurrentPlayerMarkerScores = await loadRemoteScore(
             resolvedPlayerIds.selectedPlayerIds,
-            resolvedPlayerIds.markerPlayerId
+            resolvedPlayerIds.assignedMarkerPlayerId
           );
           if (remoteCurrentPlayerMarkerScores) {
             if (hasAnyHoleScore(remoteCurrentPlayerMarkerScores)) {
@@ -819,11 +841,11 @@ function ReciprocalPlayerScorecardPage() {
             resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id)) &&
             entry.entry_status === "submitted"
         );
-        const markerEntrySubmitted = resolvedPlayerIds.markerPlayerId
+        const markerEntrySubmitted = resolvedPlayerIds.assignedMarkerPlayerId
           ? sharedScores.some(
               (entry) =>
                 resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
-                resolvedPlayerIds.markerPlayerIds.includes(String(entry.entered_by_player_id)) &&
+                resolvedPlayerIds.assignedMarkerPlayerIds.includes(String(entry.entered_by_player_id)) &&
                 entry.entry_status === "submitted"
             )
           : false;
@@ -859,7 +881,7 @@ function ReciprocalPlayerScorecardPage() {
 
         if (!hasAnyHoleScore(loadedMarkerScores)) {
           const sharedMarkerScores = getSharedScore(
-            resolvedPlayerIds.markerPlayerIds,
+            resolvedPlayerIds.markedPlayerIds,
             [resolvedPlayerIds.selectedPlayerId]
           );
           if (hasAnyHoleScore(sharedMarkerScores)) {
@@ -870,7 +892,7 @@ function ReciprocalPlayerScorecardPage() {
         if (!hasAnyHoleScore(loadedReviewMarkerScores)) {
           const sharedCurrentPlayerMarkerScores = getSharedScore(
             resolvedPlayerIds.selectedPlayerIds,
-            resolvedPlayerIds.markerPlayerId ? resolvedPlayerIds.markerPlayerIds : []
+            resolvedPlayerIds.assignedMarkerPlayerId ? resolvedPlayerIds.assignedMarkerPlayerIds : []
           );
           if (hasAnyHoleScore(sharedCurrentPlayerMarkerScores)) {
             loadedReviewMarkerScores = sharedCurrentPlayerMarkerScores;
@@ -886,7 +908,7 @@ function ReciprocalPlayerScorecardPage() {
             roundNumber,
             shareToken: requestedShareToken || undefined,
             markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
-            markerEnteredByPlayerIds: resolvedPlayerIds.markerPlayerIds,
+            markerEnteredByPlayerIds: resolvedPlayerIds.assignedMarkerPlayerIds,
             statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
             holes: scorecard.holes,
             snapshotSelfScores: scorecard.initialPlayerScores,
@@ -1365,7 +1387,7 @@ function ReciprocalPlayerScorecardPage() {
       return scoreSaveQueueRef.current;
     }
 
-    const playerId = kind === "self" ? resolvedPlayerIds.selectedPlayerId : resolvedPlayerIds.markerPlayerId;
+    const playerId = kind === "self" ? resolvedPlayerIds.selectedPlayerId : resolvedPlayerIds.markedPlayerId;
     if (!playerId || playerId === resolvedPlayerIds.selectedPlayerId && kind === "marker") {
       setSaveError("Unable to save score. Marker assignment is invalid.");
       return scoreSaveQueueRef.current;
@@ -1375,7 +1397,7 @@ function ReciprocalPlayerScorecardPage() {
     const enteredByPlayerId = resolvedPlayerIds.selectedPlayerId;
     const normalizedScores = normalizeHoleScores(nextScores, scorecard.holes.length);
     const localPlayerId = getLocalStoragePlayerId(
-      kind === "self" ? resolvedPlayerIds.selectedPlayerIds : resolvedPlayerIds.markerPlayerIds,
+      kind === "self" ? resolvedPlayerIds.selectedPlayerIds : resolvedPlayerIds.markedPlayerIds,
       playerId
     );
 
@@ -1484,7 +1506,7 @@ function ReciprocalPlayerScorecardPage() {
         const stableMarkerPlayerId = isValidPlayerId(scorecard.markerPlayerId) ? String(scorecard.markerPlayerId) : "";
         const localSelfPlayerId = getLocalStoragePlayerId(resolvedPlayerIds?.selectedPlayerIds ?? [stableSelfPlayerId], stableSelfPlayerId);
         const localMarkerPlayerId = stableMarkerPlayerId
-          ? getLocalStoragePlayerId(resolvedPlayerIds?.markerPlayerIds ?? [stableMarkerPlayerId], stableMarkerPlayerId)
+          ? getLocalStoragePlayerId(resolvedPlayerIds?.markedPlayerIds ?? [stableMarkerPlayerId], stableMarkerPlayerId)
           : "";
         if (isDevelopment) {
           setScoreDiagnostics((current) => ({
@@ -1580,7 +1602,7 @@ function ReciprocalPlayerScorecardPage() {
 
     try {
       await scoreSaveQueueRef.current;
-      if (!sharedScoreTournamentId || !resolvedPlayerIds?.markerPlayerId) {
+      if (!sharedScoreTournamentId || !resolvedPlayerIds?.assignedMarkerPlayerId) {
         throw new Error("Tournament comparison information is unavailable.");
       }
 
@@ -1589,7 +1611,7 @@ function ReciprocalPlayerScorecardPage() {
         roundNumber: Number(scorecard.round) || 1,
         shareToken: requestedShareToken || undefined,
         markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
-        markerEnteredByPlayerIds: resolvedPlayerIds.markerPlayerIds,
+        markerEnteredByPlayerIds: resolvedPlayerIds.assignedMarkerPlayerIds,
         statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
         holes: scorecard.holes,
         snapshotSelfScores: scorecard.initialPlayerScores,
@@ -1641,7 +1663,7 @@ function ReciprocalPlayerScorecardPage() {
     const markerAlreadySubmitted = persistedEntries.some(
       (entry) =>
         resolvedPlayerIds?.selectedPlayerIds.includes(String(entry.player_id)) &&
-        resolvedPlayerIds.markerPlayerIds.includes(String(entry.entered_by_player_id)) &&
+        resolvedPlayerIds.assignedMarkerPlayerIds.includes(String(entry.entered_by_player_id)) &&
         entry.entry_status === "submitted"
     );
     if (scorerAlreadySubmitted && markerAlreadySubmitted) {
@@ -1650,8 +1672,8 @@ function ReciprocalPlayerScorecardPage() {
       return;
     }
 
-    // Validate markerPlayerId before submitting
-    if (!isValidPlayerId(scorecard.markerPlayerId)) {
+    const assignedMarkerPlayerId = resolvedPlayerIds?.assignedMarkerPlayerId;
+    if (!isValidPlayerId(assignedMarkerPlayerId)) {
       setSaveError("Unable to submit. Marker player information is invalid.");
       return;
     }
@@ -1674,8 +1696,7 @@ function ReciprocalPlayerScorecardPage() {
       setSaveError("Complete every required statistic or select the statistics opt-out before submitting.");
       return;
     }
-    const stableMarkerPlayerId = String(scorecard.markerPlayerId);
-    const reviewOwnership = buildReviewOwnership(scorecard.playerId, stableMarkerPlayerId);
+    const reviewOwnership = buildReviewOwnership(scorecard.playerId, String(assignedMarkerPlayerId));
     const submittedAt = new Date().toISOString();
     try {
       await saveRound({

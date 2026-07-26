@@ -7,6 +7,7 @@ import {
   buildIncompleteTournamentSeed,
   INCOMPLETE_TEST_PLAYER_IDS,
 } from "../../app/lib/services/incompleteTournamentSeedService";
+import { resolveReciprocalScoringAssignments } from "../../app/lib/services/reciprocalScoringAssignmentService";
 
 const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
 
@@ -1575,6 +1576,71 @@ test("reciprocal Review ownership keeps each player on their own score and stati
   expect(jordanReview.markerScores).toEqual(jordanScores);
   expect(jordanReview.selfTotal).toBe(72);
   expect(jordanReview.totalPutts).toBe(18);
+});
+
+test("three-player reciprocal Review resolves the inverse scorer while score entry keeps the forward player", () => {
+  const players = [
+    { playerId: "avery", markerPlayerId: "jordan" },
+    { playerId: "jordan", markerPlayerId: "sam" },
+    { playerId: "sam", markerPlayerId: "avery" },
+  ];
+  const expectedAssignments = [
+    { current: "avery", marked: "jordan", assignedMarker: "sam" },
+    { current: "jordan", marked: "sam", assignedMarker: "avery" },
+    { current: "sam", marked: "avery", assignedMarker: "jordan" },
+  ];
+  const holes = Array.from({ length: 9 }, (_, index) => ({
+    holeNumber: index + 1,
+    par: index === 2 || index === 6 ? 3 : 4,
+  }));
+  const scoreEntries = players.flatMap((player) => {
+    const assignments = resolveReciprocalScoringAssignments(players, player);
+    return [
+      buildScoreEntry(player.playerId, player.playerId, Array.from({ length: 9 }, () => 4)),
+      buildScoreEntry(
+        String(assignments.markedPlayer?.playerId),
+        player.playerId,
+        Array.from({ length: 9 }, () => 4)
+      ),
+    ];
+  });
+
+  for (const expected of expectedAssignments) {
+    const currentPlayer = players.find((player) => player.playerId === expected.current);
+    expect(currentPlayer).toBeDefined();
+    const assignments = resolveReciprocalScoringAssignments(players, currentPlayer!);
+    expect(assignments.markedPlayer?.playerId).toBe(expected.marked);
+    expect(assignments.assignedMarkerPlayer?.playerId).toBe(expected.assignedMarker);
+
+    const comparison = buildReviewComparisonModel({
+      scoreEntries,
+      statisticEntries: [],
+      markedPlayerIds: [expected.current],
+      markerEnteredByPlayerIds: [expected.assignedMarker],
+      statisticsPlayerIds: [expected.current],
+      holes,
+    });
+    expect(comparison.selfScores).toEqual(Array.from({ length: 9 }, () => 4));
+    expect(comparison.markerScores).toEqual(Array.from({ length: 9 }, () => 4));
+    expect(comparison.mismatches).toEqual([]);
+  }
+
+  expect(scoreEntries).toHaveLength(6);
+  expect(new Set(scoreEntries.map((entry) => `${entry.player_id}:${entry.entered_by_player_id}`)).size).toBe(6);
+});
+
+test("two-player reciprocal assignment keeps the same marked player and assigned marker", () => {
+  const players = [
+    { playerId: "alex", markerPlayerId: "jordan" },
+    { playerId: "jordan", markerPlayerId: "alex" },
+  ];
+
+  const alexAssignments = resolveReciprocalScoringAssignments(players, players[0]);
+  const jordanAssignments = resolveReciprocalScoringAssignments(players, players[1]);
+  expect(alexAssignments.markedPlayer?.playerId).toBe("jordan");
+  expect(alexAssignments.assignedMarkerPlayer?.playerId).toBe("jordan");
+  expect(jordanAssignments.markedPlayer?.playerId).toBe("alex");
+  expect(jordanAssignments.assignedMarkerPlayer?.playerId).toBe("alex");
 });
 
 test("Review keeps current-player statistics separate and applies stable-first marker precedence", () => {
