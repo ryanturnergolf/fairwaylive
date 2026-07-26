@@ -4,6 +4,12 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+### Qualifying finalization requires a current Tournament Engine snapshot
+
+Status: inherited certified finalization precondition.
+
+Q7 intentionally delegates to the existing Tournament Finalization Service, which requires the backing tournament workspace to have a current authoritative snapshot. Qualifying does not weaken or duplicate that precondition; the operations screen links directly to the existing workspace when reconciliation is needed.
+
 ### Qualifying course configuration does not yet carry hole-level pars
 
 Status: non-blocking Q6 data limitation.

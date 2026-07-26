@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   QualifyingPlayerResult,
   QualifyingResultsReadModel,
+  QualifyingSessionStatus,
   QualifyingStatisticsSummary,
 } from "../../lib/qualifyingModel";
+import { finalizeQualifyingSession } from "../../lib/services/qualifyingFinalizationService";
 import { loadQualifyingResults } from "../../lib/services/qualifyingSessionService";
 
 const formatToPar = (value: number | null) => {
@@ -71,13 +73,20 @@ const ResultsTable = ({ players }: { players: QualifyingPlayerResult[] }) => (
 export default function QualifyingResultsPanel({
   sessionId,
   tournamentId,
+  sessionStatus = "active",
+  historyMode = false,
+  onFinalized,
 }: {
   sessionId: string;
   tournamentId: string;
+  sessionStatus?: QualifyingSessionStatus;
+  historyMode?: boolean;
+  onFinalized?: () => void;
 }) {
   const [results, setResults] = useState<QualifyingResultsReadModel | null>(null);
   const [activeTab, setActiveTab] = useState("combined");
   const [isLoading, setIsLoading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState("");
 
   const refresh = async () => {
@@ -92,22 +101,58 @@ export default function QualifyingResultsPanel({
     }
   };
 
+  useEffect(() => {
+    if (historyMode) void refresh();
+  }, [historyMode]);
+
+  const handleFinalize = async () => {
+    setError("");
+    setIsFinalizing(true);
+    try {
+      await finalizeQualifyingSession(sessionId);
+      await refresh();
+      onFinalized?.();
+    } catch (finalizationError) {
+      setError(
+        finalizationError instanceof Error
+          ? finalizationError.message
+          : "Unable to finalize qualifying."
+      );
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
+  const isFinalized = sessionStatus === "finalized" || results?.sessionStatus === "finalized";
+  const effectiveTournamentId = tournamentId || results?.tournamentId || "";
+
   return (
     <section className="mt-4 rounded-lg border border-[#D9D0C0] bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-black">Qualifying Operations</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-black">{historyMode ? "Qualifying History" : "Qualifying Operations"}</h3>
+            {isFinalized ? (
+              <span className="rounded-full bg-[#0B3D2E] px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+                Read Only
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 text-xs text-[#51635C]">
-            Read-only progress and results from the Tournament Engine.
+            {isFinalized
+              ? "Permanent read-only results from the finalized Tournament Engine."
+              : "Read-only progress and results from the Tournament Engine."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/tournament/${tournamentId}`}
-            className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
-          >
-            Open Tournament Workspace
-          </Link>
+          {effectiveTournamentId ? (
+            <Link
+              href={`/tournament/${effectiveTournamentId}`}
+              className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
+            >
+              Open Tournament Workspace
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => void refresh()}
@@ -116,12 +161,25 @@ export default function QualifyingResultsPanel({
           >
             {isLoading ? "Loading Results..." : results ? "Refresh Results" : "Results"}
           </button>
+          {isFinalized ? (
+            <Link
+              href={`/coach-dashboard/qualifying-manager/${sessionId}`}
+              className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
+            >
+              View History
+            </Link>
+          ) : null}
         </div>
       </div>
 
       {error ? <p role="alert" className="mt-3 text-sm font-semibold text-[#8A2E2E]">{error}</p> : null}
       {results ? (
         <div className="mt-4">
+          {results.finalizedAt ? (
+            <p className="mb-4 rounded-lg border border-[#77B98E] bg-[#ECF8EF] p-3 text-sm font-semibold text-[#146233]">
+              Finalized {new Date(results.finalizedAt).toLocaleString()} by {results.finalizedByName || "Coach"}.
+            </p>
+          ) : null}
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded bg-[#F6F1E6] p-3"><p className="text-xs text-[#51635C]">Session</p><p className="font-black capitalize">{results.sessionStatus}</p></div>
             <div className="rounded bg-[#F6F1E6] p-3"><p className="text-xs text-[#51635C]">Player progress</p><p className="font-black">{results.readiness.playerRoundAssignments}/{results.readiness.expectedPlayerRoundAssignments}</p></div>
@@ -162,6 +220,16 @@ export default function QualifyingResultsPanel({
               }
             />
           </div>
+          {!historyMode && !isFinalized && results.readiness.ready ? (
+            <button
+              type="button"
+              onClick={() => void handleFinalize()}
+              disabled={isFinalizing}
+              className="mt-4 w-full rounded-lg bg-[#B8892D] px-4 py-3 text-sm font-black text-[#0B3D2E] disabled:opacity-60"
+            >
+              {isFinalizing ? "Finalizing Qualifying..." : "Finalize Qualifying"}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

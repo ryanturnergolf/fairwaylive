@@ -54,6 +54,7 @@ export type TournamentRoundReadRow = {
   tournament_id: string;
   round_number: number;
   hole_count: 9 | 18;
+  qualifying_session_id: string | null;
 };
 
 export type TournamentScorecardReadRow = {
@@ -402,7 +403,7 @@ export const getTournamentRound = async (
 ): Promise<TournamentRoundReadRow | null> => {
   const supabase = await getReadClient(options);
   const { data, error } = await supabase.from("tournament_rounds")
-    .select("tournament_id,round_number,hole_count")
+    .select("tournament_id,round_number,hole_count,qualifying_session_id")
     .eq("tournament_id", tournamentId)
     .eq("round_number", roundNumber)
     .maybeSingle();

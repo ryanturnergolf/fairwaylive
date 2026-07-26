@@ -8,6 +8,15 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q7 - Finalization and Historical Results
+
+Status: **IN VERIFICATION**
+
+- Delegate finalization to the certified Tournament Engine workflow.
+- Record only locked, idempotent Qualifying finalized metadata after readiness and Tournament finalization succeed.
+- Expose permanent read-only historical daily/combined results, summaries, statistics, and rankings.
+- Disable access management and setup actions after finalization.
+
 ### Qualifying Milestone Q6 - Reciprocal Certification and Results
 
 Status: **IN VERIFICATION**

@@ -35,6 +35,7 @@ export type BuildQualifyingResultsInput = {
   scoreEntries: ScoreEntryRow[];
   holeEntries: ScoreHoleEntryRow[];
   reviewStatuses: ScoreReviewStatusRow[];
+  finalizedByName?: string | null;
   generatedAt?: string;
 };
 
@@ -281,6 +282,7 @@ export const buildQualifyingResults = ({
   scoreEntries,
   holeEntries,
   reviewStatuses,
+  finalizedByName = null,
   generatedAt = new Date().toISOString(),
 }: BuildQualifyingResultsInput): QualifyingResultsReadModel => {
   const distinctPlayers = [...new Map(
@@ -320,6 +322,9 @@ export const buildQualifyingResults = ({
     sessionName: session.name,
     sessionStatus: session.status,
     scoringMode: session.scoringMode,
+    finalizedAt: session.finalizedAt,
+    finalizedBy: session.finalizedBy,
+    finalizedByName,
     days: dayResults,
     combined: aggregatePlayers(distinctPlayers, allSegmentsByPlayer, rounds.length),
     readiness: buildQualifyingReadiness({

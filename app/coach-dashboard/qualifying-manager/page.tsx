@@ -178,13 +178,28 @@ export default function QualifyingSessionsPage() {
                       </span>
                     </div>
                   </div>
-                  {session.status === "active" ? (
+                  {["active", "finalized"].includes(session.status) ? (
                     <>
-                      <QualifyingAccessPanel sessionId={session.id} />
+                      {session.status === "active" ? (
+                        <QualifyingAccessPanel sessionId={session.id} />
+                      ) : null}
                       {session.tournamentId ? (
                         <QualifyingResultsPanel
                           sessionId={session.id}
                           tournamentId={session.tournamentId}
+                          sessionStatus={session.status}
+                          onFinalized={() => {
+                            setSessions((current) =>
+                              current.map((foundation) =>
+                                foundation.session.id === session.id
+                                  ? {
+                                      ...foundation,
+                                      session: { ...foundation.session, status: "finalized" },
+                                    }
+                                  : foundation
+                              )
+                            );
+                          }}
                         />
                       ) : null}
                     </>

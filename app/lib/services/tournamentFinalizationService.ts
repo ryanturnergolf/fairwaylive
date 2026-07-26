@@ -88,6 +88,12 @@ export type FinalizeTournamentResult = {
   finalizationRecord?: TournamentFinalizationRecord;
 };
 
+export type FinalizeTournamentWithValidatedReadinessInput = {
+  tournamentId: string;
+  finalizedBy: string;
+  finalizationVersion?: number;
+};
+
 export type ReopenFinalizedTournamentInput = {
   tournamentId: string;
   sharedTournamentId?: string;
@@ -510,6 +516,66 @@ export const finalizeTournament = async ({
     },
     finalizationRecord,
   };
+};
+
+export const finalizeTournamentWithValidatedReadiness = async ({
+  tournamentId,
+  finalizedBy,
+  finalizationVersion = currentFinalizationVersion,
+}: FinalizeTournamentWithValidatedReadinessInput): Promise<TournamentFinalizationRecord> => {
+  const aggregate = await getTournamentAggregate(tournamentId);
+  const alreadyFinalizedAt = aggregate?.tournamentRow?.finalized_at;
+  if (
+    alreadyFinalizedAt ||
+    ["finalized", "complete"].includes(String(aggregate?.tournamentRow?.status).toLowerCase())
+  ) {
+    return getTournamentFinalizationRecord(aggregate?.envelope) ?? {
+      isFinalized: true,
+      finalizedAt: alreadyFinalizedAt ?? new Date().toISOString(),
+      finalizedBy: finalizedBy || defaultFinalizedBy,
+      finalizationVersion,
+    };
+  }
+  if (!aggregate?.envelope) {
+    throw new Error("Tournament finalization requires an authoritative shared snapshot.");
+  }
+
+  const finalizationRecord: TournamentFinalizationRecord = {
+    isFinalized: true,
+    finalizedAt: new Date().toISOString(),
+    finalizedBy: finalizedBy || defaultFinalizedBy,
+    finalizationVersion,
+  };
+  const finalizedEnvelope: TournamentStorageEnvelope = {
+    ...aggregate.envelope,
+    tournament: {
+      ...aggregate.envelope.tournament,
+      settings: {
+        ...aggregate.envelope.tournament.settings,
+        status: "Finalized",
+        finalization: finalizationRecord,
+      },
+      rounds: aggregate.envelope.tournament.rounds.map((round) => ({
+        ...round,
+        status: "complete",
+      })),
+    },
+  };
+
+  await finalizeTournamentAggregate({
+    tournamentId,
+    localTournamentId: aggregate.localTournamentId || tournamentId,
+    schemaVersion: finalizedEnvelope.version,
+    stateSnapshot: finalizedEnvelope,
+    finalizedAt: finalizationRecord.finalizedAt,
+  });
+  saveTournamentStorageEnvelope(aggregate.localTournamentId || tournamentId, finalizedEnvelope);
+  updateStoredTournamentFinalizationSettings(
+    aggregate.localTournamentId || tournamentId,
+    "Finalized",
+    finalizationRecord
+  );
+  return finalizationRecord;
 };
 
 export const reopenFinalizedTournament = async ({

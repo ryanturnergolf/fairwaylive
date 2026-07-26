@@ -10,6 +10,8 @@ export type QualifyingSessionStatus =
   | "activating"
   | "scheduled"
   | "active"
+  | "finalizing"
+  | "finalized"
   | "complete";
 
 export type QualifyingSession = {
@@ -22,6 +24,8 @@ export type QualifyingSession = {
   status: QualifyingSessionStatus;
   selectedPlayers: QualifyingRosterPlayer[];
   groups: QualifyingGroup[];
+  finalizedAt: string | null;
+  finalizedBy: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -214,8 +218,20 @@ export type QualifyingResultsReadModel = {
   sessionName: string;
   sessionStatus: QualifyingSessionStatus;
   scoringMode: QualifyingScoringMode;
+  finalizedAt: string | null;
+  finalizedBy: string | null;
+  finalizedByName: string | null;
   days: QualifyingDayResults[];
   combined: QualifyingPlayerResult[];
   readiness: QualifyingReadiness;
   generatedAt: string;
+};
+
+export type QualifyingFinalizationResult = {
+  qualifyingSessionId: string;
+  tournamentId: string;
+  status: "finalized";
+  finalizedAt: string;
+  finalizedBy: string;
+  reusedFinalization: boolean;
 };

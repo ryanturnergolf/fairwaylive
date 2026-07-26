@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying finalization follows Tournament Engine authority
+
+Q7 calls a Qualifying-readiness adapter inside the certified Tournament Finalization Service before recording any Qualifying finalization metadata. The adapter preserves the existing snapshot/tournament compare-and-swap mutation and finalization record, but accepts Q6's multi-round readiness instead of the ordinary single-workspace readiness projection. An owner-scoped advisory-locked RPC then independently verifies the finalized tournament and Q6 readiness before atomically recording only `qualifying_sessions.status`, `finalized_at`, and `finalized_by`. If Tournament finalization fails, Qualifying remains Active; if metadata convergence is interrupted after Tournament success, an idempotent retry completes it without re-finalizing or creating historical result rows.
+
 ### Qualifying results are read-only Tournament Engine projections
 
 Q6 stores no standings, totals, progress, or statistics summaries. It maps existing `tournament_rounds` to Qualifying days and segments, applies the shared official-score resolver to submitted self rows, reads player-owned statistics, and derives competition-ranked daily/combined results plus readiness on demand. Incomplete players remain unranked, withdrawal/disqualification remain non-numeric states, and detailed review/resolution stays in the Tournament Director workspace.

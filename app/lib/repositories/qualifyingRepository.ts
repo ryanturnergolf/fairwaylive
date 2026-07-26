@@ -19,6 +19,8 @@ type QualifyingSessionRow = {
   status: QualifyingSession["status"];
   selected_players: QualifyingSession["selectedPlayers"];
   groups: QualifyingSession["groups"];
+  finalized_at: string | null;
+  finalized_by: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -103,6 +105,8 @@ const mapSession = (row: QualifyingSessionRow): QualifyingSession => ({
   status: row.status,
   selectedPlayers: row.selected_players,
   groups: row.groups,
+  finalizedAt: row.finalized_at,
+  finalizedBy: row.finalized_by,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -217,7 +221,7 @@ export const getQualifyingSessionRow = async (
 ): Promise<QualifyingSession | null> => {
   const { data, error } = await getClient()
     .from("qualifying_sessions")
-    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,created_at,updated_at")
+    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
     .eq("id", sessionId)
     .maybeSingle();
   if (error) throw error;
@@ -227,7 +231,7 @@ export const getQualifyingSessionRow = async (
 export const listQualifyingSessionRows = async (): Promise<QualifyingSession[]> => {
   const { data, error } = await getClient()
     .from("qualifying_sessions")
-    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,created_at,updated_at")
+    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => mapSession(row as QualifyingSessionRow));

@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const supabase = await getAuthenticatedClient(request);
     const { data: sessions, error: sessionError } = await supabase
       .from("qualifying_sessions")
-      .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,created_at,updated_at")
+      .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
       .order("created_at", { ascending: false });
     if (sessionError) throw sessionError;
 
@@ -120,6 +120,8 @@ export async function GET(request: Request) {
           status: session.status,
           selectedPlayers,
           groups: mappedGroups,
+          finalizedAt: session.finalized_at,
+          finalizedBy: session.finalized_by,
           createdAt: session.created_at,
           updatedAt: session.updated_at,
         },

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Q7 Qualifying finalization orchestration through the certified Tournament Engine service, followed by locked and idempotent Qualifying metadata convergence.
+- Added permanent read-only Qualifying history with finalized coach/date, daily and combined results, round summaries, statistics, and final rankings.
 - Added Q6 read-only Qualifying daily, combined, segment, statistics, progress, discrepancy, and readiness projections over authoritative Tournament Engine rows.
 - Added coach operations/results controls with competition ranking, incomplete-player handling, and direct routing to the existing Tournament Director workspace.
 - Added Q5 session-wide Qualifying access codes, isolated player selection, bounded share-token exchange, and routing into the certified mobile scorecard.

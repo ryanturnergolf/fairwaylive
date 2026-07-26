@@ -627,6 +627,10 @@ export const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): 
 };
 
 export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope, roundNumber: number) => {
+  const durableRound = await getTournamentRound(envelope.tournament.id, roundNumber).catch(() => null);
+  if (durableRound?.qualifying_session_id) {
+    return;
+  }
   const rows = buildTournamentPlayerRows(envelope).filter((row) => row.round_number === roundNumber);
   await reconcileTournamentPlayers(
     [{ tournamentId: envelope.tournament.id, roundNumber }],

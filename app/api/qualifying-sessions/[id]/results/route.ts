@@ -55,7 +55,7 @@ export async function GET(
     const { supabase, coachId } = await getAuthenticatedClient(request);
     const { data: sessionRow, error: sessionError } = await supabase
       .from("qualifying_sessions")
-      .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,created_at,updated_at")
+      .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
       .eq("id", id)
       .maybeSingle();
     if (sessionError) throw sessionError;
@@ -105,6 +105,14 @@ export async function GET(
     const queryError = dayError || roundError || participantError || playerError ||
       scorecardError || scoreError || holeError || reviewError;
     if (queryError) throw queryError;
+    const { data: finalizingCoach, error: coachError } = sessionRow.finalized_by
+      ? await supabase
+          .from("coaches")
+          .select("display_name")
+          .eq("id", sessionRow.finalized_by)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (coachError) throw coachError;
 
     const selectedPlayers = (participants ?? []).map((participant) => ({
       id: String(participant.player_id),
@@ -122,6 +130,8 @@ export async function GET(
       status: sessionRow.status,
       selectedPlayers,
       groups: sessionRow.groups ?? [],
+      finalizedAt: sessionRow.finalized_at,
+      finalizedBy: sessionRow.finalized_by,
       createdAt: sessionRow.created_at,
       updatedAt: sessionRow.updated_at,
     };
@@ -170,6 +180,7 @@ export async function GET(
       scoreEntries: (scoreEntries ?? []) as ScoreEntryRow[],
       holeEntries: (holeEntries ?? []) as ScoreHoleEntryRow[],
       reviewStatuses: (reviews ?? []) as ScoreReviewStatusRow[],
+      finalizedByName: finalizingCoach?.display_name ?? null,
     }));
   } catch (error) {
     return errorResponse(error);
