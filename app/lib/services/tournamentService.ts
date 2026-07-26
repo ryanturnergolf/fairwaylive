@@ -1,6 +1,8 @@
 import {
   createTournamentRow,
   getTournamentPlayers,
+  getTournamentRound,
+  getTournamentScorecards,
   getTournamentRow,
   getTournamentStateSnapshot,
   listTournamentRows,
@@ -1207,7 +1209,23 @@ export const loadSharedTournamentScorecardState = async (
     getTournamentStateSnapshot(tournamentId, { shareToken }).catch(() => null),
   ]);
 
-  if (!tournamentRow || playerRows.length === 0 || !isTournamentStorageEnvelope(snapshot?.state_snapshot)) {
+  const snapshotEnvelope = isTournamentStorageEnvelope(snapshot?.state_snapshot)
+    ? snapshot.state_snapshot
+    : null;
+  const hasSnapshot = Boolean(snapshotEnvelope);
+  const [durableRound, durableScorecards] = hasSnapshot
+    ? [null, []]
+    : await Promise.all([
+        getTournamentRound(tournamentId, roundNumber, { shareToken }).catch(() => null),
+        getTournamentScorecards(tournamentId, roundNumber, { shareToken }).catch(() => []),
+      ]);
+  const hasDurableQualifyingArtifacts =
+    Boolean(durableRound) &&
+    durableScorecards.length === playerRows.length &&
+    durableScorecards.every((scorecard) =>
+      playerRows.some((player) => player.player_id === scorecard.player_id)
+    );
+  if (!tournamentRow || playerRows.length === 0 || (!hasSnapshot && !hasDurableQualifyingArtifacts)) {
     return null;
   }
 
@@ -1229,13 +1247,14 @@ export const loadSharedTournamentScorecardState = async (
     return null;
   }
 
-  const snapshotEnvelope = snapshot.state_snapshot;
-  const configuredRoundSetup = getRoundSetupMap(snapshotEnvelope.tournament.settings)?.[String(roundNumber)];
-  const uiRoundSetup = snapshotEnvelope.uiState.scorecards.roundSetup;
+  const configuredRoundSetup = snapshotEnvelope
+    ? getRoundSetupMap(snapshotEnvelope.tournament.settings)?.[String(roundNumber)]
+    : null;
+  const uiRoundSetup = snapshotEnvelope?.uiState.scorecards.roundSetup ?? null;
   const exactRoundSetup = configuredRoundSetup ??
-    (Number(uiRoundSetup.roundNumber) === roundNumber ? uiRoundSetup : null);
-  const parsedHoleCount = Number(exactRoundSetup?.numberOfHoles);
-  if (!exactRoundSetup || !Number.isInteger(parsedHoleCount) || parsedHoleCount < 1 || parsedHoleCount > 18) {
+    (uiRoundSetup && Number(uiRoundSetup.roundNumber) === roundNumber ? uiRoundSetup : null);
+  const parsedHoleCount = Number(exactRoundSetup?.numberOfHoles ?? durableRound?.hole_count);
+  if ((!exactRoundSetup && !durableRound) || !Number.isInteger(parsedHoleCount) || parsedHoleCount < 1 || parsedHoleCount > 18) {
     return null;
   }
 
@@ -1265,7 +1284,7 @@ export const loadSharedTournamentScorecardState = async (
         markerPlayerId: String(row.marker_player_id),
       })),
     }));
-  const snapshotScorecardRows = snapshotEnvelope.uiState.scorecards.scorecardRows;
+  const snapshotScorecardRows = snapshotEnvelope?.uiState.scorecards.scorecardRows ?? [];
   const findSnapshotScorecard = (row: TournamentPlayerRow) => {
     const byStableId = snapshotScorecardRows.filter((scorecard) => String(scorecard.id) === row.player_id);
     if (byStableId.length === 1) {
@@ -1283,11 +1302,11 @@ export const loadSharedTournamentScorecardState = async (
   return {
     tournament: toStoredTournament(tournamentRow),
     isFinalized: Boolean(
-      snapshotEnvelope.tournament.settings.finalization &&
+      snapshotEnvelope?.tournament.settings.finalization &&
         typeof snapshotEnvelope.tournament.settings.finalization === "object" &&
         (snapshotEnvelope.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
     ),
-    updatedAt: snapshot.updated_at ?? tournamentRow.updated_at,
+    updatedAt: snapshot?.updated_at ?? tournamentRow.updated_at,
     pairings,
     scorecardRows: sharedPlayerRows.map((row) => {
       const snapshotScorecard = findSnapshotScorecard(row);
@@ -1304,7 +1323,7 @@ export const loadSharedTournamentScorecardState = async (
     roundSetup: {
       roundNumber: String(roundNumber),
       numberOfHoles: String(parsedHoleCount),
-      countingScores: String(Number(exactRoundSetup.countingScores) || 4),
+      countingScores: String(Number(exactRoundSetup?.countingScores) || 4),
     },
   };
 };

@@ -50,6 +50,20 @@ export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
   updated_at: string | null;
 };
 
+export type TournamentRoundReadRow = {
+  tournament_id: string;
+  round_number: number;
+  hole_count: 9 | 18;
+};
+
+export type TournamentScorecardReadRow = {
+  tournament_id: string;
+  round_number: number;
+  player_id: string;
+  hole_count: 9 | 18;
+  status: string;
+};
+
 export type TournamentPlayerReconcileScope = {
   tournamentId: string;
   roundNumber: number;
@@ -379,6 +393,35 @@ export const getTournamentPlayers = async (
   }
 
   return (data ?? []) as TournamentPlayerRow[];
+};
+
+export const getTournamentRound = async (
+  tournamentId: string,
+  roundNumber: number,
+  options: ShareTokenReadOptions = {}
+): Promise<TournamentRoundReadRow | null> => {
+  const supabase = await getReadClient(options);
+  const { data, error } = await supabase.from("tournament_rounds")
+    .select("tournament_id,round_number,hole_count")
+    .eq("tournament_id", tournamentId)
+    .eq("round_number", roundNumber)
+    .maybeSingle();
+  if (error) throw error;
+  return data as TournamentRoundReadRow | null;
+};
+
+export const getTournamentScorecards = async (
+  tournamentId: string,
+  roundNumber: number,
+  options: ShareTokenReadOptions = {}
+): Promise<TournamentScorecardReadRow[]> => {
+  const supabase = await getReadClient(options);
+  const { data, error } = await supabase.from("tournament_scorecards")
+    .select("tournament_id,round_number,player_id,hole_count,status")
+    .eq("tournament_id", tournamentId)
+    .eq("round_number", roundNumber);
+  if (error) throw error;
+  return (data ?? []) as TournamentScorecardReadRow[];
 };
 
 export const createTournamentShareToken = async (

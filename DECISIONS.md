@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying access exchanges into certified mobile scoring
+
+Q5 stores one hash-only, deterministic qualifying code per Active session. Public resolution is database-authoritative, session-isolated, rate-limited by hashed IP and normalized-code keys, and never exposes relational tables. Player selection exchanges into the existing `mobile_scoring` share-token system with one bounded reusable token per session, player, and active round; the destination remains the certified `/scorecard/[playerId]` route.
+
 ### Qualifying activation composes durable Tournament Engine artifacts
 
 Q4 uses a per-session advisory lock and one database transaction. The pairing service applies the relational Qualifying groups to the existing `tournament_players` pairing identity fields; the scorecard service creates one durable `tournament_scorecards` artifact per tournament, round, and player. Activation validates readiness counts before moving Provisioned through Activating to Active. Retries return the existing activation and failures roll back all artifacts and status changes.

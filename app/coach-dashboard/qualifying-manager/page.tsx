@@ -6,6 +6,7 @@ import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
 import { activateQualifyingSession } from "../../lib/services/qualifyingActivationService";
 import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
 import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingSessionService";
+import QualifyingAccessPanel from "./QualifyingAccessPanel";
 
 export default function QualifyingSessionsPage() {
   const [sessions, setSessions] = useState<QualifyingSessionFoundation[]>([]);
@@ -176,6 +177,9 @@ export default function QualifyingSessionsPage() {
                       </span>
                     </div>
                   </div>
+                  {session.status === "active" ? (
+                    <QualifyingAccessPanel sessionId={session.id} />
+                  ) : null}
                 </article>
               ))}
             </div>

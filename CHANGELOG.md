@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Q5 session-wide Qualifying access codes, isolated player selection, bounded share-token exchange, and routing into the certified mobile scorecard.
+- Added coach code management and a signed-out Qualifying Login flow with an explicit designated-scorer milestone block.
 - Added Q4 transactional Qualifying activation, composing durable Tournament Engine pairing and scorecard generation under an advisory lock.
 - Added idempotent coach activation with readiness validation and no scoring, review, snapshot, access-token, or QR writes.
 - Added Q3B transactional Qualifying provisioning that composes idempotent tournament creation, reusable player synchronization, and durable round provisioning behind an advisory lock.

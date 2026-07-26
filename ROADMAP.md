@@ -8,6 +8,15 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q5 - Qualifying Access and Player Entry
+
+Status: **COMPLETE**
+
+- Manage one session-wide hash-only access code.
+- Resolve only Active reciprocal sessions and their relational participants.
+- Reuse bounded `mobile_scoring` share tokens and the certified scorecard route.
+- Explicitly block Designated Group Scorer access until its scoring milestone.
+
 ### Qualifying Milestone Q4 - Pairings and Scorecard Generation
 
 Status: **COMPLETE**
