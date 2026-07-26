@@ -4,6 +4,12 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+### Qualifying activation intentionally stops before player access
+
+Status: expected Q4 milestone boundary, not a production defect.
+
+Active Qualifying sessions have durable pairings and generated scorecard artifacts. QR/share tokens, Team Login, qualifying codes, scores, statistics, reviews, and snapshots remain absent until later milestones.
+
 ### Qualifying provisioning intentionally stops before player access
 
 Status: expected Q3B milestone boundary, not a production defect.

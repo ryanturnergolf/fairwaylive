@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying activation composes durable Tournament Engine artifacts
+
+Q4 uses a per-session advisory lock and one database transaction. The pairing service applies the relational Qualifying groups to the existing `tournament_players` pairing identity fields; the scorecard service creates one durable `tournament_scorecards` artifact per tournament, round, and player. Activation validates readiness counts before moving Provisioned through Activating to Active. Retries return the existing activation and failures roll back all artifacts and status changes.
+
 ### Qualifying provisioning composes Tournament Engine services transactionally
 
 Q3B acquires a per-session PostgreSQL advisory lock and composes the certified idempotent tournament-creation function with reusable tournament-player synchronization and tournament-round provisioning functions inside one database transaction. The deterministic creation key is `qualifying:<session UUID>`. A session moves from Draft through Provisioning to Provisioned atomically; failures roll back to Draft, while concurrent calls and retries return the same tournament. Qualifying never inserts engine objects from its TypeScript coordinator and does not create pairings, scorecards, access tokens, scores, statistics, reviews, or snapshots.

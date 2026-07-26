@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Q4 transactional Qualifying activation, composing durable Tournament Engine pairing and scorecard generation under an advisory lock.
+- Added idempotent coach activation with readiness validation and no scoring, review, snapshot, access-token, or QR writes.
 - Added Q3B transactional Qualifying provisioning that composes idempotent tournament creation, reusable player synchronization, and durable round provisioning behind an advisory lock.
 - Added a coach provisioning action that converts a validated draft into a real Tournament Engine tournament and reuses the existing tournament on concurrent calls or retries.
 - Added Q3A owner-scoped relational Qualifying participants, groups, and group membership with transactional draft persistence and deterministic ordering.

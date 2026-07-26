@@ -8,6 +8,15 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q4 - Pairings and Scorecard Generation
+
+Status: **COMPLETE**
+
+- Activate only an already-Provisioned session.
+- Reuse relational groups and existing Tournament Engine player identities for pairings.
+- Generate durable, idempotent scorecard artifacts transactionally.
+- Keep QR, Team Login, scoring, review, leaderboard, finalization, and snapshots out of Q4.
+
 ### Qualifying Milestone Q3B - Tournament Engine Provisioning
 
 Status: **COMPLETE**

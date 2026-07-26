@@ -7,6 +7,7 @@ export type QualifyingSessionStatus =
   | "draft"
   | "provisioning"
   | "provisioned"
+  | "activating"
   | "scheduled"
   | "active"
   | "complete";
@@ -133,4 +134,19 @@ export type QualifyingProvisioningResult = {
   roundCount: number;
   tournamentPlayerCount: number;
   reusedTournament: boolean;
+};
+
+export type QualifyingActivationResult = {
+  qualifyingSessionId: string;
+  tournamentId: string;
+  status: "active";
+  pairingCount: number;
+  scorecardCount: number;
+  reusedActivation: boolean;
+  readiness: {
+    playersReady: boolean;
+    roundsReady: boolean;
+    pairingsReady: boolean;
+    scorecardsReady: boolean;
+  };
 };

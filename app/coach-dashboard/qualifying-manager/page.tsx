@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
+import { activateQualifyingSession } from "../../lib/services/qualifyingActivationService";
 import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
 import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingSessionService";
 
@@ -11,6 +12,8 @@ export default function QualifyingSessionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [provisioningId, setProvisioningId] = useState("");
+  const [activatingId, setActivatingId] = useState("");
+  const [provisionedTournamentIds, setProvisionedTournamentIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +37,10 @@ export default function QualifyingSessionsPage() {
     setProvisioningId(qualifyingSessionId);
     try {
       const result = await provisionQualifyingSession(qualifyingSessionId);
+      setProvisionedTournamentIds((current) => ({
+        ...current,
+        [qualifyingSessionId]: result.tournamentId,
+      }));
       setSessions((current) =>
         current.map((foundation) =>
           foundation.session.id === qualifyingSessionId
@@ -56,6 +63,32 @@ export default function QualifyingSessionsPage() {
       );
     } finally {
       setProvisioningId("");
+    }
+  };
+
+  const handleActivate = async (qualifyingSessionId: string) => {
+    setError("");
+    setActivatingId(qualifyingSessionId);
+    try {
+      const result = await activateQualifyingSession(qualifyingSessionId);
+      setSessions((current) =>
+        current.map((foundation) =>
+          foundation.session.id === qualifyingSessionId
+            ? {
+                ...foundation,
+                session: { ...foundation.session, status: result.status },
+              }
+            : foundation
+        )
+      );
+    } catch (activationError) {
+      setError(
+        activationError instanceof Error
+          ? activationError.message
+          : "Unable to activate qualifying."
+      );
+    } finally {
+      setActivatingId("");
     }
   };
 
@@ -107,14 +140,18 @@ export default function QualifyingSessionsPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {session.tournamentId ? (
-                        <Link
-                          href={`/tournament/${session.tournamentId}`}
-                          className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
+                      {session.status === "provisioned" ? (
+                        <button
+                          type="button"
+                          disabled={activatingId === session.id}
+                          onClick={() => void handleActivate(session.id)}
+                          className="rounded-lg bg-[#0B3D2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"
                         >
-                          Open Tournament
-                        </Link>
-                      ) : (
+                          {activatingId === session.id
+                            ? "Activating..."
+                            : "Generate Pairings & Scorecards"}
+                        </button>
+                      ) : !session.tournamentId ? (
                         <button
                           type="button"
                           disabled={provisioningId === session.id}
@@ -125,7 +162,15 @@ export default function QualifyingSessionsPage() {
                             ? "Provisioning..."
                             : "Provision Tournament"}
                         </button>
-                      )}
+                      ) : null}
+                      {session.tournamentId || provisionedTournamentIds[session.id] ? (
+                        <Link
+                          href={`/tournament/${session.tournamentId || provisionedTournamentIds[session.id]}`}
+                          className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
+                        >
+                          Open Tournament
+                        </Link>
+                      ) : null}
                       <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-xs font-black uppercase">
                         {session.status}
                       </span>

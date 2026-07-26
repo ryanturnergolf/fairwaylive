@@ -59,6 +59,26 @@ export type BuildTournamentReadinessInput = {
   checkedAt?: string;
 };
 
+export const validateTournamentActivationReadiness = (input: {
+  expectedPlayerRows: number;
+  pairingCount: number;
+  scorecardCount: number;
+}) => {
+  if (
+    input.expectedPlayerRows < 1 ||
+    input.pairingCount !== input.expectedPlayerRows ||
+    input.scorecardCount !== input.expectedPlayerRows
+  ) {
+    throw new Error("Tournament readiness validation failed after activation.");
+  }
+  return {
+    playersReady: true,
+    roundsReady: true,
+    pairingsReady: true,
+    scorecardsReady: true,
+  } as const;
+};
+
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isUuid = (value: string) => uuidPattern.test(value);
