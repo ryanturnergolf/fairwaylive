@@ -4,6 +4,9 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+- Q8 blocks missing, duplicate, cross-group, and post-scoring scorer assignment changes at the database boundary; activation stays unavailable until every group/round assignment is valid.
+- Resolved Q8's reciprocal-only finalization blocker; designated readiness no longer requires synthetic self/marker comparison rows.
+
 ### Qualifying finalization requires a current Tournament Engine snapshot
 
 Status: inherited certified finalization precondition.

@@ -12,12 +12,14 @@ import type {
 import type { ScoreEntryRow, ScoreReviewStatusRow } from "../repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
 import { applyOfficialScoreResolutions, buildOfficialScoreResolutionMap } from "./officialScoreResolutionService";
+import { resolveQualifyingPolicyReadiness } from "./qualifyingScoringPolicyService";
 
 export type QualifyingEnginePlayer = {
   playerId: string;
   playerName: string;
   roundNumber: number;
   status: string;
+  groupNumber?: number;
 };
 
 export type QualifyingEngineScorecard = {
@@ -37,6 +39,7 @@ export type BuildQualifyingResultsInput = {
   reviewStatuses: ScoreReviewStatusRow[];
   finalizedByName?: string | null;
   generatedAt?: string;
+  designatedScorerByPlayerRound?: Map<string, string>;
 };
 
 const emptyStatistics = (): QualifyingStatisticsSummary => ({
@@ -123,12 +126,14 @@ const buildSegment = ({
   scoreEntries,
   holeEntries,
   reviewStatuses,
+  scoringMode,
 }: {
   player: QualifyingEnginePlayer;
   round: QualifyingRoundMapping;
   scoreEntries: ScoreEntryRow[];
   holeEntries: ScoreHoleEntryRow[];
   reviewStatuses: ScoreReviewStatusRow[];
+  scoringMode: QualifyingSession["scoringMode"];
 }): QualifyingSegmentResult => {
   const playerScores = scoreEntries.filter((entry) =>
     entry.round_number === round.roundNumber && String(entry.player_id) === player.playerId
@@ -138,8 +143,9 @@ const buildSegment = ({
   const official = buildOfficialScoreResolutionMap(
     holeEntries.filter((entry) => entry.round_number === round.roundNumber)
   );
+  const primary = scoringMode === "designated_scorer" ? (marker ?? self) : self;
   const resolvedSelf = applyOfficialScoreResolutions(
-    self?.hole_scores ?? [],
+    primary?.hole_scores ?? [],
     player.playerId,
     round.holeCount,
     official
@@ -155,8 +161,9 @@ const buildSegment = ({
     round.holeCount,
     official
   );
-  const markerComplete = markerResolved.length === round.holeCount && markerResolved.every((score) => score > 0);
-  const submitted = isSubmitted(self);
+  const markerComplete = scoringMode === "designated_scorer" ||
+    (markerResolved.length === round.holeCount && markerResolved.every((score) => score > 0));
+  const submitted = isSubmitted(primary);
   const playerStatus = String(player.status).toLowerCase();
   const completionStatus = playerStatus === "withdrawn"
     ? "withdrawn"
@@ -225,16 +232,16 @@ export const buildQualifyingReadiness = ({
   scoreEntries,
   holeEntries,
   reviewStatuses,
+  scoringMode = "reciprocal",
+  designatedScorerByPlayerRound = new Map(),
 }: Omit<BuildQualifyingResultsInput, "session" | "days" | "rounds"> & {
   participantCount: number;
   roundCount: number;
+  scoringMode?: QualifyingSession["scoringMode"];
+  designatedScorerByPlayerRound?: Map<string, string>;
 }): QualifyingReadiness => {
   const expected = participantCount * roundCount;
   const selfRows = scoreEntries.filter((entry) => String(entry.player_id) === String(entry.entered_by_player_id));
-  const submittedSegments = selfRows.filter(isSubmitted).length;
-  const completedReviews = reviewStatuses.filter((review) =>
-    review.self_review_complete && review.marker_review_complete
-  ).length;
   const unresolvedDiscrepancies = selfRows.reduce((count, self) => {
     const marker = scoreEntries.find((entry) =>
       entry.round_number === self.round_number &&
@@ -252,24 +259,25 @@ export const buildQualifyingReadiness = ({
       score > 0 && resolvedMarker[index] > 0 && score !== resolvedMarker[index]
     ).length;
   }, 0);
-  const ready =
-    expected > 0 &&
-    players.length === expected &&
-    scorecards.length === expected &&
-    submittedSegments === expected &&
-    completedReviews === expected &&
-    unresolvedDiscrepancies === 0;
+  const policy = resolveQualifyingPolicyReadiness({
+    mode: scoringMode,
+    expectedCount: expected,
+    scoreEntries,
+    reviews: reviewStatuses,
+    designatedScorerByPlayerRound,
+    unresolvedDiscrepancies,
+  });
   return {
     expectedPlayerRoundAssignments: expected,
     playerRoundAssignments: players.length,
     expectedScorecards: expected,
     scorecards: scorecards.length,
-    submittedSegments,
+    submittedSegments: policy.submittedSegments,
     requiredSubmittedSegments: expected,
-    completedReviews,
+    completedReviews: policy.completedReviews,
     requiredReviews: expected,
     unresolvedDiscrepancies,
-    ready,
+    ready: players.length === expected && scorecards.length === expected && policy.ready,
   };
 };
 
@@ -284,6 +292,7 @@ export const buildQualifyingResults = ({
   reviewStatuses,
   finalizedByName = null,
   generatedAt = new Date().toISOString(),
+  designatedScorerByPlayerRound = new Map(),
 }: BuildQualifyingResultsInput): QualifyingResultsReadModel => {
   const distinctPlayers = [...new Map(
     players.map((player) => [player.playerId, player])
@@ -294,7 +303,7 @@ export const buildQualifyingResults = ({
       const roundPlayer = players.find((candidate) =>
         candidate.playerId === player.playerId && candidate.roundNumber === round.roundNumber
       ) ?? player;
-      return buildSegment({ player: roundPlayer, round, scoreEntries, holeEntries, reviewStatuses });
+      return buildSegment({ player: roundPlayer, round, scoreEntries, holeEntries, reviewStatuses, scoringMode: session.scoringMode });
     });
     allSegmentsByPlayer.set(player.playerId, playerRounds);
   });
@@ -335,6 +344,8 @@ export const buildQualifyingResults = ({
       scoreEntries,
       holeEntries,
       reviewStatuses,
+      scoringMode: session.scoringMode,
+      designatedScorerByPlayerRound,
     }),
     generatedAt,
   };

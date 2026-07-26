@@ -76,6 +76,7 @@ export async function GET(
       { data: scoreEntries, error: scoreError },
       { data: holeEntries, error: holeError },
       { data: reviews, error: reviewError },
+      { data: scorerAssignments, error: scorerAssignmentError },
     ] = await Promise.all([
       supabase.from("qualifying_days")
         .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,created_at,updated_at")
@@ -87,7 +88,7 @@ export async function GET(
         .select("player_id,player_name,display_order")
         .eq("qualifying_session_id", id).order("display_order"),
       supabase.from("tournament_players")
-        .select("player_id,player_name,round_number,status")
+        .select("player_id,player_name,round_number,group_number,status")
         .eq("tournament_id", tournamentId).order("round_number"),
       supabase.from("tournament_scorecards")
         .select("player_id,round_number,hole_count")
@@ -101,9 +102,12 @@ export async function GET(
       supabase.from("score_review_status")
         .select("id,tournament_id,round_number,player_id,self_review_complete,marker_review_complete,official_at,created_at,updated_at")
         .eq("tournament_id", tournamentId).order("round_number"),
+      supabase.from("qualifying_scorer_assignments")
+        .select("tournament_round_id,group_number,scorer_player_id")
+        .eq("qualifying_session_id", id),
     ]);
     const queryError = dayError || roundError || participantError || playerError ||
-      scorecardError || scoreError || holeError || reviewError;
+      scorecardError || scoreError || holeError || reviewError || scorerAssignmentError;
     if (queryError) throw queryError;
     const { data: finalizingCoach, error: coachError } = sessionRow.finalized_by
       ? await supabase
@@ -164,6 +168,7 @@ export async function GET(
       playerName: String(player.player_name),
       roundNumber: Number(player.round_number),
       status: String(player.status),
+      groupNumber: Number(player.group_number),
     }));
     const mappedScorecards = (scorecards ?? []).map((scorecard): QualifyingEngineScorecard => ({
       playerId: String(scorecard.player_id),
@@ -171,6 +176,18 @@ export async function GET(
       holeCount: Number(scorecard.hole_count),
     }));
 
+    const designatedScorerByPlayerRound = new Map<string, string>();
+    mappedPlayers.forEach((player) => {
+      const roundId = mappedRounds.find((round) => round.roundNumber === player.roundNumber)?.id;
+      const assignment = (scorerAssignments ?? []).find((candidate) =>
+        candidate.tournament_round_id === roundId &&
+        Number(candidate.group_number) === player.groupNumber
+      );
+      if (assignment) designatedScorerByPlayerRound.set(
+        `${player.roundNumber}:${player.playerId}`,
+        String(assignment.scorer_player_id)
+      );
+    });
     return NextResponse.json(buildQualifyingResults({
       session,
       days: mappedDays,
@@ -180,6 +197,7 @@ export async function GET(
       scoreEntries: (scoreEntries ?? []) as ScoreEntryRow[],
       holeEntries: (holeEntries ?? []) as ScoreHoleEntryRow[],
       reviewStatuses: (reviews ?? []) as ScoreReviewStatusRow[],
+      designatedScorerByPlayerRound,
       finalizedByName: finalizingCoach?.display_name ?? null,
     }));
   } catch (error) {

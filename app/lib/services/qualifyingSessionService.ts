@@ -101,3 +101,26 @@ export const loadQualifyingResults = async (
   }
   return body as QualifyingResultsReadModel;
 };
+
+export const saveQualifyingScorerAssignments = async (
+  sessionId: string,
+  assignments: Array<{
+    tournamentRoundId: string;
+    groupNumber: number;
+    scorerPlayerId: string;
+  }>
+) => {
+  const accessToken = await getSupabaseAuthAccessToken();
+  if (!accessToken) throw new Error("Coach authentication is required.");
+  const response = await fetch(`/api/qualifying-sessions/${sessionId}/scorer-assignments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ assignments }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error || "Unable to save scorer assignments.");
+  return body;
+};

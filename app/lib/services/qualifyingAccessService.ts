@@ -9,7 +9,7 @@ export type QualifyingAccessResolution = {
   qualifyingName: string;
   scoringMode: "reciprocal" | "designated_scorer";
   blockedReason?: "designated_scorer_unavailable";
-  players: Array<{ playerId: string; playerName: string }>;
+  players: Array<{ playerId: string; playerName: string; accessRole?: "scorer" | "verifier" }>;
 };
 
 export const normalizeQualifyingCode = (value: string) =>
@@ -86,8 +86,10 @@ export const exchangeQualifyingPlayerAccess = async (code: string, playerId: str
     markerPlayerId: string;
     startingHole: number;
     shareToken: string;
+    scoringMode?: "reciprocal" | "designated_scorer";
+    accessRole?: "scorer" | "verifier";
   };
-  return buildMobileScorecardPath({
+  const path = buildMobileScorecardPath({
     shareToken: result.shareToken,
     roundNumber: result.roundNumber,
     activeQrScoringPlayerId: result.playerId,
@@ -101,4 +103,9 @@ export const exchangeQualifyingPlayerAccess = async (code: string, playerId: str
       ],
     },
   });
+  if (result.scoringMode !== "designated_scorer") return path;
+  const destination = new URL(path, window.location.origin);
+  destination.searchParams.set("qualifyingPolicy", "designated_scorer");
+  destination.searchParams.set("accessRole", result.accessRole ?? "verifier");
+  return `${destination.pathname}${destination.search}`;
 };

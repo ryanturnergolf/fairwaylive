@@ -4,6 +4,9 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+- Q8 Designated Group Scorer is a Qualifying-only strategy. Scorer-authored scores retain `(golfer, designated scorer)` identity, personal statistics retain `(golfer, golfer)` identity, and ordinary Tournament and reciprocal paths do not branch on designated behavior.
+- Qualifying finalization dispatches readiness by scoring policy: reciprocal delegates unchanged to the Q7 gate, while designated sessions require assignment-matched scorer rows and each golfer's self verification.
+
 ### Qualifying finalization follows Tournament Engine authority
 
 Q7 calls a Qualifying-readiness adapter inside the certified Tournament Finalization Service before recording any Qualifying finalization metadata. The adapter preserves the existing snapshot/tournament compare-and-swap mutation and finalization record, but accepts Q6's multi-round readiness instead of the ordinary single-workspace readiness projection. An owner-scoped advisory-locked RPC then independently verifies the finalized tournament and Q6 readiness before atomically recording only `qualifying_sessions.status`, `finalized_at`, and `finalized_by`. If Tournament finalization fails, Qualifying remains Active; if metadata convergence is interrupted after Tournament success, an idempotent retry completes it without re-finalizing or creating historical result rows.

@@ -28,6 +28,7 @@ import { loadSharedTournamentScorecardState } from "../../lib/services/tournamen
 import { findInitialScorecardHoleIndex } from "../../lib/services/scorecardResumeService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
 import { resolveShareToken } from "../../lib/services/shareTokenService";
+import DesignatedQualifyingScorecard from "./DesignatedQualifyingScorecard";
 import { canUseDevelopmentBrowserSupabaseWriteFallback } from "../../lib/supabaseClient";
 
 type Hole = {
@@ -259,7 +260,7 @@ const getScoredHoleNumbers = (holes: Hole[], ...scoreSets: number[][]) =>
     .filter((_, index) => scoreSets.some((holeScores) => (holeScores[index] ?? 0) > 0))
     .map((hole) => hole.holeNumber);
 
-export default function PlayerScorecardPage() {
+function ReciprocalPlayerScorecardPage() {
   const params = useParams<{ playerId: string }>();
   const searchParams = useSearchParams();
   const routePlayerId = Array.isArray(params?.playerId) ? params.playerId[0] : params?.playerId;
@@ -2548,4 +2549,20 @@ export default function PlayerScorecardPage() {
       </section>
     </main>
   );
+}
+
+export default function PlayerScorecardPage() {
+  const params = useParams<{ playerId: string }>();
+  const searchParams = useSearchParams();
+  const playerId = Array.isArray(params?.playerId) ? params.playerId[0] : params?.playerId ?? "";
+  if (searchParams.get("qualifyingPolicy") === "designated_scorer") {
+    return (
+      <DesignatedQualifyingScorecard
+        playerId={playerId}
+        roundNumber={Number(searchParams.get("round")) || 1}
+        shareToken={searchParams.get("shareToken") ?? ""}
+      />
+    );
+  }
+  return <ReciprocalPlayerScorecardPage />;
 }

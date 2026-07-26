@@ -4,6 +4,8 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 ## Architecture Stabilization Roadmap
 
+- Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
+
 Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.

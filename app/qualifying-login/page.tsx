@@ -82,6 +82,9 @@ export default function QualifyingLoginPage() {
                     onClick={() => void selectPlayer(player.playerId)}
                     className="min-h-14 w-full rounded-2xl border-2 px-5 text-left font-black">
                     {player.playerName}
+                    {player.accessRole === "scorer" ? (
+                      <span className="ml-2 text-xs text-[#B8892D]">Designated scorer</span>
+                    ) : null}
                   </button>
                 ))}
               </div>

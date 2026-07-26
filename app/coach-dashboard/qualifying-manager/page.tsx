@@ -8,6 +8,7 @@ import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisi
 import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingSessionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
+import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
 
 export default function QualifyingSessionsPage() {
   const [sessions, setSessions] = useState<QualifyingSessionFoundation[]>([]);
@@ -132,7 +133,11 @@ export default function QualifyingSessionsPage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {sessions.map(({ session, days }) => (
+              {sessions.map((foundation) => {
+                const { session, days } = foundation;
+                const designatedReady = session.scoringMode !== "designated_scorer" ||
+                  foundation.rounds.length * session.groups.length === foundation.scorerAssignments.length;
+                return (
                 <article key={session.id} className="rounded-lg border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -145,13 +150,14 @@ export default function QualifyingSessionsPage() {
                       {session.status === "provisioned" ? (
                         <button
                           type="button"
-                          disabled={activatingId === session.id}
+                          disabled={activatingId === session.id || !designatedReady}
+                          aria-disabled={!designatedReady}
                           onClick={() => void handleActivate(session.id)}
                           className="rounded-lg bg-[#0B3D2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"
                         >
                           {activatingId === session.id
                             ? "Activating..."
-                            : "Generate Pairings & Scorecards"}
+                            : designatedReady ? "Generate Pairings & Scorecards" : "Assign Scorers First"}
                         </button>
                       ) : !session.tournamentId ? (
                         <button
@@ -178,6 +184,14 @@ export default function QualifyingSessionsPage() {
                       </span>
                     </div>
                   </div>
+                  {session.scoringMode === "designated_scorer" && session.status === "provisioned" ? (
+                    <DesignatedScorerAssignments
+                      foundation={foundation}
+                      onSaved={(assignments) => setSessions((current) => current.map((item) =>
+                        item.session.id === session.id ? { ...item, scorerAssignments: assignments } : item
+                      ))}
+                    />
+                  ) : null}
                   {["active", "finalized"].includes(session.status) ? (
                     <>
                       {session.status === "active" ? (
@@ -205,7 +219,7 @@ export default function QualifyingSessionsPage() {
                     </>
                   ) : null}
                 </article>
-              ))}
+              )})}
             </div>
           )}
         </section>

@@ -1,5 +1,10 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-25
+
+- Added Qualifying Q8 designated group scoring behind an explicit policy boundary, with validated group/round assignments, role-isolated access, group score entry, player-owned statistics, and self-verification on the existing scorecard route.
+- Added designated-aware Qualifying readiness and finalization without reciprocal compatibility rows; official hole resolutions converge player assertions against scorer-authored audit rows.
+
 ## 2026-07-24
 
 ### Added
