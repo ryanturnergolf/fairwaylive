@@ -10,7 +10,9 @@ import {
   reconcileTournamentPlayers,
   type CreateTournamentRowInput,
   type TournamentPlayerRow,
+  type TournamentRoundReadRow,
   type TournamentRow,
+  type TournamentScorecardReadRow,
   type TournamentPlayerUpsertRow,
 } from "../repositories/tournamentRepository";
 import { buildPlayerIdentity, validatePairingIntegrity } from "./tournamentPageHelpers";
@@ -202,6 +204,320 @@ const getRoundSetup = (envelope: TournamentStorageEnvelope, roundNumber: number)
     ...(configuredSetup ?? {}),
     roundNumber: String(roundNumber),
     roundName: configuredSetup?.roundName ?? envelope.tournament.rounds.find((round) => round.roundNumber === roundNumber)?.name ?? `Round ${roundNumber}`,
+  };
+};
+
+const durableTeamKey = (row: TournamentPlayerRow) =>
+  row.team_id || (row.team_name ? `team:${row.team_name}` : "");
+
+const durablePlayerNameParts = (playerName: string) => {
+  const [firstName = playerName, ...lastNameParts] = playerName.trim().split(/\s+/);
+  return { firstName, lastName: lastNameParts.join(" ") };
+};
+
+const durablePairingsForRound = (
+  playerRows: TournamentPlayerRow[],
+  roundNumber: number,
+  fallbackTeam: Team | null = null
+): Pairing[] => {
+  const rowsByGroup = new Map<number, TournamentPlayerRow[]>();
+  playerRows
+    .filter((row) => row.round_number === roundNumber && row.group_number !== null)
+    .forEach((row) => {
+      const groupNumber = row.group_number as number;
+      rowsByGroup.set(groupNumber, [...(rowsByGroup.get(groupNumber) ?? []), row]);
+    });
+
+  return [...rowsByGroup.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([groupNumber, rows]) => ({
+      id: `round-${roundNumber}-group-${groupNumber}`,
+      roundId: getRoundId(roundNumber),
+      groupNumber,
+      teeTime: "",
+      startingHole: String(rows[0]?.starting_hole ?? rows[0]?.tee_number ?? 1),
+      players: rows.map((row) => ({
+        playerId: row.player_id,
+        playerName: row.player_name,
+        teamName: row.team_name || fallbackTeam?.name || "",
+      })),
+    }));
+};
+
+const hasEveryDurablePlayer = (
+  envelope: TournamentStorageEnvelope,
+  playerRows: TournamentPlayerRow[]
+) => {
+  const snapshotIds = new Set(envelope.tournament.players.map((player) => String(player.id)));
+  const teamNames = new Map(envelope.tournament.teams.map((team) => [team.id, team.name]));
+  return playerRows.every((row) => {
+    if (snapshotIds.has(row.player_id)) return true;
+    const identityMatches = envelope.tournament.players.filter((player) => {
+      const playerName = `${player.firstName} ${player.lastName}`.trim();
+      const teamName =
+        teamNames.get(player.teamId) ||
+        (typeof player.statistics.teamName === "string" ? player.statistics.teamName : "");
+      return (
+        playerName === row.player_name &&
+        (!row.team_name || teamName === row.team_name)
+      );
+    });
+    return identityMatches.length === 1;
+  });
+};
+
+const hasEveryDurablePairing = (
+  envelope: TournamentStorageEnvelope,
+  playerRows: TournamentPlayerRow[],
+  roundNumber: number
+) => {
+  const durablePairedRows = playerRows.filter(
+    (row) => row.round_number === roundNumber && row.group_number !== null
+  );
+  const snapshotPairingPlayers = envelope.tournament.pairings
+    .filter((pairing) => pairing.roundId === getRoundId(roundNumber))
+    .flatMap((pairing) => pairing.players);
+  return durablePairedRows.every((row) => {
+    const matches = snapshotPairingPlayers.filter(
+      (player) =>
+        String(player.playerId) === row.player_id ||
+        (
+          player.playerName === row.player_name &&
+          (!row.team_name || player.teamName === row.team_name)
+        )
+    );
+    return matches.length === 1;
+  });
+};
+
+const hasEveryDurableScorecard = (
+  envelope: TournamentStorageEnvelope,
+  playerRows: TournamentPlayerRow[],
+  scorecards: TournamentScorecardReadRow[]
+) => {
+  const durablePlayerIds = new Set(scorecards.map((scorecard) => scorecard.player_id));
+  const snapshotPlayerIds = new Set(
+    envelope.uiState.scorecards.scorecardRows.flatMap((scorecard) => {
+      const stableMatches = playerRows
+        .filter(
+          (row) =>
+            row.player_name === scorecard.playerName &&
+            (!row.team_name || row.team_name === scorecard.team)
+        )
+        .map((row) => row.player_id);
+      return [String(scorecard.id), ...stableMatches];
+    })
+  );
+  return [...durablePlayerIds].every((playerId) => snapshotPlayerIds.has(playerId));
+};
+
+export const reconcileSnapshotWithDurableTournamentState = ({
+  envelope,
+  tournament,
+  roundNumber,
+  playerRows,
+  durableRound,
+  durableScorecards,
+}: {
+  envelope: TournamentStorageEnvelope | null;
+  tournament: StoredTournament;
+  roundNumber: number;
+  playerRows: TournamentPlayerRow[];
+  durableRound: TournamentRoundReadRow | null;
+  durableScorecards: TournamentScorecardReadRow[];
+}): TournamentStorageEnvelope | null => {
+  if (!envelope || playerRows.length === 0) return envelope;
+
+  const roundPlayerRows = dedupeTournamentPlayerRows(
+    playerRows.filter((row) => row.round_number === roundNumber)
+  );
+  if (roundPlayerRows.length === 0) return envelope;
+
+  const durablePairedPlayerCount = roundPlayerRows.filter(
+    (row) => row.group_number !== null
+  ).length;
+  const snapshotPairedPlayerCount = envelope.tournament.pairings
+    .filter((pairing) => pairing.roundId === getRoundId(roundNumber))
+    .reduce((total, pairing) => total + pairing.players.length, 0);
+  const expectedScorecardCount =
+    durableScorecards.length > 0 ? durableScorecards.length : roundPlayerRows.length;
+  const snapshotCollectionsComplete =
+    envelope.tournament.players.length >= roundPlayerRows.length &&
+    snapshotPairedPlayerCount >= durablePairedPlayerCount &&
+    envelope.uiState.scorecards.scorecardsGenerated &&
+    envelope.uiState.scorecards.scorecardRows.length >= expectedScorecardCount;
+  if (snapshotCollectionsComplete) return envelope;
+
+  const playersIncomplete = !hasEveryDurablePlayer(envelope, roundPlayerRows);
+  const pairingsIncomplete = !hasEveryDurablePairing(envelope, roundPlayerRows, roundNumber);
+  const scorecardsIncomplete =
+    durableScorecards.length > 0 &&
+    !hasEveryDurableScorecard(envelope, roundPlayerRows, durableScorecards);
+
+  if (!playersIncomplete && !pairingsIncomplete && !scorecardsIncomplete) {
+    return envelope;
+  }
+
+  const fallbackTeam =
+    envelope.tournament.teams.length === 1 ? envelope.tournament.teams[0] : null;
+  const effectiveTeamKey = (row: TournamentPlayerRow) =>
+    durableTeamKey(row) || fallbackTeam?.id || "";
+  const teamRows = new Map<string, TournamentPlayerRow>();
+  roundPlayerRows.forEach((row) => {
+    const key = effectiveTeamKey(row);
+    if (key && !teamRows.has(key)) teamRows.set(key, row);
+  });
+  const durableTeams: Team[] = [...teamRows.entries()].map(([id, row]) => ({
+    id,
+    name: row.team_name || (fallbackTeam?.id === id ? fallbackTeam.name : id),
+    players: roundPlayerRows
+      .filter((player) => effectiveTeamKey(player) === id)
+      .map((player) => player.player_id),
+  }));
+  const durablePlayers: TournamentModelPlayer[] = roundPlayerRows.map((row) => {
+    const { firstName, lastName } = durablePlayerNameParts(row.player_name);
+    const teamId = effectiveTeamKey(row);
+    return {
+      id: row.player_id,
+      firstName,
+      lastName,
+      teamId,
+      isIndividual: !teamId || row.is_individual,
+      statistics: {
+        teamName: row.team_name || (fallbackTeam?.id === teamId ? fallbackTeam.name : ""),
+      },
+    };
+  });
+  const durablePairings = durablePairingsForRound(roundPlayerRows, roundNumber, fallbackTeam);
+  const holeCount = durableRound?.hole_count ??
+    durableScorecards[0]?.hole_count ??
+    Math.max(1, Math.min(18, Number(getRoundSetup(envelope, roundNumber).numberOfHoles) || 18));
+  const durableScorecardIds = new Set(durableScorecards.map((scorecard) => scorecard.player_id));
+  const existingScorecardsByPlayerId = new Map<string, LegacyScorecardRow>();
+  envelope.uiState.scorecards.scorecardRows.forEach((scorecard) => {
+    const matchingRow = roundPlayerRows.find(
+      (row) =>
+        String(scorecard.id) === row.player_id ||
+        (scorecard.playerName === row.player_name &&
+          scorecard.team === (row.team_name || fallbackTeam?.name || ""))
+    );
+    if (matchingRow) existingScorecardsByPlayerId.set(matchingRow.player_id, scorecard);
+  });
+  const durableScorecardRows = roundPlayerRows
+    .filter((row) => durableScorecardIds.has(row.player_id))
+    .map((row, index) => {
+      const existing = existingScorecardsByPlayerId.get(row.player_id);
+      return {
+        id: existing?.id ?? index + 1,
+        playerName: row.player_name,
+        team: row.team_name || fallbackTeam?.name || "",
+        scores: existing?.scores?.length === holeCount
+          ? [...existing.scores]
+          : Array.from({ length: holeCount }, () => 0),
+      };
+    });
+  const roundSetup = {
+    ...getRoundSetup(envelope, roundNumber),
+    roundNumber: String(roundNumber),
+    numberOfHoles: String(holeCount),
+  };
+  const nextPairings = [
+    ...envelope.tournament.pairings.filter((pairing) => pairing.roundId !== getRoundId(roundNumber)),
+    ...durablePairings,
+  ];
+  const nextRounds = envelope.tournament.rounds.some(
+    (round) => round.roundNumber === roundNumber
+  )
+    ? envelope.tournament.rounds
+    : [
+        ...envelope.tournament.rounds,
+        {
+          id: getRoundId(roundNumber),
+          name: `Round ${roundNumber}`,
+          roundNumber,
+          status: roundNumber === 1 ? "live" as const : "upcoming" as const,
+          pairings: durablePairings.map((pairing) => pairing.id),
+          leaderboard: [],
+        },
+      ];
+  const roundStates = {
+    ...(getRoundStateMap(envelope.tournament.settings) ?? {}),
+    [String(roundNumber)]: {
+      scorecardsGenerated:
+        getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated ??
+        (
+          envelope.uiState.scorecards.scorecardsGenerated ||
+          durableScorecards.length === roundPlayerRows.length
+        ),
+    },
+  };
+  const roundSetups = {
+    ...(getRoundSetupMap(envelope.tournament.settings) ?? {}),
+    [String(roundNumber)]: roundSetup,
+  };
+
+  return {
+    version: 2,
+    tournament: {
+      ...envelope.tournament,
+      id: tournament.id,
+      name: tournament.name || envelope.tournament.name,
+      course: tournament.course || envelope.tournament.course,
+      teams: playersIncomplete ? durableTeams : envelope.tournament.teams,
+      players: playersIncomplete ? durablePlayers : envelope.tournament.players,
+      pairings: pairingsIncomplete ? nextPairings : envelope.tournament.pairings,
+      rounds: nextRounds,
+      settings: {
+        ...envelope.tournament.settings,
+        activeRoundNumber: roundNumber,
+        roundSetups,
+        roundStates,
+      },
+    },
+    uiState: {
+      ...envelope.uiState,
+      teams: playersIncomplete
+        ? durableTeams.map((team, index) => ({
+            id: index + 1,
+            schoolName: team.name,
+            shortName: team.name.slice(0, 3).toUpperCase(),
+            teamColor: "#0B3D2E",
+            coachName: "",
+          }))
+        : envelope.uiState.teams,
+      players: playersIncomplete
+        ? roundPlayerRows.map((row, index) => {
+            const { firstName, lastName } = durablePlayerNameParts(row.player_name);
+            return {
+              id: index + 1,
+              firstName,
+              lastName,
+              teamId: effectiveTeamKey(row),
+              teamName: row.team_name || fallbackTeam?.name || "",
+              handicap: "0",
+              email: "",
+            };
+          })
+        : envelope.uiState.players,
+      pairings: pairingsIncomplete
+        ? durablePairings.map((pairing) => ({
+            groupNumber: pairing.groupNumber,
+            teeTime: pairing.teeTime,
+            startingHole: pairing.startingHole,
+            players: pairing.players.map((player) => ({ ...player })),
+          }))
+        : envelope.uiState.pairings,
+      scorecards: {
+        ...envelope.uiState.scorecards,
+        roundSetup,
+        scorecardsGenerated:
+          envelope.uiState.scorecards.scorecardsGenerated ||
+          durableScorecards.length === roundPlayerRows.length,
+        scorecardRows: scorecardsIncomplete
+          ? durableScorecardRows
+          : envelope.uiState.scorecards.scorecardRows,
+      },
+    },
   };
 };
 
@@ -750,9 +1066,6 @@ const loadTournamentAggregate = async (
   }
 
   const roundNumber = getAggregateRoundNumber(snapshot);
-  const tournamentPlayers = await getTournamentPlayers(sharedTournamentUuidOrId, roundNumber).catch(() => []);
-  const envelope = snapshot?.envelope ?? null;
-  const scorecards = envelope?.uiState.scorecards ?? null;
   const tournament = tournamentRow
     ? toStoredTournament(tournamentRow)
     : snapshot
@@ -762,6 +1075,38 @@ const loadTournamentAggregate = async (
   if (!tournament) {
     return null;
   }
+
+  const tournamentPlayers = await getTournamentPlayers(
+    sharedTournamentUuidOrId,
+    roundNumber
+  ).catch(() => []);
+  const snapshotEnvelope = snapshot?.envelope ?? null;
+  const snapshotHasCompleteCollections = Boolean(
+    snapshotEnvelope &&
+    snapshotEnvelope.tournament.players.length > 0 &&
+    snapshotEnvelope.tournament.pairings.some(
+      (pairing) => pairing.roundId === getRoundId(roundNumber) && pairing.players.length > 0
+    ) &&
+    snapshotEnvelope.uiState.scorecards.scorecardsGenerated &&
+    snapshotEnvelope.uiState.scorecards.scorecardRows.length > 0
+  );
+  const [durableRound, durableScorecards] = snapshotHasCompleteCollections
+    ? [null, []]
+    : await Promise.all([
+        getTournamentRound(sharedTournamentUuidOrId, roundNumber).catch(() => null),
+        getTournamentScorecards(sharedTournamentUuidOrId, roundNumber).catch(() => []),
+      ]);
+  const envelope = snapshotHasCompleteCollections
+    ? snapshotEnvelope
+    : reconcileSnapshotWithDurableTournamentState({
+        envelope: snapshotEnvelope,
+        tournament,
+        roundNumber,
+        playerRows: tournamentPlayers,
+        durableRound,
+        durableScorecards,
+      });
+  const scorecards = envelope?.uiState.scorecards ?? null;
 
   return {
     tournamentId: sharedTournamentUuidOrId,
@@ -1217,7 +1562,22 @@ export const loadSharedTournamentScorecardState = async (
     ? snapshot.state_snapshot
     : null;
   const hasSnapshot = Boolean(snapshotEnvelope);
-  const [durableRound, durableScorecards] = hasSnapshot
+  const configuredRoundSetup = snapshotEnvelope
+    ? getRoundSetupMap(snapshotEnvelope.tournament.settings)?.[String(roundNumber)]
+    : null;
+  const uiRoundSetup = snapshotEnvelope?.uiState.scorecards.roundSetup ?? null;
+  const exactRoundSetup = configuredRoundSetup ??
+    (uiRoundSetup && Number(uiRoundSetup.roundNumber) === roundNumber ? uiRoundSetup : null);
+  const snapshotHasCompleteScorecardState = Boolean(
+    exactRoundSetup &&
+    snapshotEnvelope &&
+    snapshotEnvelope.tournament.players.length > 0 &&
+    snapshotEnvelope.tournament.pairings.some(
+      (pairing) => pairing.roundId === getRoundId(roundNumber) && pairing.players.length > 0
+    ) &&
+    snapshotEnvelope.uiState.scorecards.scorecardRows.length > 0
+  );
+  const [durableRound, durableScorecards] = snapshotHasCompleteScorecardState
     ? [null, []]
     : await Promise.all([
         getTournamentRound(tournamentId, roundNumber, { shareToken }).catch(() => null),
@@ -1251,13 +1611,11 @@ export const loadSharedTournamentScorecardState = async (
     return null;
   }
 
-  const configuredRoundSetup = snapshotEnvelope
-    ? getRoundSetupMap(snapshotEnvelope.tournament.settings)?.[String(roundNumber)]
-    : null;
-  const uiRoundSetup = snapshotEnvelope?.uiState.scorecards.roundSetup ?? null;
-  const exactRoundSetup = configuredRoundSetup ??
-    (uiRoundSetup && Number(uiRoundSetup.roundNumber) === roundNumber ? uiRoundSetup : null);
-  const parsedHoleCount = Number(exactRoundSetup?.numberOfHoles ?? durableRound?.hole_count);
+  const parsedHoleCount = Number(
+    exactRoundSetup?.numberOfHoles ??
+    durableRound?.hole_count ??
+    durableScorecards[0]?.hole_count
+  );
   if ((!exactRoundSetup && !durableRound) || !Number.isInteger(parsedHoleCount) || parsedHoleCount < 1 || parsedHoleCount > 18) {
     return null;
   }
