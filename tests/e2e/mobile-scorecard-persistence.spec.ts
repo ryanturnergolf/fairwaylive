@@ -2539,7 +2539,7 @@ test("shared tournament page hydrates generated scorecards from snapshot without
   await expect(page.getByRole("button", { name: "Regenerate Scorecards" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Generate Scorecards", exact: true })).toHaveCount(0);
   await expect(page.getByRole("row", { name: /T1 Ava Green E2E University/ })).toBeVisible();
-  await expect(page.getByRole("row", { name: /T2 Ben Marker E2E University/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /T1 Ben Marker E2E University/ })).toBeVisible();
   await expect
     .poll(() => page.evaluate((key) => window.localStorage.getItem(key), `clubhouse-hq-tournament-${sharedTournamentId}`))
     .toContain(storedTournament.name);

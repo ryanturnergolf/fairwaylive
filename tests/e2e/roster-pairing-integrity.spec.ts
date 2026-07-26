@@ -13,6 +13,7 @@ import {
 } from "../../app/lib/services/tournamentPageHelpers";
 import { buildTournamentPlayerRows } from "../../app/lib/services/tournamentService";
 import {
+  addTiePositions,
   buildIndividualLeaderboard,
   buildTeamLeaderboard,
   limitCountingScoresToAvailablePlayers,
@@ -210,6 +211,54 @@ test("team counting scores remain feasible for three-player teams without changi
   expect(fivePlayerStandings.every((team) => team.totalScore === 18 * (4 + 5 + 6 + 7))).toBe(true);
 });
 
+test("leaderboard positions use standard competition ranking for ties", () => {
+  expect(
+    addTiePositions(
+      [36, 36, 36, 36, 36, 36].map((score) => ({ score })),
+      (row) => row.score
+    ).map((row) => row.position)
+  ).toEqual(["T1", "T1", "T1", "T1", "T1", "T1"]);
+
+  expect(
+    addTiePositions(
+      [36, 36, 36, 37, 38, 38].map((score) => ({ score })),
+      (row) => row.score
+    ).map((row) => row.position)
+  ).toEqual(["T1", "T1", "T1", "4", "T5", "T5"]);
+
+  expect(
+    addTiePositions(
+      [36, 37, 38].map((score) => ({ score })),
+      (row) => row.score
+    ).map((row) => row.position)
+  ).toEqual(["1", "2", "3"]);
+});
+
+test("individual and team leaderboards share competition ranking", () => {
+  const rows = [
+    { id: 1, playerName: "A One", team: "Team A", scores: [4, 4, 4] },
+    { id: 2, playerName: "B Two", team: "Team B", scores: [4, 4, 4] },
+    { id: 3, playerName: "C Three", team: "Team C", scores: [4, 4, 5] },
+  ];
+
+  expect(
+    buildIndividualLeaderboard({
+      scorecardsGenerated: true,
+      scorecardRows: rows,
+      displayHoleCount: 3,
+    }).map((row) => row.position)
+  ).toEqual(["T1", "T1", "3"]);
+
+  expect(
+    buildTeamLeaderboard({
+      scorecardsGenerated: true,
+      scorecardRows: rows,
+      displayHoleCount: 3,
+      countingScores: 1,
+    }).map((row) => row.position)
+  ).toEqual(["T1", "T1", "3"]);
+});
+
 test("official hole resolutions project into individual and team leaderboards without mutating audit rows", () => {
   const scorecardRows = [
     { id: 1, playerName: "Cam Riley", team: "Individuals", scores: [5, 4, 4] },
@@ -258,7 +307,7 @@ test("official hole resolutions project into individual and team leaderboards wi
   });
   expect(individual.map((row) => [row.playerName, row.totalScore, row.position])).toEqual([
     ["Cam Riley", 12, "T1"],
-    ["Drew Patel", 12, "T2"],
+    ["Drew Patel", 12, "T1"],
   ]);
 
   const team = buildTeamLeaderboard({

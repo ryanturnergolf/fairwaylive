@@ -98,10 +98,17 @@ export const addTiePositions = <T,>(rows: T[], getScore: (row: T) => number) => 
     map.set(score, (map.get(score) ?? 0) + 1);
     return map;
   }, new Map<number, number>());
-
-  return rows.map((row, index) => {
+  const firstOrdinals = rows.reduce((map, row, index) => {
     const score = getScore(row);
-    const ordinal = index + 1;
+    if (!map.has(score)) {
+      map.set(score, index + 1);
+    }
+    return map;
+  }, new Map<number, number>());
+
+  return rows.map((row) => {
+    const score = getScore(row);
+    const ordinal = firstOrdinals.get(score) ?? 0;
     const position = (scoreCounts.get(score) ?? 0) > 1 ? `T${ordinal}` : `${ordinal}`;
 
     return {
