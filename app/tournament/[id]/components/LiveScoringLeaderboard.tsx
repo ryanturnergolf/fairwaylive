@@ -34,6 +34,7 @@ type LiveScoringLeaderboardProps = {
   normalizedRoundSetup: NormalizedRoundSetup;
   scorecardsGenerated: boolean;
   scorecardRows: ScorecardRow[];
+  leaderboardScorecardRows?: ScorecardRow[];
   onPrintTournamentScorecards: () => void;
   onGenerateScorecards: () => void;
   onRoundSetupChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -54,6 +55,7 @@ export default function LiveScoringLeaderboard({
   normalizedRoundSetup,
   scorecardsGenerated,
   scorecardRows,
+  leaderboardScorecardRows = scorecardRows,
   onPrintTournamentScorecards,
   onGenerateScorecards,
   onRoundSetupChange,
@@ -73,13 +75,18 @@ export default function LiveScoringLeaderboard({
   const countingScores = normalizedRoundSetup.countingScores;
 
   const individualLeaderboard = useMemo(
-    () => buildIndividualLeaderboard({ scorecardsGenerated, scorecardRows, displayHoleCount }),
-    [displayHoleCount, scorecardRows, scorecardsGenerated]
+    () => buildIndividualLeaderboard({ scorecardsGenerated, scorecardRows: leaderboardScorecardRows, displayHoleCount }),
+    [displayHoleCount, leaderboardScorecardRows, scorecardsGenerated]
   );
 
   const teamLeaderboard = useMemo(
-    () => buildTeamLeaderboard({ scorecardsGenerated, scorecardRows, displayHoleCount, countingScores }),
-    [countingScores, displayHoleCount, scorecardRows, scorecardsGenerated]
+    () => buildTeamLeaderboard({
+      scorecardsGenerated,
+      scorecardRows: leaderboardScorecardRows,
+      displayHoleCount,
+      countingScores,
+    }),
+    [countingScores, displayHoleCount, leaderboardScorecardRows, scorecardsGenerated]
   );
 
   return (
@@ -192,7 +199,7 @@ export default function LiveScoringLeaderboard({
         </div>
       ) : null}
       {scorecardsGenerated ? (
-        scorecardRows.length > 0 ? (
+        leaderboardScorecardRows.length > 0 ? (
           <div className="space-y-6">
             <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
               <div className="flex items-center justify-between gap-4">
@@ -294,7 +301,7 @@ export default function LiveScoringLeaderboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {scorecardRows.map((row) => {
+                    {leaderboardScorecardRows.map((row) => {
                       const total = calculateTotal(row.scores);
                       const toPar = formatTotalToPar(total);
 

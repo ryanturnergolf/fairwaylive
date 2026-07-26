@@ -1,4 +1,9 @@
 import type { LegacyPairingGroup, LegacyRoundSetupState, LegacyScorecardRow } from "../tournamentModel";
+import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
+import {
+  applyOfficialScoreResolutions,
+  buildOfficialScoreResolutionMap,
+} from "./officialScoreResolutionService";
 
 export type NormalizedRoundSetup = {
   roundNumber: number;
@@ -103,6 +108,35 @@ export const addTiePositions = <T,>(rows: T[], getScore: (row: T) => number) => 
       ...row,
       position,
     };
+  });
+};
+
+export const projectOfficialLeaderboardScorecards = ({
+  scorecardRows,
+  playerIdsByName,
+  officialEntries,
+  holeCount,
+}: {
+  scorecardRows: LegacyScorecardRow[];
+  playerIdsByName: Map<string, string>;
+  officialEntries: ScoreHoleEntryRow[];
+  holeCount: number;
+}) => {
+  const resolutions = buildOfficialScoreResolutionMap(officialEntries);
+  if (resolutions.size === 0) {
+    return scorecardRows;
+  }
+
+  return scorecardRows.map((row) => {
+    const playerId = playerIdsByName.get(row.playerName);
+    if (!playerId) {
+      return row;
+    }
+
+    const scores = applyOfficialScoreResolutions(row.scores, playerId, holeCount, resolutions);
+    return scores.some((score, index) => score !== row.scores[index])
+      ? { ...row, scores }
+      : row;
   });
 };
 

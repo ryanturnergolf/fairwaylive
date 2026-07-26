@@ -13,8 +13,10 @@ import {
 } from "../../app/lib/services/tournamentPageHelpers";
 import { buildTournamentPlayerRows } from "../../app/lib/services/tournamentService";
 import {
+  buildIndividualLeaderboard,
   buildTeamLeaderboard,
   limitCountingScoresToAvailablePlayers,
+  projectOfficialLeaderboardScorecards,
 } from "../../app/lib/services/tournamentDerivedState";
 import type { LegacyPlayer, TournamentStorageEnvelope } from "../../app/lib/tournamentModel";
 
@@ -206,4 +208,66 @@ test("team counting scores remain feasible for three-player teams without changi
   expect(fivePlayerCount).toBe(4);
   expect(fivePlayerStandings).toHaveLength(2);
   expect(fivePlayerStandings.every((team) => team.totalScore === 18 * (4 + 5 + 6 + 7))).toBe(true);
+});
+
+test("official hole resolutions project into individual and team leaderboards without mutating audit rows", () => {
+  const scorecardRows = [
+    { id: 1, playerName: "Cam Riley", team: "Individuals", scores: [5, 4, 4] },
+    { id: 2, playerName: "Drew Patel", team: "Individuals", scores: [4, 4, 4] },
+  ];
+  const originalRows = structuredClone(scorecardRows);
+  const officialEntries = [
+    {
+      tournament_id: "tournament-1",
+      round_number: 1,
+      player_id: "cam",
+      entered_by_player_id: "cam",
+      hole_number: 1,
+      strokes: 4,
+      fairway_hit: true,
+      green_in_regulation: true,
+      putts: 2,
+      is_official: true,
+      review_status: "official_player_accepted",
+      official_at: "2026-07-26T22:46:34.697Z",
+      official_by: "Tournament Director",
+      override_reason: null,
+      created_at: "2026-07-26T22:46:34.697Z",
+      updated_at: "2026-07-26T22:46:34.697Z",
+    },
+  ];
+
+  const projectedRows = projectOfficialLeaderboardScorecards({
+    scorecardRows,
+    playerIdsByName: new Map([
+      ["Cam Riley", "cam"],
+      ["Drew Patel", "drew"],
+    ]),
+    officialEntries,
+    holeCount: 3,
+  });
+
+  expect(projectedRows[0].scores).toEqual([4, 4, 4]);
+  expect(scorecardRows).toEqual(originalRows);
+  expect(officialEntries[0].strokes).toBe(4);
+
+  const individual = buildIndividualLeaderboard({
+    scorecardsGenerated: true,
+    scorecardRows: projectedRows,
+    displayHoleCount: 3,
+  });
+  expect(individual.map((row) => [row.playerName, row.totalScore, row.position])).toEqual([
+    ["Cam Riley", 12, "T1"],
+    ["Drew Patel", 12, "T2"],
+  ]);
+
+  const team = buildTeamLeaderboard({
+    scorecardsGenerated: true,
+    scorecardRows: projectedRows,
+    displayHoleCount: 3,
+    countingScores: 2,
+  });
+  expect(team).toEqual([
+    expect.objectContaining({ teamName: "Individuals", totalScore: 24, toPar: "E", position: "1" }),
+  ]);
 });

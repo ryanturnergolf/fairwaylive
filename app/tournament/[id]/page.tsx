@@ -8,6 +8,7 @@ import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
 import { getTournamentPlayers } from "../../lib/repositories/tournamentRepository";
 import {
   normalizeTournamentRoundSetup,
+  projectOfficialLeaderboardScorecards,
 } from "../../lib/services/tournamentDerivedState";
 import {
   loadTournamentReadiness,
@@ -321,6 +322,16 @@ export default function TournamentPage() {
           .map((entry) => `${entry.player_id}:${entry.hole_number}`)
       ),
     [scoreHoleEntries]
+  );
+  const leaderboardScorecardRows = useMemo(
+    () =>
+      projectOfficialLeaderboardScorecards({
+        scorecardRows,
+        playerIdsByName,
+        officialEntries: scoreHoleEntries,
+        holeCount: normalizedRoundSetup.numberOfHoles,
+      }),
+    [normalizedRoundSetup.numberOfHoles, playerIdsByName, scoreHoleEntries, scorecardRows]
   );
   const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
     const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
@@ -1528,9 +1539,10 @@ export default function TournamentPage() {
                 {({ onPrintTournamentScorecards, onOpenQrModal, onOpenPrintScorecardModal }) =>
                   activeTab === "Live Scoring" ? (
                     <LiveScoringLeaderboard
-                      normalizedRoundSetup={normalizedRoundSetup}
-                      scorecardsGenerated={scorecardsGenerated}
-                      scorecardRows={scorecardRows}
+                       normalizedRoundSetup={normalizedRoundSetup}
+                       scorecardsGenerated={scorecardsGenerated}
+                       scorecardRows={scorecardRows}
+                       leaderboardScorecardRows={leaderboardScorecardRows}
                       onPrintTournamentScorecards={onPrintTournamentScorecards}
                       onGenerateScorecards={generateScorecards}
                       onRoundSetupChange={handleRoundSetupChange}
