@@ -8,6 +8,15 @@ Last updated: 2026-07-24
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Qualifying Milestone Q6 - Reciprocal Certification and Results
+
+Status: **IN VERIFICATION**
+
+- Certify reciprocal scoring across 9/18/27/36-hole schedules and multiple days using the existing mobile scorecard.
+- Project daily, combined, segment, statistics, progress, discrepancy, and readiness results from Tournament Engine authority.
+- Keep detailed discrepancy work and eventual finalization in the existing Tournament Director workspace.
+- Persist no duplicate standings, totals, statistics, reviews, or readiness state.
+
 ### Qualifying Milestone Q5 - Qualifying Access and Player Entry
 
 Status: **COMPLETE**

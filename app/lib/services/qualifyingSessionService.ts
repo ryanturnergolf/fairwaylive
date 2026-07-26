@@ -1,5 +1,6 @@
 import type {
   CreateQualifyingSessionInput,
+  QualifyingResultsReadModel,
   QualifyingSessionFoundation,
 } from "../qualifyingModel";
 import {
@@ -81,4 +82,22 @@ export const createQualifyingSessionDraft = async (
   const body = (await response.json().catch(() => null)) as { id?: string; error?: string } | null;
   if (!response.ok || !body?.id) throw new Error(body?.error || "Unable to save qualifying.");
   return { id: body.id };
+};
+
+export const loadQualifyingResults = async (
+  sessionId: string
+): Promise<QualifyingResultsReadModel> => {
+  const accessToken = await getSupabaseAuthAccessToken();
+  if (!accessToken) throw new Error("Coach authentication is required.");
+  const response = await fetch(`/api/qualifying-sessions/${sessionId}/results`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const body = (await response.json().catch(() => null)) as
+    | QualifyingResultsReadModel
+    | { error?: string }
+    | null;
+  if (!response.ok) {
+    throw new Error((body as { error?: string } | null)?.error || "Unable to load qualifying results.");
+  }
+  return body as QualifyingResultsReadModel;
 };

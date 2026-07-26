@@ -4,6 +4,12 @@ Last updated: 2026-07-24
 
 ## Open Bugs
 
+### Qualifying course configuration does not yet carry hole-level pars
+
+Status: non-blocking Q6 data limitation.
+
+Q6 uses the Tournament Engine's current four-per-hole round par convention because Qualifying days store course and tee names but no hole-level course setup. Results remain internally consistent with the certified engine; a later additive course-assignment milestone may provide authoritative hole pars without changing scoring.
+
 ### Designated Group Scorer access is intentionally unavailable
 
 Status: expected Q5 milestone boundary, not a production defect.

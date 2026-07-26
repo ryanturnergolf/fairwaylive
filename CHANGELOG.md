@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Q6 read-only Qualifying daily, combined, segment, statistics, progress, discrepancy, and readiness projections over authoritative Tournament Engine rows.
+- Added coach operations/results controls with competition ranking, incomplete-player handling, and direct routing to the existing Tournament Director workspace.
 - Added Q5 session-wide Qualifying access codes, isolated player selection, bounded share-token exchange, and routing into the certified mobile scorecard.
 - Added coach code management and a signed-out Qualifying Login flow with an explicit designated-scorer milestone block.
 - Added Q4 transactional Qualifying activation, composing durable Tournament Engine pairing and scorecard generation under an advisory lock.

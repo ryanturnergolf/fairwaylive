@@ -4,6 +4,10 @@ Last updated: 2026-07-24
 
 ## Active Decisions
 
+### Qualifying results are read-only Tournament Engine projections
+
+Q6 stores no standings, totals, progress, or statistics summaries. It maps existing `tournament_rounds` to Qualifying days and segments, applies the shared official-score resolver to submitted self rows, reads player-owned statistics, and derives competition-ranked daily/combined results plus readiness on demand. Incomplete players remain unranked, withdrawal/disqualification remain non-numeric states, and detailed review/resolution stays in the Tournament Director workspace.
+
 ### Qualifying access exchanges into certified mobile scoring
 
 Q5 stores one hash-only, deterministic qualifying code per Active session. Public resolution is database-authoritative, session-isolated, rate-limited by hashed IP and normalized-code keys, and never exposes relational tables. Player selection exchanges into the existing `mobile_scoring` share-token system with one bounded reusable token per session, player, and active round; the destination remains the certified `/scorecard/[playerId]` route.

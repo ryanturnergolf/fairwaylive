@@ -150,3 +150,72 @@ export type QualifyingActivationResult = {
     scorecardsReady: boolean;
   };
 };
+
+export type QualifyingResultStatus = "complete" | "incomplete" | "withdrawn" | "disqualified";
+
+export type QualifyingStatisticsSummary = {
+  fairwaysHit: number;
+  fairwaysAvailable: number;
+  greensInRegulation: number;
+  greensAvailable: number;
+  totalPutts: number;
+  recordedHoles: number;
+};
+
+export type QualifyingSegmentResult = {
+  roundNumber: number;
+  dayNumber: number;
+  segmentNumber: number;
+  holeCount: number;
+  score: number | null;
+  par: number;
+  toPar: number | null;
+  completionStatus: QualifyingResultStatus;
+  reviewComplete: boolean;
+  submitted: boolean;
+  statistics: QualifyingStatisticsSummary;
+};
+
+export type QualifyingPlayerResult = {
+  playerId: string;
+  playerName: string;
+  position: string | null;
+  score: number | null;
+  par: number;
+  toPar: number | null;
+  completionStatus: QualifyingResultStatus;
+  segments: QualifyingSegmentResult[];
+  statistics: QualifyingStatisticsSummary;
+};
+
+export type QualifyingDayResults = {
+  dayNumber: number;
+  playDate: string | null;
+  holeCount: number;
+  players: QualifyingPlayerResult[];
+};
+
+export type QualifyingReadiness = {
+  expectedPlayerRoundAssignments: number;
+  playerRoundAssignments: number;
+  expectedScorecards: number;
+  scorecards: number;
+  submittedSegments: number;
+  requiredSubmittedSegments: number;
+  completedReviews: number;
+  requiredReviews: number;
+  unresolvedDiscrepancies: number;
+  ready: boolean;
+};
+
+export type QualifyingResultsReadModel = {
+  qualifyingSessionId: string;
+  tournamentId: string;
+  sessionName: string;
+  sessionStatus: QualifyingSessionStatus;
+  scoringMode: QualifyingScoringMode;
+  days: QualifyingDayResults[];
+  combined: QualifyingPlayerResult[];
+  readiness: QualifyingReadiness;
+  generatedAt: string;
+};

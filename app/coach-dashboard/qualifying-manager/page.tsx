@@ -7,6 +7,7 @@ import { activateQualifyingSession } from "../../lib/services/qualifyingActivati
 import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
 import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingSessionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
+import QualifyingResultsPanel from "./QualifyingResultsPanel";
 
 export default function QualifyingSessionsPage() {
   const [sessions, setSessions] = useState<QualifyingSessionFoundation[]>([]);
@@ -178,7 +179,15 @@ export default function QualifyingSessionsPage() {
                     </div>
                   </div>
                   {session.status === "active" ? (
-                    <QualifyingAccessPanel sessionId={session.id} />
+                    <>
+                      <QualifyingAccessPanel sessionId={session.id} />
+                      {session.tournamentId ? (
+                        <QualifyingResultsPanel
+                          sessionId={session.id}
+                          tournamentId={session.tournamentId}
+                        />
+                      ) : null}
+                    </>
                   ) : null}
                 </article>
               ))}
