@@ -141,6 +141,10 @@ test("public team login resolution is protected by a concurrent sliding-window r
     join(process.cwd(), "app/api/team-tournament-login/resolve/route.ts"),
     "utf8"
   );
+  const sharedResolver = readFileSync(
+    join(process.cwd(), "app/lib/services/playerScoringCodeServerService.ts"),
+    "utf8"
+  );
 
   expect(migration).toContain("private.team_tournament_login_attempts");
   expect(migration).toContain("attempted_at > window_started_at");
@@ -153,12 +157,14 @@ test("public team login resolution is protected by a concurrent sliding-window r
   expect(migration).toContain("code_key_hash text := encode(digest");
   expect(migration).toContain("revoke execute on function public.resolve_team_tournament_code(text) from anon, authenticated");
   expect(migration).toContain("return public.resolve_team_tournament_code(normalized_code)");
-  expect(route).toContain('supabase.rpc("resolve_team_tournament_code_rate_limited"');
-  expect(route).toContain('createHash("sha256")');
-  expect(route).not.toContain("input_code_hash");
-  expect(route).toContain('request.headers.get("x-real-ip")');
-  expect(route).toContain('request.headers.get("x-forwarded-for")');
+  expect(route).toContain("resolveTeamScoringCodeForRequest");
+  expect(sharedResolver).toContain('supabase.rpc("resolve_team_tournament_code_rate_limited"');
+  expect(sharedResolver).toContain('createHash("sha256")');
+  expect(sharedResolver).toContain("input_code: normalizeTeamTournamentCode(code)");
+  expect(sharedResolver).toContain('request.headers.get("x-real-ip")');
+  expect(sharedResolver).toContain('request.headers.get("x-forwarded-for")');
   expect(route).not.toContain("console.");
+  expect(sharedResolver).not.toContain("console.");
 });
 
 test("repeated team resolutions can reuse one token while other teams remain isolated", async () => {
