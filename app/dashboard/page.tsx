@@ -28,6 +28,12 @@ import {
   persistIncompleteTournamentSeed,
 } from "../lib/services/incompleteTournamentSeedService";
 import {
+  qaSeedTemplates,
+  QA_SEED_TEST_QUALIFIER_ID,
+  runQaSeedTemplate,
+  type QaSeedTemplateResult,
+} from "../lib/services/qaSeedTemplateService";
+import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
   loadTournamentStorageEnvelope,
@@ -250,6 +256,8 @@ export default function DashboardPage() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isSeedingTournament, setIsSeedingTournament] = useState(false);
   const [isSeedingIncompleteTournament, setIsSeedingIncompleteTournament] = useState(false);
+  const [activeQaSeedTemplateId, setActiveQaSeedTemplateId] = useState("");
+  const [qaSeedResult, setQaSeedResult] = useState<QaSeedTemplateResult | null>(null);
   const [seedError, setSeedError] = useState("");
   const seedInFlightRef = useRef(false);
 
@@ -603,6 +611,24 @@ export default function DashboardPage() {
     } finally {
       seedInFlightRef.current = false;
       setIsSeedingIncompleteTournament(false);
+    }
+  };
+
+  const handleQaSeedTemplate = async (templateId: string) => {
+    if (seedInFlightRef.current) return;
+    seedInFlightRef.current = true;
+    setActiveQaSeedTemplateId(templateId);
+    setQaSeedResult(null);
+    setSeedError("");
+    try {
+      const result = await runQaSeedTemplate(templateId);
+      setQaSeedResult(result);
+      router.push(`/tournament/${result.tournamentId}`);
+    } catch (error) {
+      setSeedError(error instanceof Error ? error.message : "Unable to create QA test data.");
+    } finally {
+      seedInFlightRef.current = false;
+      setActiveQaSeedTemplateId("");
     }
   };
 
@@ -1001,6 +1027,41 @@ export default function DashboardPage() {
               {seedError}
             </p>
           ) : null}
+
+          <section className="mt-10 rounded-[32px] border border-dashed border-[#B8892D] bg-[#FFF9E8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
+              Developer / QA
+            </p>
+            <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+              Reusable test-data templates
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#51635C]">
+              Development and testing only. These templates create real authenticated data through the same production services used by coaches and players.
+            </p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              {qaSeedTemplates.map((template) => (
+                <article key={template.id} className="rounded-2xl border border-[#E8DCC8] bg-white p-5">
+                  <h4 className="font-black">{template.label}</h4>
+                  <p className="mt-2 text-sm leading-6 text-[#51635C]">{template.description}</p>
+                  <button
+                    type="button"
+                    disabled={Boolean(activeQaSeedTemplateId)}
+                    onClick={() => void handleQaSeedTemplate(template.id)}
+                    className="mt-4 min-h-12 w-full rounded-full bg-[#0B3D2E] px-5 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {activeQaSeedTemplateId === template.id
+                      ? "Seeding Test Qualifier..."
+                      : template.label}
+                  </button>
+                </article>
+              ))}
+            </div>
+            {qaSeedResult?.templateId === QA_SEED_TEST_QUALIFIER_ID ? (
+              <p className="mt-4 rounded-2xl border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-bold text-[#146233]">
+                Test qualifier ready in {(qaSeedResult.durationMs / 1000).toFixed(1)} seconds.
+              </p>
+            ) : null}
+          </section>
 
           <section id="director" className="mt-10 rounded-[32px] border border-[#D6E0D8] bg-[#F8FBF8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
