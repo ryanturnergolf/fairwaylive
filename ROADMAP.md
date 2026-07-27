@@ -28,6 +28,56 @@ Status: **NEXT**
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 
+### Approved Future Capability - Custom Statistics And Player Season Tracking
+
+Status: **APPROVED AFTER CONTROLLED-BETA PREPARATION**
+
+This work follows UX polish, onboarding, and durable roster preparation. It must reuse the certified scoring, Review, official-resolution, finalization, and read-only architecture rather than introducing a second event or analytics authority.
+
+#### Phase 1 - Data Foundation
+
+- Add durable coach/program-owned stat definitions with stable IDs, input metadata, applicability, ordering, lifecycle state, and historical definition integrity.
+- Add reusable stat packages and event/package assignment for Tournament, Qualifying, Practice, and future scored-event types.
+- Add hole-level custom values tied to durable rostered-player, season, event, round, hole, definition, entered-by, and official identities.
+- Establish durable rostered-player and season relationships that survive roster edits, finalized events, season transitions, and definition changes.
+- Keep hole-level values authoritative; derived season summaries are not the source of truth.
+
+#### Phase 2 - Coach Configuration
+
+- Enable or disable built-in statistics without deleting historical values.
+- Configure package display order and applicability.
+- Create basic custom checkbox and bounded-number definitions.
+- Assign a selected stat package to an event before scoring begins.
+
+#### Phase 3 - Dynamic Scorecards
+
+- Generate mobile statistic inputs from the event's selected package.
+- Preserve existing Fairway, GIR, Putts, Save Hole atomicity, resume behavior, and signed-out authorization.
+- Add Shots from 100 yards and in with a 1–6+ selector.
+- Add up-and-down opportunity and success/failure tracking.
+
+#### Phase 4 - Review And Finalization
+
+- Compare self and marker custom-stat values only where the definition and scoring policy require it.
+- Resolve official custom-stat values through the existing immutable audit/projection model.
+- Preserve original values, finalized read-only history, and event finalization semantics.
+
+#### Phase 5 - Player Season Analytics
+
+- Add rostered-player profiles with season totals, averages, percentages, and per-round averages.
+- Add event history, Tournament/Qualifying splits, recent trends, and custom-stat summaries.
+- Derive analytics from durable hole-level data.
+- Defer team comparisons and career/multi-season analysis until the player-season foundation is certified.
+
+Open design questions to resolve before Phase 1:
+
+- the canonical durable rostered-player and season entities and how existing event player IDs map to them,
+- immutable definition versioning versus value-level definition snapshots,
+- the applicability-rule format and validation boundary,
+- which custom definitions require self/marker Review,
+- migration of existing Fairway, GIR, Putts, and historical Penalty Strokes into the package model,
+- privacy, retention, and export rules for multi-season player development records.
+
 ### Qualifying Milestone Q7 - Finalization and Historical Results
 
 Status: **COMPLETE**

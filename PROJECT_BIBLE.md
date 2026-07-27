@@ -182,30 +182,76 @@ Responsibilities:
 
 Review Hub should be built on top of the Tournament Aggregate rather than duplicating score resolution logic in route components.
 
-## Future Stat Tracking
+## Approved Future Capability: Custom Statistics And Player Season Tracking
 
-Stats should be enabled by default per tournament, with the option to disable later if needed.
+Status: **APPROVED FOR FUTURE PHASED IMPLEMENTATION**
 
-Each hole score should be able to carry:
+This capability follows controlled-beta UX, onboarding, and roster preparation. It is not implemented by this documentation milestone and must not destabilize the certified Tournament Engine or Qualifying workflows.
 
-- fairway hit,
-- green in regulation,
-- putts from 1 to 6,
-- optional future stat fields.
+Coaches will be able to select which statistics appear on mobile scorecards, organize them into event stat packages, and create configuration-driven custom statistics. Initial and anticipated fields include:
 
-Stats must be tied to the hole score entry, not stored as detached player-level notes. That keeps scoring, review, and development analytics aligned.
+- Fairway,
+- Green in Regulation,
+- Putts,
+- Shots from 100 yards and in with a selectable 1–6+ value,
+- Up-and-down opportunity,
+- Up-and-down success or failure,
+- Sand save,
+- Penalty strokes,
+- coach-defined custom statistics.
 
-Initial stat architecture should preserve:
+Stat definitions must not require a new database column for every field. A durable definition needs:
 
-- hole number,
-- round number,
-- player id,
-- entered-by player id,
-- score,
-- fairway hit,
-- green in regulation,
-- putt count,
-- source and review status.
+- stable definition ID,
+- coach/program ownership,
+- name and description,
+- input type,
+- allowed options or numeric range,
+- display order,
+- active/inactive state,
+- applicability rules,
+- season and package assignment.
+
+Anticipated input types are checkbox, yes/no, bounded number, selectable options, rating, and optional text in a later phase.
+
+Event stat packages select and order definitions for Tournament, Qualifying, Practice, or another future scored event. The selected package controls mobile scorecard inputs while preserving the certified Fairway, GIR, and Putts behavior during migration.
+
+### Durable Player And Season Identity
+
+Statistics for rostered players attach to a durable rostered-player ID, never a player name, temporary event label, or presentation-only tournament identity. Player development history must survive roster edits, event completion, event finalization, season transitions, and changes to stat definitions.
+
+Durable season tracking should support:
+
+- season totals and averages,
+- percentages and per-round averages,
+- event and round history,
+- Tournament versus Qualifying splits,
+- recent rolling trends,
+- custom-stat summaries,
+- career and multi-season history in a later phase.
+
+### Hole-Level Statistical Authority
+
+The source of truth is durable player/event/round/hole data, not a precomputed season average. Each value must preserve enough context to recalculate analytics:
+
+- durable rostered-player ID,
+- event ID and event type,
+- course,
+- round and hole,
+- par,
+- stat definition ID,
+- entered value,
+- entered-by/scoring identity and source,
+- official status where applicable,
+- definition metadata or immutable definition version needed to interpret the historical value.
+
+Disabling, removing, renaming, reordering, or moving a definition between packages must not erase or reinterpret historical values.
+
+### Review, Official Values, And Analytics
+
+Custom statistics may participate in self/marker Review when the definition and scoring policy require comparison. Original self-entered and marker-entered values remain auditable. An official resolution may be projected into analytics without rewriting the original values, following the certified official-score projection pattern.
+
+Season summaries are derived read models over durable hole-level values. Examples include average putts per round, up-and-down percentage, average shots from 100 yards and in, Fairway and GIR percentages, checkbox success percentages, numeric averages, event-type splits, and rolling recent-round trends. Precomputed summaries may be used as caches later, but never as the sole authority.
 
 ## Architecture Rules
 

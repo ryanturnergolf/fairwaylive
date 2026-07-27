@@ -27,6 +27,24 @@ An official resolution is projected onto read-only scorecard and leaderboard mod
 
 Players or teams sharing the same ranking score receive the first ordinal position for that score and a `T` prefix. Later ranks skip the occupied positions: `1, T2, T2, 4`. Non-tied positions have no prefix, and statistics do not break score ties unless a separately approved competition rule is introduced.
 
+### Custom statistics use definitions and packages, not schema columns
+
+Future statistics are configuration-driven. A stable coach/program-owned definition describes its name, input type, allowed values, applicability, order, lifecycle state, and package membership. Tournament, Qualifying, Practice, and future scored events select a stat package that controls mobile inputs. Adding a statistic must not require adding a dedicated column to the scoring table.
+
+Built-in Fairway, GIR, and Putts behavior remains protected until the dynamic package path is separately implemented and certified. Definition removal means deactivation for future entry, not deletion of historical meaning.
+
+### Player development history uses durable rostered-player identity
+
+Season and multi-event statistics attach to a durable rostered-player ID rather than player names, event labels, qualifying participant IDs, or round-specific tournament player IDs. Event scoring identities must map explicitly to that durable player. Roster edits, finalized events, season transitions, and stat-definition changes must not sever historical ownership.
+
+### Hole-level values are analytics authority
+
+Custom statistical values are stored at player, event, round, hole, and definition granularity with event type, course, par, entered-by/source identity, and official status where applicable. Season totals, averages, percentages, event splits, and trends are derived projections. Precomputed summaries may become performance caches, but they cannot replace the durable hole-level source.
+
+### Custom-stat history preserves original and official meaning
+
+Historical values retain enough immutable definition metadata or definition-version identity to remain understandable after rename, reorder, deactivation, package removal, or rule changes. When Review applies, original self and marker values remain auditable and an official value is projected into analytics without overwriting either source, matching the certified official-score resolution pattern.
+
 ### Qualifying finalization follows Tournament Engine authority
 
 Q7 calls a Qualifying-readiness adapter inside the certified Tournament Finalization Service before recording any Qualifying finalization metadata. The adapter preserves the existing snapshot/tournament compare-and-swap mutation and finalization record, but accepts Q6's multi-round readiness instead of the ordinary single-workspace readiness projection. An owner-scoped advisory-locked RPC then independently verifies the finalized tournament and Q6 readiness before atomically recording only `qualifying_sessions.status`, `finalized_at`, and `finalized_by`. If Tournament finalization fails, Qualifying remains Active; if metadata convergence is interrupted after Tournament success, an idempotent retry completes it without re-finalizing or creating historical result rows.
