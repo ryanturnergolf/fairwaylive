@@ -152,6 +152,9 @@ test("universal resolver preserves rate limits and rejects cross-event ambiguity
   expect(resolver).toContain("resolved.length === 1");
   expect(resolver).not.toContain("console.");
   expect(route).toContain("genericFailure");
+  expect(route).toMatch(
+    /normalizedCode\.length !== PLAYER_SCORING_CODE_LENGTH\)\s*\{\s*await resolveUniversalPlayerScoringCode/
+  );
   expect(route).not.toContain("team scoring code");
   expect(route).not.toContain("qualifying code");
 });

@@ -42,6 +42,51 @@ test("Q5 migration isolates sessions, rate limits access, and bounds player toke
   expect(cryptoPathFix).toContain("set search_path = public, private, extensions");
 });
 
+test("qualifying access counts only failed resolutions toward IP and code limits", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase/migrations/20260802000000_count_only_failed_qualifying_access_attempts.sql"
+    ),
+    "utf8"
+  );
+  const normalizedSql = sql.replace(/\s+/g, " ");
+  const successfulResolution = normalizedSql.slice(
+    normalizedSql.indexOf("if session_row.id is null then"),
+    normalizedSql.indexOf("end; $$;")
+  );
+
+  expect(sql).toContain("count(*) >= 20");
+  expect(sql).toContain("count(*) >= 10");
+  expect(sql).toContain("where ip_hash = input_ip_hash");
+  expect(sql).toContain("where code_hash = input_code_hash");
+  expect(sql.match(/insert into private\.qualifying_access_attempts/g)).toHaveLength(2);
+  expect(successfulResolution).toContain("if session_row.id is null then insert into");
+  expect(successfulResolution).toContain("return jsonb_build_object");
+  expect(
+    successfulResolution.slice(successfulResolution.indexOf("return jsonb_build_object"))
+  ).not.toContain("insert into private.qualifying_access_attempts");
+});
+
+test("qualifying failure limits serialize both scopes and clear legacy successful attempts", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase/migrations/20260802000000_count_only_failed_qualifying_access_attempts.sql"
+    ),
+    "utf8"
+  );
+
+  expect(sql).toContain("least(ip_lock_key, code_lock_key)");
+  expect(sql).toContain("greatest(ip_lock_key, code_lock_key)");
+  expect(sql).toContain("delete from private.qualifying_access_attempts attempt");
+  expect(sql).toContain("code.active = true");
+  expect(sql).toContain("session.status = 'active'");
+  expect(sql).toContain(
+    "grant execute on function public.resolve_qualifying_access_code_rate_limited(text, text) to anon, authenticated"
+  );
+});
+
 test("valid reciprocal qualifying resolves isolated players and routes to certified scorecard", async ({ page }) => {
   await page.route("**/api/qualifying-access/resolve", (route) => route.fulfill({
     status: 200,

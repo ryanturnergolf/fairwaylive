@@ -19,7 +19,10 @@ export async function POST(request: Request) {
   try {
     const { code = "" } = (await request.json()) as { code?: string };
     const normalizedCode = normalizePlayerScoringCode(code);
-    if (normalizedCode.length !== PLAYER_SCORING_CODE_LENGTH) return genericFailure();
+    if (normalizedCode.length !== PLAYER_SCORING_CODE_LENGTH) {
+      await resolveUniversalPlayerScoringCode(request, normalizedCode);
+      return genericFailure();
+    }
 
     const resolution = await resolveUniversalPlayerScoringCode(request, normalizedCode);
     return resolution ? NextResponse.json(resolution) : genericFailure();
