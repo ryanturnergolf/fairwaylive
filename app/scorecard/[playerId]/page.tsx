@@ -728,6 +728,8 @@ function ReciprocalPlayerScorecardPage() {
       let loadedReviewComparison: ReviewComparisonModel | null = null;
       let loadedHoleStats = createEmptyHoleStats(holeCount);
       let remoteLoadFailed = false;
+      let stableSelfRowExists = false;
+      let stableMarkerRowExists = false;
       let localStorageLoadedCount = 0;
       let supabaseLoadedCount = 0;
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
@@ -790,43 +792,55 @@ function ReciprocalPlayerScorecardPage() {
             shareToken: requestedShareToken || undefined,
           });
 
-          if (remoteScore?.hole_scores?.length) {
-            return normalizeHoleScores(remoteScore.hole_scores, holeCount);
+          if (remoteScore) {
+            return {
+              rowExists: true,
+              scores: normalizeHoleScores(remoteScore.hole_scores, holeCount),
+            };
           }
         }
 
-        return null;
+        return {
+          rowExists: false,
+          scores: null,
+        };
       };
 
       try {
-        const remoteSelfScores = await loadRemoteScore(
+        const remoteSelfScore = await loadRemoteScore(
           resolvedPlayerIds.selectedPlayerIds,
           resolvedPlayerIds.selectedPlayerId
         );
-        if (hasAnyHoleScore(remoteSelfScores)) {
-          supabaseLoadedCount += 1;
-          loadedSelfScores = chooseMostCompleteScores(loadedSelfScores, remoteSelfScores);
+        stableSelfRowExists = remoteSelfScore.rowExists;
+        if (remoteSelfScore.rowExists) {
+          loadedSelfScores = remoteSelfScore.scores;
+          if (hasAnyHoleScore(remoteSelfScore.scores)) {
+            supabaseLoadedCount += 1;
+          }
         }
 
         if (resolvedPlayerIds.markedPlayerId && resolvedPlayerIds.assignedMarkerPlayerId) {
-          const remoteMarkerScores = await loadRemoteScore(
+          const remoteMarkerScore = await loadRemoteScore(
             resolvedPlayerIds.markedPlayerIds,
             resolvedPlayerIds.selectedPlayerId
           );
-          if (hasAnyHoleScore(remoteMarkerScores)) {
-            supabaseLoadedCount += 1;
-            loadedMarkerScores = chooseMostCompleteScores(loadedMarkerScores, remoteMarkerScores);
+          stableMarkerRowExists = remoteMarkerScore.rowExists;
+          if (remoteMarkerScore.rowExists) {
+            loadedMarkerScores = remoteMarkerScore.scores;
+            if (hasAnyHoleScore(remoteMarkerScore.scores)) {
+              supabaseLoadedCount += 1;
+            }
           }
 
           const remoteCurrentPlayerMarkerScores = await loadRemoteScore(
             resolvedPlayerIds.selectedPlayerIds,
             resolvedPlayerIds.assignedMarkerPlayerId
           );
-          if (remoteCurrentPlayerMarkerScores) {
-            if (hasAnyHoleScore(remoteCurrentPlayerMarkerScores)) {
+          if (remoteCurrentPlayerMarkerScores.rowExists) {
+            if (hasAnyHoleScore(remoteCurrentPlayerMarkerScores.scores)) {
               supabaseLoadedCount += 1;
             }
-            loadedReviewMarkerScores = remoteCurrentPlayerMarkerScores;
+            loadedReviewMarkerScores = remoteCurrentPlayerMarkerScores.scores;
           }
         }
 
@@ -858,6 +872,26 @@ function ReciprocalPlayerScorecardPage() {
           supabaseLoadedCount,
           sharedScores.filter((entry) => hasAnyHoleScore(entry.hole_scores)).length
         );
+        const stableSelfEntry = sharedScores.find(
+          (entry) =>
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id))
+        );
+        if (stableSelfEntry) {
+          stableSelfRowExists = true;
+          loadedSelfScores = normalizeHoleScores(stableSelfEntry.hole_scores, holeCount);
+        }
+
+        const stableMarkerEntry = sharedScores.find(
+          (entry) =>
+            resolvedPlayerIds.markedPlayerIds.includes(String(entry.player_id)) &&
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.entered_by_player_id))
+        );
+        if (stableMarkerEntry) {
+          stableMarkerRowExists = true;
+          loadedMarkerScores = normalizeHoleScores(stableMarkerEntry.hole_scores, holeCount);
+        }
+
         const getSharedScore = (playerIds: string[], enteredByPlayerIds?: string[], preferMarkerEntry = false) => {
           const matchingScores = sharedScores
             .filter((entry) => playerIds.includes(String(entry.player_id)) && hasAnyHoleScore(entry.hole_scores))
@@ -869,7 +903,7 @@ function ReciprocalPlayerScorecardPage() {
           return selectedEntry ? normalizeHoleScores(selectedEntry.hole_scores, holeCount) : null;
         };
 
-        if (!hasAnyHoleScore(loadedSelfScores)) {
+        if (!stableSelfRowExists && !hasAnyHoleScore(loadedSelfScores)) {
           const sharedScoreboardSelfScores = getSharedScore(
             resolvedPlayerIds.selectedPlayerIds,
             resolvedPlayerIds.selectedPlayerIds
@@ -879,7 +913,7 @@ function ReciprocalPlayerScorecardPage() {
           }
         }
 
-        if (!hasAnyHoleScore(loadedMarkerScores)) {
+        if (!stableMarkerRowExists && !hasAnyHoleScore(loadedMarkerScores)) {
           const sharedMarkerScores = getSharedScore(
             resolvedPlayerIds.markedPlayerIds,
             [resolvedPlayerIds.selectedPlayerId]
@@ -966,13 +1000,15 @@ function ReciprocalPlayerScorecardPage() {
         }
       } finally {
         if (!isCancelled) {
-          const nextScores = chooseMostCompleteScores(
-            loadedSelfScores,
-            scoresRef.current
+          const nextScores = (
+            stableSelfRowExists
+              ? loadedSelfScores
+              : chooseMostCompleteScores(loadedSelfScores, scoresRef.current)
           ) ?? normalizeHoleScores(undefined, holeCount);
-          const nextMarkerScores = chooseMostCompleteScores(
-            loadedMarkerScores,
-            markerScoresRef.current
+          const nextMarkerScores = (
+            stableMarkerRowExists
+              ? loadedMarkerScores
+              : chooseMostCompleteScores(loadedMarkerScores, markerScoresRef.current)
           ) ?? normalizeHoleScores(undefined, holeCount);
 
           scoresRef.current = nextScores;

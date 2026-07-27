@@ -2825,6 +2825,82 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
 });
 
+test("stable score rows override more-complete snapshot presentation without enabling Review", async ({ page }) => {
+  const snapshot = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
+  snapshot.uiState.scorecards.scorecardRows[0].scores = Array.from({ length: 18 }, () => 7);
+  snapshot.uiState.scorecards.scorecardRows[1].scores = Array.from({ length: 18 }, () => 5);
+
+  const stableSelfScores = [...Array.from({ length: 8 }, () => 4), ...Array.from({ length: 10 }, () => 0)];
+  const stableMarkerScores = [...Array.from({ length: 8 }, () => 6), ...Array.from({ length: 10 }, () => 0)];
+  const sharedStore = await routeSharedScoreEntriesStore(page);
+  sharedStore.savedScoreRows.push(
+    buildScoreEntry("player-1", "player-1", stableSelfScores),
+    buildScoreEntry("player-2", "player-1", stableMarkerScores)
+  );
+  const holeStatsStore = await routeScoreHoleEntriesStore(page);
+  holeStatsStore.savedHoleRows.push(
+    ...Array.from({ length: 8 }, (_, index) => {
+      const holeNumber = index + 1;
+      return buildScoreHoleEntry({
+        tournament_id: sharedTournamentId,
+        round_number: 1,
+        player_id: "player-1",
+        entered_by_player_id: "player-1",
+        hole_number: holeNumber,
+        strokes: 4,
+        fairway_hit: [3, 7].includes(holeNumber) ? null : true,
+        green_in_regulation: true,
+        putts: 2,
+        entry_source: "self",
+        entry_status: "live",
+      });
+    })
+  );
+  await routeSharedTournamentRoster(page);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: snapshot,
+  }]);
+  await page.route("**/api/share-tokens/resolve", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tournamentId: sharedTournamentId,
+        purpose: "mobile_scoring",
+        expiresAt: "2026-07-22T00:00:00.000Z",
+      }),
+    })
+  );
+
+  const writeRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "GET" && (
+      request.url().includes("/score_entries") ||
+      request.url().includes("/score_hole_entries") ||
+      request.url().includes("/tournament_state_snapshots") ||
+      request.url().includes("/api/score-mutations")
+    )) {
+      writeRequests.push(`${request.method()} ${request.url()}`);
+    }
+  });
+
+  await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=stable-precedence-token`);
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(4);
+  await expect(page.getByText("Hole 9", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Review & Submit Round" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect(page.getByText("Hole 8", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
+  await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("6");
+  expect(writeRequests).toEqual([]);
+});
+
 test("signed-out shared scorecard hydrates legacy snapshot scores by stable Supabase identity", async ({ page }) => {
   const snapshotScores = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
   snapshotScores.uiState.scorecards.scorecardRows[0].scores = [3, 5, 4, ...Array.from({ length: 15 }, () => 0)];
