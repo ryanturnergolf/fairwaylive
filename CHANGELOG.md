@@ -1,5 +1,27 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-27
+
+### Certification
+
+- Completed controlled live-pilot certification for the Tournament Engine and reciprocal Qualifying using real Supabase session `dd6a0929-a035-4f10-9185-54324f82a5f2` and backing tournament `11ddab64-36fa-4522-b9b5-cb07372bd214`.
+- Verified universal player entry, ordinary Tournament and Qualifying isolation, signed-out scoring, reciprocal scores, player-owned statistics, Review, intentional discrepancy blocking, Director resolution, audit preservation, readiness, finalization, history, and read-only enforcement.
+- Finalized Tournament and Qualifying authority at the matching timestamp `2026-07-27T02:41:33.69Z`.
+- Verified final competition rankings: Avery Brooks and Cam Riley T1 at 35 (-1), Noah Wilson and Sam Carter T3 at 36 (E), and Drew Patel and Jordan Lee T5 at 37 (+1).
+- Confirmed the production build and Playwright 169/169 baseline, with `main` synchronized to `origin/main`.
+
+### Added
+
+- Added one universal homepage scoring-code entry that securely dispatches ordinary Tournament and Qualifying codes into their existing bounded authorization exchanges and certified scorecard route.
+- Added the registry-based QA Seed Test Qualifier for repeatable real-data certification with six reciprocal players, completed Holes 1–8, and Hole 9 ready for play.
+
+### Fixed
+
+- Projected official hole resolutions into individual and team standings after refresh without mutating original audit rows or cached snapshots.
+- Corrected tied leaderboard positions to standard competition ranking.
+- Made identity-specific durable score rows authoritative over more-complete snapshot presentation arrays during mobile hydration.
+- Changed Qualifying shared-code throttling so successful exchanges do not consume brute-force failure allowances while failed IP and normalized-code limits remain enforced.
+
 ## 2026-07-25
 
 - Added Qualifying Q8 designated group scoring behind an explicit policy boundary, with validated group/round assignments, role-isolated access, group score entry, player-owned statistics, and self-verification on the existing scorecard route.

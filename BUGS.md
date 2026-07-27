@@ -1,11 +1,29 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-24
+Last updated: 2026-07-27
 
 ## Open Bugs
 
 - Q8 blocks missing, duplicate, cross-group, and post-scoring scorer assignment changes at the database boundary; activation stays unavailable until every group/round assignment is valid.
 - Resolved Q8's reciprocal-only finalization blocker; designated readiness no longer requires synthetic self/marker comparison rows.
+
+### Transient score-mutation response after official resolution
+
+Status: monitor during controlled pilot; not a release blocker.
+
+One authenticated Director resolution produced a single transient HTTP 500 from `/api/score-mutations` immediately after accepting the marker score. The official value persisted successfully, original self and marker values remained available for audit, the Review Queue converged, and fresh authoritative reloads were clean. The failure did not recur and no data was lost. Capture the action and response body if it recurs during pilot operations before changing behavior.
+
+## Closed Controlled-Pilot Blockers
+
+- Universal scoring-code entry now routes ordinary Tournament and Qualifying players through one secure public boundary without cross-event leakage.
+- Durable self and marker rows now override snapshot presentation data whenever the identity-specific stable row exists.
+- Reciprocal Review resolves the inverse assigned marker while score entry retains the forward marked-player assignment.
+- Durable scorecard coverage now repairs stale generated-readiness flags without regenerating artifacts.
+- Blank and null individual-team identities normalize consistently during roster/pairing scorecard construction.
+- Official resolutions project into refreshed leaderboards while original self/marker audit values and snapshots remain unchanged.
+- Individual and team leaderboard ties now use competition ranking.
+- Successful shared Qualifying-code exchanges no longer consume failed-attempt throttling allowances; invalid, expired, revoked, inactive-session, and malformed attempts remain protected.
+- Controlled-pilot readiness, synchronized finalization, finalized history, disabled score editing, and disabled access rotation passed against the certified real event.
 
 ### Qualifying finalization requires a current Tournament Engine snapshot
 

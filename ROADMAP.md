@@ -6,13 +6,31 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 - Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
 
-Last updated: 2026-07-24
+Last updated: 2026-07-27
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
+### Controlled Live-Pilot Certification
+
+Status: **COMPLETE**
+
+- Certified the Tournament Engine and reciprocal Qualifying lifecycle against real Supabase data from universal player entry through finalized history.
+- Verified durable self/marker identities, statistics, Review, official discrepancy convergence, leaderboard projection, competition ties, readiness, synchronized finalization, and post-finalization read-only enforcement.
+- Certified ordinary Tournament universal-code isolation and QR/share behavior as regressions alongside Qualifying.
+- Final certification event: Qualifying `dd6a0929-a035-4f10-9185-54324f82a5f2`, Tournament `11ddab64-36fa-4522-b9b5-cb07372bd214`, finalized `2026-07-27T02:41:33.69Z`.
+- Baseline: production build passed; Playwright passed 169/169; `main` synchronized with `origin/main`.
+
+### Next Phase - Controlled Beta Preparation
+
+Status: **NEXT**
+
+- Prioritize UX polish, coach onboarding, roster preparation, operational documentation, and controlled-beta support.
+- Keep pilot-found stabilization fixes separate from new feature development.
+- Do not treat controlled-pilot certification as unrestricted production readiness.
+
 ### Qualifying Milestone Q7 - Finalization and Historical Results
 
-Status: **IN VERIFICATION**
+Status: **COMPLETE**
 
 - Delegate finalization to the certified Tournament Engine workflow.
 - Record only locked, idempotent Qualifying finalized metadata after readiness and Tournament finalization succeed.
@@ -21,7 +39,7 @@ Status: **IN VERIFICATION**
 
 ### Qualifying Milestone Q6 - Reciprocal Certification and Results
 
-Status: **IN VERIFICATION**
+Status: **COMPLETE**
 
 - Certify reciprocal scoring across 9/18/27/36-hole schedules and multiple days using the existing mobile scorecard.
 - Project daily, combined, segment, statistics, progress, discrepancy, and readiness results from Tournament Engine authority.

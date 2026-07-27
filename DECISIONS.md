@@ -1,11 +1,31 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-24
+Last updated: 2026-07-27
 
 ## Active Decisions
 
 - Q8 Designated Group Scorer is a Qualifying-only strategy. Scorer-authored scores retain `(golfer, designated scorer)` identity, personal statistics retain `(golfer, golfer)` identity, and ordinary Tournament and reciprocal paths do not branch on designated behavior.
 - Qualifying finalization dispatches readiness by scoring policy: reciprocal delegates unchanged to the Q7 gate, while designated sessions require assignment-matched scorer rows and each golfer's self verification.
+
+### One universal entry resolves every supported player scoring code
+
+The homepage exposes one player scoring-code workflow. Its server boundary normalizes the code, resolves exactly one supported event type, and delegates to the existing event-specific secure exchange. Ordinary Tournament and Qualifying retain their isolation, rate limiting, bounded share tokens, and certified `/scorecard/[playerId]` destination. Direct legacy entry routes may remain compatible, but new coded event types must integrate at this boundary instead of adding another homepage flow.
+
+### Successful shared-code exchanges are not brute-force failures
+
+Qualifying access rate limits count invalid, expired, revoked, inactive-session, and malformed resolutions. A successful valid shared-code exchange does not consume the IP or normalized-code failed-attempt allowance. Database advisory locks, generic public errors, hashed rate keys, session isolation, and bounded reusable share tokens remain mandatory.
+
+### Durable identity-specific score rows outrank snapshot presentation
+
+For each tournament, round, player, and entered-by identity, the existence of a stable Supabase score row is evaluated separately from its completeness. If the row exists, its stored values—including explicit zero or incomplete holes—are authoritative. Snapshot presentation data is a non-mutating compatibility fallback only when the corresponding stable row is absent.
+
+### Official scores are immutable leaderboard projections
+
+An official resolution is projected onto read-only scorecard and leaderboard models before totals, team counts, and ranks are calculated. Projection does not rewrite original self or marker inputs and does not persist resolved values into cached snapshots. Review continues to expose the original comparison and official outcome for audit.
+
+### Leaderboards use competition ranking
+
+Players or teams sharing the same ranking score receive the first ordinal position for that score and a `T` prefix. Later ranks skip the occupied positions: `1, T2, T2, 4`. Non-tied positions have no prefix, and statistics do not break score ties unless a separately approved competition rule is introduced.
 
 ### Qualifying finalization follows Tournament Engine authority
 

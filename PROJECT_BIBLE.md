@@ -1,6 +1,6 @@
 # Clubhouse HQ Project Bible
 
-Last updated: 2026-07-07
+Last updated: 2026-07-27
 
 ## Product Vision
 
@@ -17,6 +17,48 @@ Clubhouse HQ is not recruiting software. Recruiting may become a future module, 
 - QR and mobile scoring are protected workflows.
 - localStorage remains a supported cache/offline fallback.
 - Supabase is the future source of truth, but the migration must be incremental.
+
+## Controlled Live-Pilot Certification
+
+Status: **COMPLETE FOR CONTROLLED LIVE PILOT**
+
+The Tournament Engine and Qualifying orchestration layer completed an authenticated, real-Supabase certification from player entry through synchronized finalization. This supports a controlled pilot with active operational monitoring; it does not claim unrestricted production readiness.
+
+Certified event:
+
+- Qualifying session: `dd6a0929-a035-4f10-9185-54324f82a5f2`
+- Backing tournament: `11ddab64-36fa-4522-b9b5-cb07372bd214`
+- Finalized at: `2026-07-27T02:41:33.69Z`
+- Automated baseline: production build passed and Playwright passed 169/169.
+
+Certified end-to-end workflow:
+
+- universal homepage scoring-code entry for ordinary Tournament and Qualifying events,
+- event- and team-scoped participant isolation,
+- signed-out QR/share-token scorecard access,
+- reciprocal self and marker scoring with durable identity-specific persistence,
+- player-owned Fairway, GIR, and Putts persistence,
+- authoritative refresh, resume, Review, submission, and discrepancy blocking,
+- Tournament Director official-score resolution with original self and marker audit values preserved,
+- immutable official-score projection into live standings after refresh,
+- competition ranking for tied individual and team positions,
+- readiness convergence across assignments, scorecards, submissions, Reviews, and discrepancies,
+- synchronized Tournament and Qualifying finalization timestamps,
+- finalized rankings, statistics, and historical results,
+- read-only Tournament workspaces and Qualifying history after finalization,
+- disabled score editing and access-code rotation after finalization,
+- ordinary Tournament universal-code, QR/share, Review, and finalized-state regression coverage.
+
+Certified final rankings:
+
+- T1 Avery Brooks — 35 (-1)
+- T1 Cam Riley — 35 (-1)
+- T3 Noah Wilson — 36 (E)
+- T3 Sam Carter — 36 (E)
+- T5 Drew Patel — 37 (+1)
+- T5 Jordan Lee — 37 (+1)
+
+The certified architecture keeps Tournament Engine tables authoritative for players, rounds, pairings, scorecards, scores, statistics, Reviews, official outcomes, and finalization. Qualifying remains an orchestration and read-model layer over those durable objects rather than a second scoring engine.
 
 ## Current Architecture Snapshot
 
