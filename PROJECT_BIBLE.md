@@ -60,6 +60,18 @@ Certified final rankings:
 
 The certified architecture keeps Tournament Engine tables authoritative for players, rounds, pairings, scorecards, scores, statistics, Reviews, official outcomes, and finalization. Qualifying remains an orchestration and read-model layer over those durable objects rather than a second scoring engine.
 
+## Durable Roster Foundation
+
+Status: **DATA FOUNDATION DEPLOYED**
+
+The durable roster and season identity foundation is available in the connected Supabase runtime. `roster_players` is the permanent coach-owned player identity, `seasons` defines the season boundary, and `season_roster_memberships` stores season-specific status and class year.
+
+Tournament and Qualifying event records remain immutable historical snapshots. Their nullable `roster_player_id` links may associate an event identity with a permanent roster player without replacing the existing event-scoring IDs. Legacy rows remain valid with null links, and no name-based historical backfill is performed.
+
+Owner-scoped RLS, cross-owner event-link validation, archive-first lifecycle transitions, and restricted foreign-key deletion preserve player and event history. Real Supabase verification covered same-owner creation and linking, cross-owner isolation, archived-player readability, restricted linked-player deletion, and unchanged certified tournament snapshots.
+
+Roster-management UI is not implemented. Custom statistics and player analytics remain future work.
+
 ## Current Architecture Snapshot
 
 The app is a Next.js App Router application with client-heavy tournament workflows.

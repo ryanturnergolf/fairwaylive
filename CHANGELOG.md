@@ -14,6 +14,13 @@
 
 - Added one universal homepage scoring-code entry that securely dispatches ordinary Tournament and Qualifying codes into their existing bounded authorization exchanges and certified scorecard route.
 - Added the registry-based QA Seed Test Qualifier for repeatable real-data certification with six reciprocal players, completed Holes 1–8, and Hole 9 ready for play.
+- Deployed the durable roster foundation with permanent coach-owned players, minimal seasons, season memberships, and nullable Tournament/Qualifying identity links.
+
+### Verification
+
+- Verified real Supabase RLS and integrity for owner creation, lifecycle updates, archival readability, cross-owner isolation, same-owner event links, restricted historical deletion, and legacy null links.
+- Confirmed the roster migration performs no player backfill or name-based mapping and leaves certified tournament snapshots unchanged.
+- Reconfirmed the production build and Playwright 174/174 after deployment. Roster-management UI and custom statistics remain unimplemented.
 
 ### Fixed
 

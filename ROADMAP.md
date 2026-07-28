@@ -28,6 +28,15 @@ Status: **NEXT**
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 
+### Durable Roster Foundation
+
+Status: **DATA FOUNDATION COMPLETE; UI NOT STARTED**
+
+- Deployed permanent coach-owned `roster_players`, minimal `seasons`, and season-specific `season_roster_memberships`.
+- Added nullable permanent-identity links to Tournament and Qualifying participant snapshots without changing event scoring IDs.
+- Verified real owner RLS, cross-owner rejection, archive readability, restricted historical deletion, legacy null-link compatibility, and unchanged certified snapshots.
+- Roster-management UI, roster import/mapping, custom statistics, and player analytics remain separate future milestones.
+
 ### Approved Future Capability - Custom Statistics And Player Season Tracking
 
 Status: **APPROVED AFTER CONTROLLED-BETA PREPARATION**
@@ -71,7 +80,6 @@ This work follows UX polish, onboarding, and durable roster preparation. It must
 
 Open design questions to resolve before Phase 1:
 
-- the canonical durable rostered-player and season entities and how existing event player IDs map to them,
 - immutable definition versioning versus value-level definition snapshots,
 - the applicability-rule format and validation boundary,
 - which custom definitions require self/marker Review,
