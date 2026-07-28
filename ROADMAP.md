@@ -39,17 +39,20 @@ Status: **DATA FOUNDATION COMPLETE; UI NOT STARTED**
 
 ### Approved Future Capability - Custom Statistics And Player Season Tracking
 
-Status: **APPROVED AFTER CONTROLLED-BETA PREPARATION**
+Status: **PHASE 1 DATA FOUNDATION COMPLETE; PHASE 2 NOT STARTED**
 
 This work follows UX polish, onboarding, and durable roster preparation. It must reuse the certified scoring, Review, official-resolution, finalization, and read-only architecture rather than introducing a second event or analytics authority.
 
 #### Phase 1 - Data Foundation
 
+- Status: **DEPLOYED AND VERIFIED**
 - Add durable coach/program-owned stat definitions with stable IDs, input metadata, applicability, ordering, lifecycle state, and historical definition integrity.
 - Add reusable stat packages and event/package assignment for Tournament, Qualifying, Practice, and future scored-event types.
 - Add hole-level custom values tied to durable rostered-player, season, event, round, hole, definition, entered-by, and official identities.
 - Establish durable rostered-player and season relationships that survive roster edits, finalized events, season transitions, and definition changes.
 - Keep hole-level values authoritative; derived season summaries are not the source of truth.
+- Seeded the approved built-in definitions and verified real owner RLS, cross-owner rejection, archive/restore, immutable revisions, pinned assignments, original/official value preservation, and restricted historical deletion.
+- Deployed the corrective catalog-trigger migration so package archival succeeds while semantic identity remains immutable.
 
 #### Phase 2 - Coach Configuration
 
@@ -78,7 +81,7 @@ This work follows UX polish, onboarding, and durable roster preparation. It must
 - Derive analytics from durable hole-level data.
 - Defer team comparisons and career/multi-season analysis until the player-season foundation is certified.
 
-Open design questions to resolve before Phase 1:
+Open design questions to resolve before runtime integration:
 
 - immutable definition versioning versus value-level definition snapshots,
 - the applicability-rule format and validation boundary,

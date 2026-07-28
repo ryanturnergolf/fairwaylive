@@ -191,6 +191,41 @@ test("migration is additive, owner-scoped, versioned, and preserves existing sco
   expect(migration).not.toMatch(/insert into public\.(score_entries|score_hole_entries)/);
 });
 
+test("corrective migration isolates catalog fields while preserving archival and history", () => {
+  const migration = readFileSync(
+    join(
+      process.cwd(),
+      "supabase/migrations/20260805000000_fix_dynamic_statistics_catalog_trigger.sql"
+    ),
+    "utf8"
+  ).toLowerCase();
+
+  expect(migration).toContain(
+    "create or replace function public.protect_dynamic_statistic_catalog_identity()"
+  );
+  expect(migration).toContain("if tg_table_name = 'statistic_definitions' then");
+  expect(migration).toContain("elsif tg_table_name = 'statistic_packages' then");
+
+  const definitionBranch = migration.slice(
+    migration.indexOf("if tg_table_name = 'statistic_definitions' then"),
+    migration.indexOf("elsif tg_table_name = 'statistic_packages' then")
+  );
+  const packageBranch = migration.slice(
+    migration.indexOf("elsif tg_table_name = 'statistic_packages' then"),
+    migration.indexOf("else", migration.indexOf("elsif tg_table_name = 'statistic_packages' then"))
+  );
+
+  expect(definitionBranch).toContain("new.key is distinct from old.key");
+  expect(packageBranch).not.toContain("new.key");
+  expect(definitionBranch).not.toContain("new.is_active");
+  expect(packageBranch).not.toContain("new.is_active");
+  expect(migration).toContain("statistic definition edits require a new immutable version.");
+  expect(migration).toContain("statistic package edits require a new immutable version.");
+  expect(migration).not.toContain("security definer");
+  expect(migration).not.toMatch(/\b(drop|truncate|delete|update|insert)\s+(table\s+)?public\./);
+  expect(migration).not.toContain("reject_dynamic_statistic_history_mutation");
+});
+
 test("built-ins include certified and approved future definitions without schema columns", () => {
   const migration = readFileSync(
     join(process.cwd(), "supabase/migrations/20260804000000_add_dynamic_statistics_foundation.sql"),

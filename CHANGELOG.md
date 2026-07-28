@@ -1,5 +1,21 @@
 # Clubhouse HQ Changelog
 
+## 2026-07-28
+
+### Added
+
+- Deployed the Dynamic Statistics backend foundation with owner-scoped, versioned statistic definitions, reusable versioned packages, immutable event assignments, and hole-level original/official values.
+- Seeded Fairway Hit, Green in Regulation, Putts, Penalty Strokes, Shots from 100 Yards and In, Up-and-Down Opportunity, Up-and-Down Success, and Sand Save definitions.
+
+### Fixed
+
+- Deployed `20260805000000_fix_dynamic_statistics_catalog_trigger.sql` to isolate definition-only trigger fields from package updates, restoring definition and package archival without weakening semantic identity protection.
+
+### Verification
+
+- Verified real Supabase owner access, cross-owner isolation, definition/package archive and restore, immutable revision history, pinned package assignments, preserved original and official hole values, and restricted historical deletion.
+- Production build passed and Playwright passed 186/186. Dynamic Statistics UI, mobile scorecard integration, Review integration, analytics, and player profiles remain unimplemented.
+
 ## 2026-07-27
 
 ### Certification

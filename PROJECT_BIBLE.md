@@ -196,9 +196,11 @@ Review Hub should be built on top of the Tournament Aggregate rather than duplic
 
 ## Approved Future Capability: Custom Statistics And Player Season Tracking
 
-Status: **APPROVED FOR FUTURE PHASED IMPLEMENTATION**
+Status: **PHASE 1 BACKEND FOUNDATION DEPLOYED; UI AND RUNTIME INTEGRATION NOT STARTED**
 
-This capability follows controlled-beta UX, onboarding, and roster preparation. It is not implemented by this documentation milestone and must not destabilize the certified Tournament Engine or Qualifying workflows.
+The Dynamic Statistics backend foundation is runtime-available in the connected Supabase project. It provides owner-scoped, versioned statistic definitions and packages, immutable event assignments and hole values, and the approved built-in definition catalog. Real Supabase verification covered RLS, cross-owner rejection, archive/restore, immutable definition and package revisions, pinned event assignments, original/official value preservation, and restricted historical deletion.
+
+The follow-up migration `20260805000000_fix_dynamic_statistics_catalog_trigger.sql` corrected table-specific archival protection so definitions and packages can be archived without weakening immutable identity rules. The Dynamic Statistics UI, mobile scorecard integration, Review integration, analytics, and player-profile presentation remain unimplemented.
 
 Coaches will be able to select which statistics appear on mobile scorecards, organize them into event stat packages, and create configuration-driven custom statistics. Initial and anticipated fields include:
 
