@@ -2,6 +2,10 @@ import {
   assignStatisticPackage,
   createCustomStatisticDefinition,
   createStatisticPackage,
+  listAllEventStatisticPackageAssignments,
+  listAllStatisticDefinitionVersions,
+  listAllStatisticPackageItems,
+  listAllStatisticPackageVersions,
   listAvailableStatisticDefinitions,
   listEventStatisticPackageAssignments,
   listHoleStatisticValues,
@@ -10,7 +14,11 @@ import {
   recordHoleStatisticValue,
   reviseCustomStatisticDefinition,
   reviseStatisticPackage,
+  setStatisticDefinitionActive,
+  setStatisticPackageActive,
 } from "../repositories/dynamicStatisticsRepository";
+import { listQualifyingSessionRows } from "../repositories/qualifyingRepository";
+import { listTournamentRows } from "../repositories/tournamentRepository";
 import {
   statisticEventTypes,
   statisticInputTypes,
@@ -23,6 +31,11 @@ import {
   type ReviseStatisticPackageInput,
   type StatisticPackageItem,
   type HoleStatisticValue,
+  type StatisticDefinition,
+  type StatisticDefinitionVersion,
+  type StatisticPackage,
+  type StatisticPackageVersion,
+  type EventStatisticPackageAssignment,
   type StatisticDefinitionConfiguration,
   type StatisticInputType,
   type StatisticValue,
@@ -214,6 +227,136 @@ export const loadDynamicStatisticsFoundation = async () => {
   ]);
   return { definitions, packages };
 };
+
+export type CoachStatisticDefinitionReadModel = {
+  definition: StatisticDefinition;
+  latestVersion: StatisticDefinitionVersion;
+  versions: StatisticDefinitionVersion[];
+};
+
+export type CoachStatisticPackageReadModel = {
+  package: StatisticPackage;
+  latestVersion: StatisticPackageVersion;
+  versions: StatisticPackageVersion[];
+  latestItems: StatisticPackageItem[];
+};
+
+export type StatisticAssignmentTarget = {
+  eventType: "tournament" | "qualifying";
+  id: string;
+  name: string;
+  status: string;
+};
+
+export type CoachStatisticConfigurationReadModel = {
+  definitions: CoachStatisticDefinitionReadModel[];
+  packages: CoachStatisticPackageReadModel[];
+  assignments: EventStatisticPackageAssignment[];
+  assignmentTargets: StatisticAssignmentTarget[];
+};
+
+export const buildCoachStatisticConfiguration = (input: {
+  definitions: StatisticDefinition[];
+  definitionVersions: StatisticDefinitionVersion[];
+  packages: StatisticPackage[];
+  packageVersions: StatisticPackageVersion[];
+  packageItems: StatisticPackageItem[];
+  assignments: EventStatisticPackageAssignment[];
+  assignmentTargets: StatisticAssignmentTarget[];
+}): CoachStatisticConfigurationReadModel => {
+  const definitionModels = input.definitions.flatMap((definition) => {
+    const versions = input.definitionVersions
+      .filter((version) => version.definitionId === definition.id)
+      .sort((left, right) => right.version - left.version);
+    return versions[0] ? [{ definition, latestVersion: versions[0], versions }] : [];
+  });
+  const packageModels = input.packages.flatMap((statisticPackage) => {
+    const versions = input.packageVersions
+      .filter((version) => version.packageId === statisticPackage.id)
+      .sort((left, right) => right.version - left.version);
+    const latestVersion = versions[0];
+    return latestVersion
+      ? [{
+          package: statisticPackage,
+          latestVersion,
+          versions,
+          latestItems: input.packageItems
+            .filter((item) => item.packageVersionId === latestVersion.id)
+            .sort((left, right) => left.displayOrder - right.displayOrder),
+        }]
+      : [];
+  });
+  return {
+    definitions: definitionModels.sort((left, right) =>
+      Number(right.definition.isBuiltIn) - Number(left.definition.isBuiltIn) ||
+      left.latestVersion.name.localeCompare(right.latestVersion.name)
+    ),
+    packages: packageModels.sort((left, right) =>
+      left.latestVersion.name.localeCompare(right.latestVersion.name)
+    ),
+    assignments: [...input.assignments].sort((left, right) =>
+      right.assignedAt.localeCompare(left.assignedAt) || right.id.localeCompare(left.id)
+    ),
+    assignmentTargets: [...input.assignmentTargets].sort((left, right) =>
+      left.eventType.localeCompare(right.eventType) || left.name.localeCompare(right.name)
+    ),
+  };
+};
+
+export const loadCoachStatisticConfiguration =
+  async (): Promise<CoachStatisticConfigurationReadModel> => {
+    const [
+      definitions,
+      definitionVersions,
+      packages,
+      packageVersions,
+      packageItems,
+      assignments,
+      tournaments,
+      qualifyingSessions,
+    ] = await Promise.all([
+      listAvailableStatisticDefinitions(),
+      listAllStatisticDefinitionVersions(),
+      listStatisticPackages(),
+      listAllStatisticPackageVersions(),
+      listAllStatisticPackageItems(),
+      listAllEventStatisticPackageAssignments(),
+      listTournamentRows(),
+      listQualifyingSessionRows(),
+    ]);
+    return buildCoachStatisticConfiguration({
+      definitions,
+      definitionVersions,
+      packages,
+      packageVersions,
+      packageItems,
+      assignments,
+      assignmentTargets: [
+        ...tournaments.map((tournament) => ({
+          eventType: "tournament" as const,
+          id: tournament.id,
+          name: tournament.name,
+          status: tournament.status,
+        })),
+        ...qualifyingSessions.map((session) => ({
+          eventType: "qualifying" as const,
+          id: session.id,
+          name: session.name,
+          status: session.status,
+        })),
+      ],
+    });
+  };
+
+export const setCoachStatisticDefinitionArchived = (
+  definitionId: string,
+  archived: boolean
+) => setStatisticDefinitionActive(requireText(definitionId, "Statistic definition"), !archived);
+
+export const setCoachStatisticPackageArchived = (
+  packageId: string,
+  archived: boolean
+) => setStatisticPackageActive(requireText(packageId, "Statistic package"), !archived);
 
 export const loadEventStatisticConfiguration = async (
   eventType: AssignStatisticPackageInput["eventType"],

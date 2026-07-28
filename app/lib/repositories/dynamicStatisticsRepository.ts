@@ -136,6 +136,16 @@ export const listStatisticDefinitionVersions = async (
   return (data ?? []).map((row) => mapDefinitionVersion(row as Row));
 };
 
+export const listAllStatisticDefinitionVersions = async (): Promise<StatisticDefinitionVersion[]> => {
+  const { data, error } = await getClient()
+    .from("statistic_definition_versions")
+    .select("*")
+    .order("definition_id")
+    .order("version", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => mapDefinitionVersion(row as Row));
+};
+
 export const createCustomStatisticDefinition = async (
   input: CreateStatisticDefinitionInput
 ): Promise<{ definition: StatisticDefinition; version: StatisticDefinitionVersion }> => {
@@ -178,6 +188,16 @@ export const listStatisticPackages = async (): Promise<StatisticPackage[]> => {
     .order("id");
   if (error) throw error;
   return (data ?? []).map((row) => mapPackage(row as Row));
+};
+
+export const listAllStatisticPackageVersions = async (): Promise<StatisticPackageVersion[]> => {
+  const { data, error } = await getClient()
+    .from("statistic_package_versions")
+    .select("*")
+    .order("package_id")
+    .order("version", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => mapPackageVersion(row as Row));
 };
 
 export const createStatisticPackage = async (
@@ -239,6 +259,17 @@ export const listStatisticPackageItems = async (
   return (data ?? []).map((row) => mapPackageItem(row as Row));
 };
 
+export const listAllStatisticPackageItems = async (): Promise<StatisticPackageItem[]> => {
+  const { data, error } = await getClient()
+    .from("statistic_package_version_items")
+    .select("*")
+    .order("package_version_id")
+    .order("display_order")
+    .order("id");
+  if (error) throw error;
+  return (data ?? []).map((row) => mapPackageItem(row as Row));
+};
+
 export const assignStatisticPackage = async (
   input: AssignStatisticPackageInput
 ): Promise<EventStatisticPackageAssignment> => {
@@ -268,6 +299,46 @@ export const listEventStatisticPackageAssignments = async (
     .order("id", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => mapAssignment(row as Row));
+};
+
+export const listAllEventStatisticPackageAssignments =
+  async (): Promise<EventStatisticPackageAssignment[]> => {
+    const { data, error } = await getClient()
+      .from("event_statistic_package_assignments")
+      .select("*")
+      .order("assigned_at", { ascending: false })
+      .order("id", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => mapAssignment(row as Row));
+  };
+
+export const setStatisticDefinitionActive = async (
+  definitionId: string,
+  isActive: boolean
+): Promise<StatisticDefinition> => {
+  const { data, error } = await getClient()
+    .from("statistic_definitions")
+    .update({ is_active: isActive })
+    .eq("id", definitionId)
+    .eq("is_built_in", false)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapDefinition(data as Row);
+};
+
+export const setStatisticPackageActive = async (
+  packageId: string,
+  isActive: boolean
+): Promise<StatisticPackage> => {
+  const { data, error } = await getClient()
+    .from("statistic_packages")
+    .update({ is_active: isActive })
+    .eq("id", packageId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapPackage(data as Row);
 };
 
 export const recordHoleStatisticValue = async (
