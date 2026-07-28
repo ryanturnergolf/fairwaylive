@@ -5,6 +5,7 @@ import {
   listSeasonRosterMemberships,
   listSeasons,
   saveSeasonRosterMembership,
+  updateRosterPlayer,
   updateRosterPlayerLifecycle,
 } from "../repositories/rosterRepository";
 import {
@@ -16,6 +17,8 @@ import {
   type EventRosterIdentityLink,
   type RosterPlayerStatus,
   type SaveSeasonRosterMembershipInput,
+  type SeasonRosterMembership,
+  type UpdateRosterPlayerInput,
 } from "../rosterModel";
 
 export const requireRosterText = (value: string, label: string) => {
@@ -70,6 +73,21 @@ export const createPermanentRosterPlayer = async (input: CreateRosterPlayerInput
   return createRosterPlayer(validatePermanentRosterPlayerInput(input));
 };
 
+export const validateRosterPlayerUpdate = (
+  input: UpdateRosterPlayerInput
+): UpdateRosterPlayerInput => {
+  requireRosterText(input.id, "Roster player");
+  if (!rosterPlayerStatuses.includes(input.status)) {
+    throw new Error("Player status is invalid.");
+  }
+  return {
+    ...input,
+    firstName: requireRosterText(input.firstName, "First name"),
+    lastName: requireRosterText(input.lastName, "Last name"),
+    preferredName: input.preferredName?.trim() || null,
+  };
+};
+
 export const validateSeasonRosterMembershipInput = (
   input: SaveSeasonRosterMembershipInput
 ): SaveSeasonRosterMembershipInput => {
@@ -106,6 +124,49 @@ export const transitionRosterPlayer = async (
   const { archivedAt } = getRosterLifecycleTransition(status);
   return updateRosterPlayerLifecycle(rosterPlayerId, status, archivedAt);
 };
+
+export const saveRosterPlayerForSeason = async (input: {
+  player: UpdateRosterPlayerInput;
+  seasonId: string;
+  classYear?: string | null;
+}) => {
+  const playerInput = validateRosterPlayerUpdate(input.player);
+  const { archivedAt } = getRosterLifecycleTransition(playerInput.status);
+  const player = await updateRosterPlayer(playerInput, archivedAt);
+  const membership = await assignRosterPlayerToSeason({
+    seasonId: input.seasonId,
+    rosterPlayerId: input.player.id,
+    status: input.player.status,
+    classYear: input.classYear,
+  });
+  return { player, membership };
+};
+
+export const createRosterPlayerForSeason = async (input: {
+  player: CreateRosterPlayerInput;
+  seasonId: string;
+  classYear?: string | null;
+}) => {
+  const player = await createPermanentRosterPlayer(input.player);
+  const membership = await assignRosterPlayerToSeason({
+    seasonId: input.seasonId,
+    rosterPlayerId: player.id,
+    status: player.status,
+    classYear: input.classYear,
+  });
+  return { player, membership };
+};
+
+export const transitionRosterPlayerForSeason = async (input: {
+  player: UpdateRosterPlayerInput;
+  membership: SeasonRosterMembership;
+  status: RosterPlayerStatus;
+}) =>
+  saveRosterPlayerForSeason({
+    player: { ...input.player, status: input.status },
+    seasonId: input.membership.seasonId,
+    classYear: input.membership.classYear,
+  });
 
 export const buildEventRosterIdentityLink = (
   rosterPlayerId: string | null | undefined

@@ -6,6 +6,7 @@ import type {
   SaveSeasonRosterMembershipInput,
   Season,
   SeasonRosterMembership,
+  UpdateRosterPlayerInput,
 } from "../rosterModel";
 
 type SeasonRow = {
@@ -158,6 +159,26 @@ export const updateRosterPlayerLifecycle = async (
     .from("roster_players")
     .update({ status, archived_at: archivedAt })
     .eq("id", rosterPlayerId)
+    .select(rosterPlayerColumns)
+    .single();
+  if (error) throw error;
+  return mapRosterPlayer(data as RosterPlayerRow);
+};
+
+export const updateRosterPlayer = async (
+  input: UpdateRosterPlayerInput,
+  archivedAt: string | null
+): Promise<RosterPlayer> => {
+  const { data, error } = await getClient()
+    .from("roster_players")
+    .update({
+      first_name: input.firstName,
+      last_name: input.lastName,
+      preferred_name: input.preferredName ?? null,
+      status: input.status,
+      archived_at: archivedAt,
+    })
+    .eq("id", input.id)
     .select(rosterPlayerColumns)
     .single();
   if (error) throw error;

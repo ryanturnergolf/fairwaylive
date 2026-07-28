@@ -148,6 +148,9 @@ export default function CoachDashboardPage() {
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/qualifying-manager">
               Qualifying
             </Link>
+            <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/roster">
+              Roster
+            </Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/player-development">
               Player Development
             </Link>
@@ -237,6 +240,14 @@ export default function CoachDashboardPage() {
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <SectionShell eyebrow="Program Snapshot" title="Roster And Season">
+            <div className="mb-5 grid gap-3 sm:grid-cols-2">
+              <Link href="/coach-dashboard/roster/men" className="rounded-[8px] border border-[#0B3D2E] px-4 py-3 text-center text-sm font-black">
+                Manage Men&apos;s Roster
+              </Link>
+              <Link href="/coach-dashboard/roster/women" className="rounded-[8px] border border-[#0B3D2E] px-4 py-3 text-center text-sm font-black">
+                Manage Women&apos;s Roster
+              </Link>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {dashboard.programSnapshot.metrics.map((metric) => (
                 <div key={metric.label} className="rounded-[8px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">

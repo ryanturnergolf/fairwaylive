@@ -7,6 +7,7 @@ import {
   buildEventRosterIdentityLink,
   getRosterLifecycleTransition,
   validatePermanentRosterPlayerInput,
+  validateRosterPlayerUpdate,
   validateRosterSeasonInput,
   validateSeasonRosterMembershipInput,
 } from "../../app/lib/services/rosterFoundationService";
@@ -109,6 +110,20 @@ test("season membership and lifecycle contracts preserve permanent identity", ()
   expect(() => getRosterLifecycleTransition("deleted" as "active")).toThrow(
     "Player status is invalid."
   );
+
+  expect(validateRosterPlayerUpdate({
+    id: "player-id",
+    firstName: " Avery ",
+    lastName: " Brooks ",
+    preferredName: " Ave ",
+    status: "redshirt",
+  })).toEqual({
+    id: "player-id",
+    firstName: "Avery",
+    lastName: "Brooks",
+    preferredName: "Ave",
+    status: "redshirt",
+  });
 });
 
 test("event roster links remain optional for legacy records", () => {

@@ -64,6 +64,13 @@ export type CreateRosterPlayerInput = Pick<
   status?: RosterPlayerStatus;
 };
 
+export type UpdateRosterPlayerInput = Pick<
+  RosterPlayer,
+  "id" | "firstName" | "lastName" | "status"
+> & {
+  preferredName?: string | null;
+};
+
 export type SaveSeasonRosterMembershipInput = Pick<
   SeasonRosterMembership,
   "seasonId" | "rosterPlayerId"
@@ -75,4 +82,3 @@ export type SaveSeasonRosterMembershipInput = Pick<
 export type EventRosterIdentityLink = {
   rosterPlayerId: string;
 };
-
