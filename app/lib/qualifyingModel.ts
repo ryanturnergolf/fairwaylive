@@ -46,6 +46,7 @@ export type QualifyingGroup = {
 export type QualifyingParticipant = {
   id: string;
   qualifyingSessionId: string;
+  rosterPlayerId?: string | null;
   playerId: string;
   playerName: string;
   rosterType: QualifyingRosterType;

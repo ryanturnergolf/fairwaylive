@@ -64,6 +64,7 @@ type QualifyingScorerAssignmentRow = {
 type QualifyingParticipantRow = {
   id: string;
   qualifying_session_id: string;
+  roster_player_id?: string | null;
   player_id: string;
   player_name: string;
   roster_type: QualifyingParticipant["rosterType"];
@@ -149,9 +150,12 @@ const mapAssignment = (
   updatedAt: row.updated_at,
 });
 
-const mapParticipant = (row: QualifyingParticipantRow): QualifyingParticipant => ({
+export const deserializeQualifyingParticipant = (
+  row: QualifyingParticipantRow
+): QualifyingParticipant => ({
   id: row.id,
   qualifyingSessionId: row.qualifying_session_id,
+  rosterPlayerId: row.roster_player_id ?? null,
   playerId: row.player_id,
   playerName: row.player_name,
   rosterType: row.roster_type,
@@ -180,14 +184,35 @@ const mapGroupMember = (row: QualifyingGroupMemberRow): QualifyingGroupMember =>
 export const listQualifyingParticipants = async (
   sessionId: string
 ): Promise<QualifyingParticipant[]> => {
-  const { data, error } = await getClient()
+  const client = getClient();
+  const linkedResult = await client
+    .from("qualifying_participants")
+    .select("id,qualifying_session_id,roster_player_id,player_id,player_name,roster_type,display_order,created_at,updated_at")
+    .eq("qualifying_session_id", sessionId)
+    .order("display_order")
+    .order("player_id");
+  if (!linkedResult.error) {
+    return (linkedResult.data ?? []).map((row) =>
+      deserializeQualifyingParticipant(row as QualifyingParticipantRow)
+    );
+  }
+  if (
+    !["42703", "PGRST204"].includes(linkedResult.error.code ?? "") ||
+    !linkedResult.error.message.includes("roster_player_id")
+  ) {
+    throw linkedResult.error;
+  }
+
+  const { data, error } = await client
     .from("qualifying_participants")
     .select("id,qualifying_session_id,player_id,player_name,roster_type,display_order,created_at,updated_at")
     .eq("qualifying_session_id", sessionId)
     .order("display_order")
     .order("player_id");
   if (error) throw error;
-  return (data ?? []).map((row) => mapParticipant(row as QualifyingParticipantRow));
+  return (data ?? []).map((row) =>
+    deserializeQualifyingParticipant(row as QualifyingParticipantRow)
+  );
 };
 
 export const listQualifyingGroups = async (

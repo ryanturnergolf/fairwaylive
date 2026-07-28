@@ -46,6 +46,7 @@ export type TournamentPlayerUpsertRow = {
 
 export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
   id: string;
+  roster_player_id?: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -119,7 +120,16 @@ const tournamentColumns =
   "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at";
 
 const tournamentPlayerColumns =
+  "id,tournament_id,roster_player_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
+const legacyTournamentPlayerColumns =
   "id,tournament_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
+
+export const deserializeTournamentPlayer = (
+  row: TournamentPlayerRow
+): TournamentPlayerRow => ({
+  ...row,
+  roster_player_id: row.roster_player_id ?? null,
+});
 
 const getClient = () => {
   const supabase = getSupabaseBrowserClient();
@@ -380,7 +390,7 @@ export const getTournamentPlayers = async (
   options: ShareTokenReadOptions = {}
 ): Promise<TournamentPlayerRow[]> => {
   const supabase = await getReadClient(options);
-  const { data, error } = await supabase
+  const linkedResult = await supabase
     .from("tournament_players")
     .select(tournamentPlayerColumns)
     .eq("tournament_id", tournamentId)
@@ -388,12 +398,30 @@ export const getTournamentPlayers = async (
     .order("group_number", { ascending: true })
     .order("position", { ascending: true })
     .order("player_name", { ascending: true });
-
-  if (error) {
-    throw error;
+  if (!linkedResult.error) {
+    return (linkedResult.data ?? []).map((row) =>
+      deserializeTournamentPlayer(row as TournamentPlayerRow)
+    );
+  }
+  if (
+    !["42703", "PGRST204"].includes(linkedResult.error.code ?? "") ||
+    !linkedResult.error.message.includes("roster_player_id")
+  ) {
+    throw linkedResult.error;
   }
 
-  return (data ?? []) as TournamentPlayerRow[];
+  const { data, error } = await supabase
+    .from("tournament_players")
+    .select(legacyTournamentPlayerColumns)
+    .eq("tournament_id", tournamentId)
+    .eq("round_number", roundNumber)
+    .order("group_number", { ascending: true })
+    .order("position", { ascending: true })
+    .order("player_name", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) =>
+    deserializeTournamentPlayer(row as TournamentPlayerRow)
+  );
 };
 
 export const getTournamentRound = async (
