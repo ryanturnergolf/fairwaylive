@@ -48,6 +48,7 @@ export type AnalyticsFilters = {
   seasonId?: string;
   eventId?: string;
   eventType?: StatisticEventType;
+  roundNumber?: number;
   playerId?: string;
   rosterPlayerId?: string;
   teamId?: string;
@@ -111,6 +112,24 @@ export type AnalyticsTrend = {
   previousAverage: number | null;
   delta: number | null;
   direction: "up" | "down" | "flat" | "insufficient_data";
+};
+
+export type AnalyticsRollingPoint = AnalyticsTrendPoint & {
+  rollingAverage: number | null;
+};
+
+export type AnalyticsComparisonResult = {
+  key: string;
+  label: string;
+  aggregate: AnalyticsAggregate;
+};
+
+export type AnalyticsDistributionBucket = {
+  key: string;
+  label: string;
+  count: number;
+  minimum: number | null;
+  maximum: number | null;
 };
 
 export type AnalyticsSourceData = {

@@ -1,5 +1,6 @@
 import type { AnalyticsSourceData } from "../analyticsModel";
 import { getSupabaseBrowserClient } from "../supabaseClient";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Row = Record<string, unknown>;
 
@@ -14,8 +15,9 @@ const requireRows = <T>(data: T[] | null, error: { message?: string } | null) =>
   return data ?? [];
 };
 
-export const loadAnalyticsSourceData = async (): Promise<AnalyticsSourceData> => {
-  const client = getClient();
+export const loadAnalyticsSourceDataWithClient = async (
+  client: SupabaseClient
+): Promise<AnalyticsSourceData> => {
   const [
     dynamic,
     legacy,
@@ -166,3 +168,6 @@ export const loadAnalyticsSourceData = async (): Promise<AnalyticsSourceData> =>
       ),
   };
 };
+
+export const loadAnalyticsSourceData = async (): Promise<AnalyticsSourceData> =>
+  loadAnalyticsSourceDataWithClient(getClient());

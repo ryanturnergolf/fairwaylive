@@ -294,6 +294,7 @@ export const filterAnalyticsObservations = (
     if (filters.seasonId && observation.seasonId !== filters.seasonId) return false;
     if (filters.eventId && observation.eventId !== filters.eventId) return false;
     if (filters.eventType && observation.eventType !== filters.eventType) return false;
+    if (filters.roundNumber && observation.roundNumber !== filters.roundNumber) return false;
     if (filters.playerId && observation.playerId !== filters.playerId) return false;
     if (filters.rosterPlayerId && observation.rosterPlayerId !== filters.rosterPlayerId)
       return false;
