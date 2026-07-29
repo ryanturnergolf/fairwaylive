@@ -39,7 +39,7 @@ Status: **DATA FOUNDATION COMPLETE; UI NOT STARTED**
 
 ### Approved Future Capability - Custom Statistics And Player Season Tracking
 
-Status: **PHASE 1 DATA FOUNDATION COMPLETE; PHASE 2 NOT STARTED**
+Status: **PHASE 3 MOBILE INTEGRATION DEPLOYED; PHASE 4 NOT STARTED**
 
 This work follows UX polish, onboarding, and durable roster preparation. It must reuse the certified scoring, Review, official-resolution, finalization, and read-only architecture rather than introducing a second event or analytics authority.
 
@@ -56,6 +56,7 @@ This work follows UX polish, onboarding, and durable roster preparation. It must
 
 #### Phase 2 - Coach Configuration
 
+- Status: **COMPLETE**
 - Enable or disable built-in statistics without deleting historical values.
 - Configure package display order and applicability.
 - Create basic custom checkbox and bounded-number definitions.
@@ -63,10 +64,13 @@ This work follows UX polish, onboarding, and durable roster preparation. It must
 
 #### Phase 3 - Dynamic Scorecards
 
+- Status: **DEPLOYED AND VERIFIED**
 - Generate mobile statistic inputs from the event's selected package.
 - Preserve existing Fairway, GIR, Putts, Save Hole atomicity, resume behavior, and signed-out authorization.
 - Add Shots from 100 yards and in with a 1–6+ selector.
 - Add up-and-down opportunity and success/failure tracking.
+- Verified real Tournament and Qualifying rounds with package-version pinning, required validation, all supported input types, append-only persistence, reload/reopen, signed-out authorization, and offline retry.
+- Preserved the legacy Fairway, GIR, and Putts experience for events without an assigned package.
 
 #### Phase 4 - Review And Finalization
 

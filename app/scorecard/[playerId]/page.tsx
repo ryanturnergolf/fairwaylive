@@ -31,6 +31,15 @@ import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFi
 import { resolveShareToken } from "../../lib/services/shareTokenService";
 import DesignatedQualifyingScorecard from "./DesignatedQualifyingScorecard";
 import { canUseDevelopmentBrowserSupabaseWriteFallback } from "../../lib/supabaseClient";
+import type { StatisticValue } from "../../lib/dynamicStatisticsModel";
+import {
+  loadMobileDynamicStatistics,
+  missingRequiredMobileStatistics,
+  saveMobileDynamicStatistics,
+  statisticAppliesToHole,
+  type MobileDynamicStatistics,
+  type MobileStatisticItem,
+} from "../../lib/services/mobileDynamicStatisticsService";
 
 type Hole = {
   holeNumber: number;
@@ -101,6 +110,8 @@ type HoleStatCapture = {
   putts: number | null;
   penaltyStrokes: number | null;
 };
+
+type DynamicHoleValues = Record<string, StatisticValue | null>;
 
 const initialScoreDiagnostics: ScoreDiagnostics = {
   localTournamentId: "",
@@ -605,6 +616,12 @@ function ReciprocalPlayerScorecardPage() {
   const [reviewSelfScores, setReviewSelfScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [reviewMarkerScores, setReviewMarkerScores] = useState<number[]>(Array.from({ length: scorecard.holes.length }, () => 0));
   const [holeStats, setHoleStats] = useState<HoleStatCapture[]>(createEmptyHoleStats(scorecard.holes.length));
+  const [dynamicStatistics, setDynamicStatistics] = useState<MobileDynamicStatistics | null>(null);
+  const [dynamicHoleValues, setDynamicHoleValues] = useState<DynamicHoleValues[]>(
+    Array.from({ length: scorecard.holes.length }, () => ({}))
+  );
+  const dynamicOperationKeysRef = useRef(new Map<string, string>());
+  const persistedDynamicValuesRef = useRef(new Map<string, string>());
   const [currentHoleIndex, setCurrentHoleIndex] = useState(0);
   const currentHoleIndexRef = useRef(0);
   const hasManualHoleNavigationRef = useRef(false);
@@ -631,6 +648,89 @@ function ReciprocalPlayerScorecardPage() {
   const scoreSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [isSavingHole, setIsSavingHole] = useState(false);
   const isSavingHoleRef = useRef(false);
+
+  const dynamicStatisticsStorageKey = sharedScoreTournamentId && scorecard.playerId
+    ? `clubhouse-hq-dynamic-statistics:${sharedScoreTournamentId}:${scorecard.round}:${scorecard.playerId}`
+    : "";
+
+  useEffect(() => {
+    if (
+      !sharedScoreTournamentId ||
+      !requestedShareToken ||
+      !scorecard.playerId ||
+      scorecard.playerId === "demo" ||
+      scorecard.playerId.startsWith("group-")
+    ) {
+      setDynamicStatistics(null);
+      return;
+    }
+    let cancelled = false;
+    const roundNumber = Number(scorecard.round) || 1;
+    const emptyValues = Array.from({ length: scorecard.holes.length }, () => ({} as DynamicHoleValues));
+    let cachedValues = emptyValues;
+    if (dynamicStatisticsStorageKey) {
+      try {
+        const cached = window.localStorage.getItem(dynamicStatisticsStorageKey);
+        if (cached) cachedValues = JSON.parse(cached) as DynamicHoleValues[];
+      } catch {
+        // A malformed cache must not prevent authoritative hydration.
+      }
+    }
+
+    loadMobileDynamicStatistics({
+      shareToken: requestedShareToken,
+      tournamentId: sharedScoreTournamentId,
+      roundNumber,
+      playerId: scorecard.playerId,
+    })
+      .then((configuration) => {
+        if (cancelled) return;
+        const nextValues = cachedValues.map((values) => ({ ...values }));
+        const itemByVersion = new Map(
+          configuration.items.map((item) => [item.definitionVersionId, item])
+        );
+        configuration.values.forEach((value) => {
+          const item = itemByVersion.get(value.definitionVersionId);
+          if (item && value.holeNumber >= 1 && value.holeNumber <= nextValues.length) {
+            nextValues[value.holeNumber - 1][item.key] = value.value;
+            persistedDynamicValuesRef.current.set(
+              `${value.holeNumber}:${value.definitionVersionId}`,
+              JSON.stringify(value.value)
+            );
+          }
+        });
+        setDynamicStatistics(configuration);
+        setDynamicHoleValues(nextValues);
+        setHoleStats((current) =>
+          current.map((statistics, index) => ({
+            ...statistics,
+            ...(typeof nextValues[index]?.fairway_hit === "boolean"
+              ? { fairwayHit: nextValues[index].fairway_hit as boolean }
+              : {}),
+            ...(typeof nextValues[index]?.green_in_regulation === "boolean"
+              ? { greenInRegulation: nextValues[index].green_in_regulation as boolean }
+              : {}),
+            ...(typeof nextValues[index]?.putts === "number"
+              ? { putts: nextValues[index].putts as number }
+              : {}),
+          }))
+        );
+      })
+      .catch((error) => {
+        console.warn("[DynamicStatistics] Unable to hydrate assigned statistics.", error);
+        if (!cancelled) setDynamicHoleValues(cachedValues);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dynamicStatisticsStorageKey,
+    requestedShareToken,
+    scorecard.holes.length,
+    scorecard.playerId,
+    scorecard.round,
+    sharedScoreTournamentId,
+  ]);
 
   const refreshCurrentFinalizedStateForSave = async () => {
     const effectiveTournamentId = requestedTournamentId || resolvedShareTournamentId;
@@ -1292,6 +1392,28 @@ function ReciprocalPlayerScorecardPage() {
     updateCurrentHoleStats({ [field]: currentValue === value ? null : value });
   };
 
+  const updateDynamicStatistic = (item: MobileStatisticItem, value: StatisticValue | null) => {
+    setDynamicHoleValues((current) => {
+      const next = current.map((hole) => ({ ...hole }));
+      next[currentHoleIndex] = { ...(next[currentHoleIndex] ?? {}), [item.key]: value };
+      if (dynamicStatisticsStorageKey) {
+        window.localStorage.setItem(dynamicStatisticsStorageKey, JSON.stringify(next));
+      }
+      dynamicOperationKeysRef.current.set(
+        `${currentHoleIndex + 1}:${item.definitionVersionId}`,
+        crypto.randomUUID()
+      );
+      return next;
+    });
+    if (item.key === "fairway_hit" && (typeof value === "boolean" || value === null)) {
+      updateCurrentHoleStats({ fairwayHit: value });
+    } else if (item.key === "green_in_regulation" && (typeof value === "boolean" || value === null)) {
+      updateCurrentHoleStats({ greenInRegulation: value });
+    } else if (item.key === "putts" && (typeof value === "number" || value === null)) {
+      updateCurrentHoleStats({ putts: value });
+    }
+  };
+
   // Validate player ID is real (non-empty, not demo, not a route group)
   const isValidPlayerId = (id: unknown): boolean => {
     return typeof id === "string" && id.length > 0 && id !== "demo" && !id.startsWith("group-");
@@ -1517,6 +1639,17 @@ function ReciprocalPlayerScorecardPage() {
         return;
       }
 
+      const targetDynamicValues = dynamicHoleValues[targetHoleIndex] ?? {};
+      const missingDynamicStatistics = dynamicStatistics?.assignment
+        ? missingRequiredMobileStatistics(dynamicStatistics.items, targetHole.par, targetDynamicValues)
+        : [];
+      if (missingDynamicStatistics.length > 0) {
+        setSaveError(
+          `Complete required statistics: ${missingDynamicStatistics.map((item) => item.name).join(", ")}.`
+        );
+        return;
+      }
+
       setSavedHoles((current) => {
         if (current.includes(targetHole.holeNumber)) return current;
         return [...current, targetHole.holeNumber];
@@ -1571,6 +1704,45 @@ function ReciprocalPlayerScorecardPage() {
         );
         if (!selfSaveCompleted && (Boolean(requestedShareToken) || hasEnteredStatistics || !selfScoreSaved)) {
           return;
+        }
+
+        if (dynamicStatistics?.assignment) {
+          const valuesToSave = dynamicStatistics.items.flatMap((item) => {
+            const value = targetDynamicValues[item.key];
+            if (value == null || !statisticAppliesToHole(item, targetHole.par, targetDynamicValues)) return [];
+            const operationKeyRef = `${targetHole.holeNumber}:${item.definitionVersionId}`;
+            if (persistedDynamicValuesRef.current.get(operationKeyRef) === JSON.stringify(value)) return [];
+            let operationKey = dynamicOperationKeysRef.current.get(operationKeyRef);
+            if (!operationKey) {
+              operationKey = crypto.randomUUID();
+              dynamicOperationKeysRef.current.set(operationKeyRef, operationKey);
+            }
+            return [{
+              definitionVersionId: item.definitionVersionId,
+              holeNumber: targetHole.holeNumber,
+              value,
+              operationKey,
+            }];
+          });
+          try {
+            await saveMobileDynamicStatistics({
+              shareToken: requestedShareToken,
+              tournamentId: sharedScoreTournamentId,
+              roundNumber: parsedRoundNumber,
+              playerId: stableSelfPlayerId,
+              values: valuesToSave,
+            });
+            valuesToSave.forEach((value) => {
+              persistedDynamicValuesRef.current.set(
+                `${value.holeNumber}:${value.definitionVersionId}`,
+                JSON.stringify(value.value)
+              );
+            });
+          } catch (error) {
+            console.error("[DynamicStatistics] Unable to save assigned statistics.", error);
+            setSaveError("Unable to save this hole. Check your connection and try Save Hole again.");
+            return;
+          }
         }
 
         // Save marker score only if markerPlayerId is valid
@@ -2463,6 +2635,131 @@ function ReciprocalPlayerScorecardPage() {
             </label>
           ) : null}
 
+          {dynamicStatistics?.assignment ? (
+            <div className="mt-5 border-t border-[#E8DCC8] pt-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                Hole Statistics
+              </p>
+              {dynamicStatistics.items
+                .filter((item) =>
+                  statisticAppliesToHole(item, currentHole.par, dynamicHoleValues[currentHoleIndex] ?? {})
+                )
+                .map((item) => {
+                  const value = dynamicHoleValues[currentHoleIndex]?.[item.key] ?? null;
+                  const label = `${item.name}${item.isRequired ? " *" : " (Optional)"}`;
+                  const disabled = !scoreControlsReady || isTournamentFinalized || isSavingHole;
+                  if (item.inputType === "checkbox") {
+                    return (
+                      <label
+                        key={item.definitionVersionId}
+                        className="mt-4 flex items-center gap-3 rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-sm font-bold text-[#0B3D2E]"
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={item.name}
+                          checked={value === true}
+                          onChange={(event) => updateDynamicStatistic(item, event.target.checked)}
+                          disabled={disabled}
+                          className="h-5 w-5 accent-[#0B3D2E]"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  }
+                  if (item.inputType === "yes_no") {
+                    return (
+                      <fieldset key={item.definitionVersionId} className="mt-4" aria-label={item.name}>
+                        <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                          {label}
+                        </legend>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {[true, false].map((option) => (
+                            <button
+                              key={String(option)}
+                              type="button"
+                              aria-pressed={value === option}
+                              onClick={() => updateDynamicStatistic(item, value === option ? null : option)}
+                              disabled={disabled}
+                              className={statButtonClass(value === option)}
+                            >
+                              {option ? "Yes" : "No"}
+                            </button>
+                          ))}
+                        </div>
+                      </fieldset>
+                    );
+                  }
+                  if (item.inputType === "option_list") {
+                    return (
+                      <label
+                        key={item.definitionVersionId}
+                        className="mt-4 block text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]"
+                      >
+                        {label}
+                        <select
+                          aria-label={item.name}
+                          value={typeof value === "string" ? value : ""}
+                          onChange={(event) => updateDynamicStatistic(item, event.target.value || null)}
+                          disabled={disabled}
+                          className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-sm font-bold normal-case tracking-normal text-[#0B3D2E]"
+                        >
+                          <option value="">Select…</option>
+                          {(item.configuration.options ?? []).map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      </label>
+                    );
+                  }
+                  if (item.key === "putts") {
+                    const minimum = item.configuration.minimum ?? 0;
+                    const maximum = item.configuration.maximum ?? 10;
+                    return (
+                      <fieldset key={item.definitionVersionId} className="mt-4" aria-label={item.name}>
+                        <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                          {label}
+                        </legend>
+                        <div className="mt-2 grid grid-cols-6 gap-2">
+                          {Array.from({ length: maximum - minimum + 1 }, (_, index) => minimum + index).map((option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              aria-pressed={value === option}
+                              onClick={() => updateDynamicStatistic(item, value === option ? null : option)}
+                              disabled={disabled}
+                              className={statButtonClass(value === option)}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      </fieldset>
+                    );
+                  }
+                  return (
+                    <label
+                      key={item.definitionVersionId}
+                      className="mt-4 block text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]"
+                    >
+                      {label}
+                      <input
+                        type="number"
+                        aria-label={item.name}
+                        min={item.configuration.minimum}
+                        max={item.configuration.maximum}
+                        value={typeof value === "number" ? value : ""}
+                        onChange={(event) =>
+                          updateDynamicStatistic(item, event.target.value === "" ? null : Number(event.target.value))
+                        }
+                        disabled={disabled}
+                        className="mt-2 w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-center text-lg font-black tracking-normal text-[#0B3D2E]"
+                      />
+                    </label>
+                  );
+                })}
+              <p className="mt-3 text-xs font-semibold text-[#51635C]">* Required for this hole</p>
+            </div>
+          ) : (
           <div className="mt-5 border-t border-[#E8DCC8] pt-4">
             {currentHole.par !== 3 ? (
               <fieldset className="mt-0" aria-label="Fairway Hit">
@@ -2527,6 +2824,7 @@ function ReciprocalPlayerScorecardPage() {
             </fieldset>
 
           </div>
+          )}
 
           <button
             type="button"

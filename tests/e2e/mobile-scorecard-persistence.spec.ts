@@ -3047,3 +3047,142 @@ test("shared QR phone without local tournament still saves stable IDs to Supabas
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-1" && row.entered_by_player_id === "player-2")?.hole_scores[0])
     .toBe(5);
 });
+
+test("assigned dynamic statistic package renders, validates, persists, and reloads on the certified scorecard", async ({ page }) => {
+  await routeSharedTournamentRoster(page);
+  await routeSharedScoreEntriesStore(page);
+  await routeScoreHoleEntriesStore(page);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: tournamentEnvelope,
+  }]);
+  await page.route("**/api/share-tokens/resolve", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tournamentId: sharedTournamentId,
+        purpose: "mobile_scoring",
+        expiresAt: "2027-07-22T00:00:00.000Z",
+      }),
+    })
+  );
+
+  const savedDynamicValues: Array<Record<string, unknown>> = [];
+  const items = [
+    {
+      definitionVersionId: "fairway-version",
+      key: "fairway_hit",
+      name: "Fairway Hit",
+      description: null,
+      inputType: "yes_no",
+      configuration: {},
+      applicability: { pars: [4, 5] },
+      displayOrder: 0,
+      isRequired: true,
+    },
+    {
+      definitionVersionId: "putts-version",
+      key: "putts",
+      name: "Putts",
+      description: null,
+      inputType: "bounded_number",
+      configuration: { minimum: 0, maximum: 6 },
+      applicability: {},
+      displayOrder: 1,
+      isRequired: true,
+    },
+    {
+      definitionVersionId: "shape-version",
+      key: "shot_shape",
+      name: "Shot Shape",
+      description: null,
+      inputType: "option_list",
+      configuration: { options: ["Draw", "Fade"] },
+      applicability: {},
+      displayOrder: 2,
+      isRequired: true,
+    },
+  ];
+  await page.route("**/api/mobile-dynamic-statistics", async (route) => {
+    const body = route.request().postDataJSON() as {
+      action: string;
+      values?: Array<Record<string, unknown>>;
+    };
+    if (body.action === "save") {
+      savedDynamicValues.push(...(body.values ?? []));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body.values ?? []),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        assignment: {
+          eventType: "tournament",
+          eventId: sharedTournamentId,
+          packageVersionId: "package-version",
+        },
+        items,
+        values: savedDynamicValues.map((value, index) => ({
+          id: `value-${index}`,
+          definitionVersionId: value.definitionVersionId,
+          holeNumber: value.holeNumber,
+          value: value.value,
+          entryKind: "self",
+          createdAt: `2026-07-28T12:00:0${index}.000Z`,
+        })),
+      }),
+    });
+  });
+  await page.route("**/api/score-mutations", async (route) => {
+    const body = route.request().postDataJSON() as {
+      action: string;
+      input?: Record<string, unknown>;
+      rows?: Array<Record<string, unknown>>;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body.action === "saveScoreHoleEntries" ? body.rows ?? [] : {
+        id: "saved-score",
+        ...(body.input ?? {}),
+      }),
+    });
+  });
+
+  await gotoApp(
+    page,
+    `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=dynamic-statistics-token`
+  );
+  await expect(page.getByRole("group", { name: "Fairway Hit" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Putts" })).toBeVisible();
+  await expect(page.getByLabel("Shot Shape")).toBeVisible();
+  await expect(page.getByText("Fairway Hit *")).toBeVisible();
+
+  await page.getByLabel("Ava Green's Score").fill("4");
+  await page.getByLabel("Ben Marker's Score").fill("4");
+  await page.getByRole("button", { name: "Save Hole" }).click();
+  await expect(page.getByText(/Complete required statistics:/)).toContainText("Fairway Hit");
+  expect(savedDynamicValues).toHaveLength(0);
+
+  await page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { name: "Yes" }).click();
+  await page.getByRole("group", { name: "Putts" }).getByRole("button", { name: "2" }).click();
+  await page.getByLabel("Shot Shape").selectOption("Fade");
+  await page.getByRole("button", { name: "Save Hole" }).click();
+  await expect(page.getByText("Hole 2", { exact: true })).toBeVisible();
+  expect(savedDynamicValues.map((value) => value.value)).toEqual([true, 2, "Fade"]);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Hole 1", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { name: "Yes" })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Shot Shape")).toHaveValue("Fade");
+});

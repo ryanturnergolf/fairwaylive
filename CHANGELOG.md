@@ -6,15 +6,20 @@
 
 - Deployed the Dynamic Statistics backend foundation with owner-scoped, versioned statistic definitions, reusable versioned packages, immutable event assignments, and hole-level original/official values.
 - Seeded Fairway Hit, Green in Regulation, Putts, Penalty Strokes, Shots from 100 Yards and In, Up-and-Down Opportunity, Up-and-Down Success, and Sand Save definitions.
+- Deployed Dynamic Statistics mobile access for assigned Tournament and Qualifying packages, including ordered required/optional checkbox, yes/no, bounded-number, and option-list inputs on the certified scorecard.
+- Added append-only signed-out statistic loading and saving with package-version pinning, player/round authorization, reload persistence, and offline retry behavior.
 
 ### Fixed
 
 - Deployed `20260805000000_fix_dynamic_statistics_catalog_trigger.sql` to isolate definition-only trigger fields from package updates, restoring definition and package archival without weakening semantic identity protection.
+- Deployed `20260806010000_enforce_mobile_dynamic_statistics_player_read.sql` so share-token package reads also require an authorized tournament player and round.
 
 ### Verification
 
 - Verified real Supabase owner access, cross-owner isolation, definition/package archive and restore, immutable revision history, pinned package assignments, preserved original and official hole values, and restricted historical deletion.
-- Production build passed and Playwright passed 186/186. Dynamic Statistics UI, mobile scorecard integration, Review integration, analytics, and player profiles remain unimplemented.
+- Verified complete real Tournament and Qualifying rounds with package rendering, required validation, all supported input types, append-only writes, reload/reopen persistence, signed-out authorization, final-hole completion, and offline reconnect.
+- Verified legacy events without packages continue using Fairway, GIR, and Putts, with existing score tables and score-saving behavior unchanged.
+- Production build passed and Playwright passed 196/196. Dynamic Statistics Review integration, analytics, and player profiles remain unimplemented.
 
 ## 2026-07-27
 
