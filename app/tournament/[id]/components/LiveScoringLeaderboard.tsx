@@ -11,6 +11,9 @@ import {
 import PairingsScorecardGeneration from "./PairingsScorecardGeneration";
 import type { OfficialScoreResolutionChoice } from "../../../lib/services/statisticsService";
 import type { ScoreHoleEntryRow } from "../../../lib/repositories/statisticsRepository";
+import type {
+  DynamicStatisticReviewItem,
+} from "../../../lib/services/dynamicStatisticsReviewService";
 
 export type ScorecardRow = {
   id: number;
@@ -49,6 +52,27 @@ type LiveScoringLeaderboardProps = {
   onReviewOverrideValueChange?: (itemId: string, value: string) => void;
   onReviewOverrideReasonChange?: (itemId: string, value: string) => void;
   onResolveReviewItem?: (item: ReviewResolutionItem, choice: OfficialScoreResolutionChoice) => void;
+  dynamicStatisticReviewItems?: DynamicStatisticReviewItem[];
+  dynamicStatisticReviewMessage?: string;
+  dynamicStatisticOverrideValues?: Record<string, string>;
+  onDynamicStatisticOverrideValueChange?: (itemId: string, value: string) => void;
+  onResolveDynamicStatistic?: (
+    item: DynamicStatisticReviewItem,
+    choice: "player" | "marker" | "coach_override"
+  ) => void;
+};
+
+const formatStatisticValue = (value: DynamicStatisticReviewItem["playerValue"]) => {
+  if (value === null) return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+};
+
+const statisticStatusLabel: Record<DynamicStatisticReviewItem["status"], string> = {
+  match: "Match",
+  different: "Different",
+  missing: "Missing",
+  required_missing: "Required Missing",
 };
 
 export default function LiveScoringLeaderboard({
@@ -70,6 +94,11 @@ export default function LiveScoringLeaderboard({
   onReviewOverrideValueChange,
   onReviewOverrideReasonChange,
   onResolveReviewItem,
+  dynamicStatisticReviewItems = [],
+  dynamicStatisticReviewMessage = "",
+  dynamicStatisticOverrideValues = {},
+  onDynamicStatisticOverrideValueChange,
+  onResolveDynamicStatistic,
 }: LiveScoringLeaderboardProps) {
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
   const countingScores = normalizedRoundSetup.countingScores;
@@ -197,6 +226,134 @@ export default function LiveScoringLeaderboard({
         <div className="rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
           {reviewResolutionMessage}
         </div>
+      ) : null}
+      {dynamicStatisticReviewItems.length > 0 ? (
+        <section className="rounded-[28px] border border-[#7DA7BE] bg-[#F7FCFE] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.35em] text-[#255D78]">
+                Dynamic Statistics Review
+              </p>
+              <h4 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+                Player and Marker Values
+              </h4>
+            </div>
+            <span className="rounded-full border border-[#7DA7BE] bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#255D78]">
+              Assigned Package
+            </span>
+          </div>
+          {dynamicStatisticReviewMessage ? (
+            <p className="mt-4 rounded-2xl border border-[#C8DCE7] bg-white px-4 py-3 text-sm font-bold text-[#51635C]">
+              {dynamicStatisticReviewMessage}
+            </p>
+          ) : null}
+          <div className="mt-5 space-y-4">
+            {dynamicStatisticReviewItems.map((item) => (
+              <div key={item.id} className="rounded-[20px] border border-[#C8DCE7] bg-white p-4">
+                <div className="grid gap-4 lg:grid-cols-[1.4fr_repeat(4,minmax(90px,0.7fr))] lg:items-center">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
+                      {item.playerName} · Hole {item.holeNumber}
+                    </p>
+                    <p className="mt-1 text-lg font-black text-[#0B3D2E]">
+                      {item.name}
+                      <span className="ml-2 text-xs text-[#B8892D]">
+                        {item.isRequired ? "Required" : "Optional"}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Player Value</p>
+                    <p className="mt-1 font-black text-[#0B3D2E]">{formatStatisticValue(item.playerValue)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Marker Value</p>
+                    <p className="mt-1 font-black text-[#0B3D2E]">{formatStatisticValue(item.markerValue)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Official Value</p>
+                    <p className="mt-1 font-black text-[#0B3D2E]">{formatStatisticValue(item.officialValue)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Status</p>
+                    <p className="mt-1 font-black text-[#255D78]">{statisticStatusLabel[item.status]}</p>
+                  </div>
+                </div>
+                {item.playerEntry || item.markerEntry ? (
+                  <div className="mt-4 flex flex-wrap items-end gap-3">
+                    <button
+                      type="button"
+                      disabled={isReadOnly || !item.playerEntry}
+                      onClick={() => onResolveDynamicStatistic?.(item, "player")}
+                      className="h-10 rounded-full border border-[#0B3D2E] px-4 text-[10px] font-black uppercase tracking-[0.2em] text-[#0B3D2E] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Accept Player Value
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isReadOnly || !item.markerEntry}
+                      onClick={() => onResolveDynamicStatistic?.(item, "marker")}
+                      className="h-10 rounded-full border border-[#0B3D2E] px-4 text-[10px] font-black uppercase tracking-[0.2em] text-[#0B3D2E] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Accept Marker Value
+                    </button>
+                    <label className="min-w-44 text-[10px] font-black uppercase tracking-[0.2em] text-[#51635C]">
+                      Corrected Official Value
+                      {item.inputType === "option_list" ? (
+                        <select
+                          value={dynamicStatisticOverrideValues[item.id] ?? ""}
+                          onChange={(event) =>
+                            onDynamicStatisticOverrideValueChange?.(item.id, event.target.value)
+                          }
+                          disabled={isReadOnly}
+                          className="mt-2 h-10 w-full rounded-full border border-[#C8DCE7] bg-[#FCFAF5] px-3 text-sm text-[#0B3D2E]"
+                        >
+                          <option value="">Select</option>
+                          {item.configuration.options?.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      ) : item.inputType === "checkbox" || item.inputType === "yes_no" ? (
+                        <select
+                          value={dynamicStatisticOverrideValues[item.id] ?? ""}
+                          onChange={(event) =>
+                            onDynamicStatisticOverrideValueChange?.(item.id, event.target.value)
+                          }
+                          disabled={isReadOnly}
+                          className="mt-2 h-10 w-full rounded-full border border-[#C8DCE7] bg-[#FCFAF5] px-3 text-sm text-[#0B3D2E]"
+                        >
+                          <option value="">Select</option>
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      ) : (
+                        <input
+                          type="number"
+                          min={item.configuration.minimum}
+                          max={item.configuration.maximum}
+                          value={dynamicStatisticOverrideValues[item.id] ?? ""}
+                          onChange={(event) =>
+                            onDynamicStatisticOverrideValueChange?.(item.id, event.target.value)
+                          }
+                          disabled={isReadOnly}
+                          className="mt-2 h-10 w-full rounded-full border border-[#C8DCE7] bg-[#FCFAF5] px-3 text-sm text-[#0B3D2E]"
+                        />
+                      )}
+                    </label>
+                    <button
+                      type="button"
+                      disabled={isReadOnly || !(dynamicStatisticOverrideValues[item.id] ?? "")}
+                      onClick={() => onResolveDynamicStatistic?.(item, "coach_override")}
+                      className="h-10 rounded-full bg-[#0B3D2E] px-4 text-[10px] font-black uppercase tracking-[0.2em] text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {item.officialEntry ? "Correct Official Value" : "Enter Official Value"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
       {scorecardsGenerated ? (
         leaderboardScorecardRows.length > 0 ? (

@@ -27,6 +27,15 @@ import {
   resolveOfficialScore,
   type OfficialScoreResolutionChoice,
 } from "../../lib/services/statisticsService";
+import {
+  buildDynamicStatisticReviewItems,
+  certifiedMobileHolePars,
+  loadDynamicStatisticReviewFoundation,
+  parseDynamicStatisticOfficialValue,
+  resolveOfficialDynamicStatistic,
+  type DynamicStatisticReviewFoundation,
+  type DynamicStatisticReviewItem,
+} from "../../lib/services/dynamicStatisticsReviewService";
 import type { ScoreEntryRow } from "../../lib/repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../../lib/repositories/statisticsRepository";
 import {
@@ -241,6 +250,11 @@ export default function TournamentPage() {
   const [reviewResolutionMessage, setReviewResolutionMessage] = useState("");
   const [reviewOverrideValues, setReviewOverrideValues] = useState<Record<string, string>>({});
   const [reviewOverrideReasons, setReviewOverrideReasons] = useState<Record<string, string>>({});
+  const [dynamicReviewFoundation, setDynamicReviewFoundation] =
+    useState<DynamicStatisticReviewFoundation | null>(null);
+  const [dynamicReviewMessage, setDynamicReviewMessage] = useState("");
+  const [dynamicReviewOverrideValues, setDynamicReviewOverrideValues] =
+    useState<Record<string, string>>({});
   const [autoRepairState, setAutoRepairState] = useState<AutoRepairState>({
     sourceRound: "Round 1",
     targetRound: "Round 2",
@@ -382,6 +396,27 @@ export default function TournamentPage() {
       }).filter((item): item is ReviewResolutionItem => Boolean(item));
     });
   }, [normalizedRoundSetup.numberOfHoles, officialHoleKeys, playerIdsByName, scoreHoleEntries, scorecardRows, sharedScoreEntries]);
+  const dynamicStatisticReviewItems = useMemo(
+    () =>
+      dynamicReviewFoundation
+        ? buildDynamicStatisticReviewItems({
+            foundation: dynamicReviewFoundation,
+            players: scorecardRows.flatMap((row) => {
+              const playerId = playerIdsByName.get(row.playerName);
+              return playerId ? [{ playerId, playerName: row.playerName }] : [];
+            }),
+            roundNumber: normalizedRoundSetup.roundNumber,
+            holePars: certifiedMobileHolePars.slice(0, normalizedRoundSetup.numberOfHoles),
+          })
+        : [],
+    [
+      dynamicReviewFoundation,
+      normalizedRoundSetup.numberOfHoles,
+      normalizedRoundSetup.roundNumber,
+      playerIdsByName,
+      scorecardRows,
+    ]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -404,11 +439,12 @@ export default function TournamentPage() {
     if (!sharedTournamentId) {
       setSharedScoreEntries([]);
       setScoreHoleEntries([]);
+      setDynamicReviewFoundation(null);
       return;
     }
 
     const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
-    const [scores, holes] = await Promise.all([
+    const [scores, holes, dynamicFoundation] = await Promise.all([
       loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
         console.warn("[ScoreService] Unable to load review score entries.", error);
         return [];
@@ -417,10 +453,15 @@ export default function TournamentPage() {
         console.warn("[StatisticsService] Unable to load review hole entries.", error);
         return [];
       }),
+      loadDynamicStatisticReviewFoundation(sharedTournamentId).catch((error) => {
+        console.warn("[DynamicStatistics] Unable to load Review statistics.", error);
+        return null;
+      }),
     ]);
 
     setSharedScoreEntries(scores);
     setScoreHoleEntries(holes);
+    setDynamicReviewFoundation(dynamicFoundation);
   }, [normalizedRoundSetup.roundNumber, sharedTournamentId]);
 
   useEffect(() => {
@@ -1033,6 +1074,62 @@ export default function TournamentPage() {
     }
   };
 
+  const handleResolveDynamicReviewItem = async (
+    item: DynamicStatisticReviewItem,
+    choice: "player" | "marker" | "coach_override"
+  ) => {
+    if (isTournamentFinalized) {
+      setDynamicReviewMessage("This tournament is finalized. Dynamic statistic Review is read-only.");
+      return;
+    }
+    if (!sharedTournamentId || !dynamicReviewFoundation?.assignment) {
+      setDynamicReviewMessage("An assigned statistic package is required.");
+      return;
+    }
+    const sourceEntry =
+      choice === "player"
+        ? item.playerEntry
+        : choice === "marker"
+          ? item.markerEntry
+          : item.playerEntry ?? item.markerEntry;
+    if (!sourceEntry) {
+      setDynamicReviewMessage("The selected original statistic value is unavailable.");
+      return;
+    }
+    try {
+      const value =
+        choice === "player"
+          ? item.playerValue
+          : choice === "marker"
+            ? item.markerValue
+            : parseDynamicStatisticOfficialValue(
+                item,
+                dynamicReviewOverrideValues[item.id] ?? ""
+              );
+      if (value === null) throw new Error("The selected statistic value is unavailable.");
+      const officialValue = await resolveOfficialDynamicStatistic({
+        assignment: dynamicReviewFoundation.assignment,
+        tournamentId: sharedTournamentId,
+        roundNumber: normalizedRoundSetup.roundNumber,
+        item,
+        value,
+        sourceEntry,
+        decision: choice,
+      });
+      setDynamicReviewFoundation((current) =>
+        current ? { ...current, values: [...current.values, officialValue] } : current
+      );
+      setDynamicReviewOverrideValues((current) => ({ ...current, [item.id]: "" }));
+      setDynamicReviewMessage(
+        `${item.name} on Hole ${item.holeNumber} for ${item.playerName} is now official.`
+      );
+    } catch (error) {
+      setDynamicReviewMessage(
+        error instanceof Error ? error.message : "Unable to resolve the statistic."
+      );
+    }
+  };
+
   const handleGeneratePairings = () => {
     if (isTournamentFinalized) {
       setPairingsMessage("This tournament is finalized. Pairings are read-only.");
@@ -1560,8 +1657,18 @@ export default function TournamentPage() {
                        onReviewOverrideReasonChange={(itemId, value) =>
                          setReviewOverrideReasons((current) => ({ ...current, [itemId]: value }))
                        }
-                       onResolveReviewItem={handleResolveReviewItem}
-                     />
+                        onResolveReviewItem={handleResolveReviewItem}
+                        dynamicStatisticReviewItems={dynamicStatisticReviewItems}
+                        dynamicStatisticReviewMessage={dynamicReviewMessage}
+                        dynamicStatisticOverrideValues={dynamicReviewOverrideValues}
+                        onDynamicStatisticOverrideValueChange={(itemId, value) =>
+                          setDynamicReviewOverrideValues((current) => ({
+                            ...current,
+                            [itemId]: value,
+                          }))
+                        }
+                        onResolveDynamicStatistic={handleResolveDynamicReviewItem}
+                      />
                   ) : null
                 }
               </TournamentPrintExport>

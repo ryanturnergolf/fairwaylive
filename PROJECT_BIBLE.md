@@ -196,13 +196,15 @@ Review Hub should be built on top of the Tournament Aggregate rather than duplic
 
 ## Approved Future Capability: Custom Statistics And Player Season Tracking
 
-Status: **PHASE 3 MOBILE INTEGRATION DEPLOYED AND VERIFIED**
+Status: **PHASE 4 REVIEW INTEGRATION VERIFIED**
 
 The Dynamic Statistics backend foundation is runtime-available in the connected Supabase project. It provides owner-scoped, versioned statistic definitions and packages, immutable event assignments and hole values, and the approved built-in definition catalog. Real Supabase verification covered RLS, cross-owner rejection, archive/restore, immutable definition and package revisions, pinned event assignments, original/official value preservation, and restricted historical deletion.
 
 The follow-up migration `20260805000000_fix_dynamic_statistics_catalog_trigger.sql` corrected table-specific archival protection so definitions and packages can be archived without weakening immutable identity rules. Coach configuration and the Phase 3 mobile scorecard integration are now available. `20260806000000_add_mobile_dynamic_statistics_access.sql` added narrow share-token-authorized package/value access, and `20260806010000_enforce_mobile_dynamic_statistics_player_read.sql` ensures public reads are restricted to an authorized player and round.
 
-Real Supabase verification covered Tournament and Qualifying package resolution, immutable package-version pinning, required-stat validation, checkbox, yes/no, bounded-number, and option-list inputs, append-only persistence, reload/reopen behavior, signed-out share-token and player authorization, and offline retry after reconnect. Events without an assigned package retain the certified Fairway, GIR, and Putts workflow. Review integration, analytics, and player-profile presentation remain unimplemented.
+Real Supabase verification covered Tournament and Qualifying package resolution, immutable package-version pinning, required-stat validation, checkbox, yes/no, bounded-number, and option-list inputs, append-only persistence, reload/reopen behavior, signed-out share-token and player authorization, and offline retry after reconnect. Events without an assigned package retain the certified Fairway, GIR, and Putts workflow.
+
+Dynamic Statistics now participates in the authenticated Review Hub through the pinned package version. The read model preserves package order and applicability, distinguishes Match, Different, Missing, and Required Missing states, and supports accepting player or marker values plus append-only official corrections. Original player and marker rows remain unchanged; later official corrections supersede earlier official values without deleting history. Finalized events remain readable and disable Review controls. Analytics and player-profile presentation remain unimplemented.
 
 Coaches will be able to select which statistics appear on mobile scorecards, organize them into event stat packages, and create configuration-driven custom statistics. Initial and anticipated fields include:
 

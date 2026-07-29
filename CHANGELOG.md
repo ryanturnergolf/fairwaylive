@@ -8,6 +8,8 @@
 - Seeded Fairway Hit, Green in Regulation, Putts, Penalty Strokes, Shots from 100 Yards and In, Up-and-Down Opportunity, Up-and-Down Success, and Sand Save definitions.
 - Deployed Dynamic Statistics mobile access for assigned Tournament and Qualifying packages, including ordered required/optional checkbox, yes/no, bounded-number, and option-list inputs on the certified scorecard.
 - Added append-only signed-out statistic loading and saving with package-version pinning, player/round authorization, reload persistence, and offline retry behavior.
+- Integrated assigned Dynamic Statistics packages into the authenticated Review Hub for Tournament and Qualifying events, preserving package order and applicability.
+- Added Match, Different, Missing, and Required Missing comparison states plus player-value, marker-value, corrected official-value, and later official-correction actions.
 
 ### Fixed
 
@@ -19,7 +21,9 @@
 - Verified real Supabase owner access, cross-owner isolation, definition/package archive and restore, immutable revision history, pinned package assignments, preserved original and official hole values, and restricted historical deletion.
 - Verified complete real Tournament and Qualifying rounds with package rendering, required validation, all supported input types, append-only writes, reload/reopen persistence, signed-out authorization, final-hole completion, and offline reconnect.
 - Verified legacy events without packages continue using Fairway, GIR, and Putts, with existing score tables and score-saving behavior unchanged.
-- Production build passed and Playwright passed 196/196. Dynamic Statistics Review integration, analytics, and player profiles remain unimplemented.
+- Verified original player and marker values remain immutable while official values append and later corrections supersede without deleting history.
+- Verified finalized Dynamic Statistics Review is read-only and package-free and legacy Review behavior remains unchanged.
+- Production build passed and Playwright passed 202/202. Analytics and player profiles remain unimplemented.
 
 ## 2026-07-27
 

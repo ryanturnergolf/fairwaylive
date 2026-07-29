@@ -39,7 +39,7 @@ Status: **DATA FOUNDATION COMPLETE; UI NOT STARTED**
 
 ### Approved Future Capability - Custom Statistics And Player Season Tracking
 
-Status: **PHASE 3 MOBILE INTEGRATION DEPLOYED; PHASE 4 NOT STARTED**
+Status: **PHASE 4 REVIEW INTEGRATION COMPLETE**
 
 This work follows UX polish, onboarding, and durable roster preparation. It must reuse the certified scoring, Review, official-resolution, finalization, and read-only architecture rather than introducing a second event or analytics authority.
 
@@ -74,9 +74,11 @@ This work follows UX polish, onboarding, and durable roster preparation. It must
 
 #### Phase 4 - Review And Finalization
 
+- Status: **COMPLETE**
 - Compare self and marker custom-stat values only where the definition and scoring policy require it.
 - Resolve official custom-stat values through the existing immutable audit/projection model.
 - Preserve original values, finalized read-only history, and event finalization semantics.
+- Verified authenticated Tournament and Qualifying Review with pinned package order, applicability, all comparison states, player/marker acceptance, corrected and later official values, validation, reload persistence, finalized read-only behavior, and legacy compatibility.
 
 #### Phase 5 - Player Season Analytics
 
