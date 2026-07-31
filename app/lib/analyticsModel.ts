@@ -124,6 +124,11 @@ export type AnalyticsComparisonResult = {
   aggregate: AnalyticsAggregate;
 };
 
+export type AnalyticsRoundAggregate = AnalyticsAggregate & {
+  roundsPlayed: number;
+  eventsPlayed: number;
+};
+
 export type AnalyticsDistributionBucket = {
   key: string;
   label: string;

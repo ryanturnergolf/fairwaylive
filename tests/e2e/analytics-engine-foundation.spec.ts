@@ -218,6 +218,7 @@ test("legacy Fairway GIR and Putts remain available when dynamic values are abse
     "green_in_regulation",
     "penalty_strokes",
     "putts",
+    "strokes",
   ]);
   expect(buildAnalyticsObservations(input).every((value) => value.seasonId === "season-1")).toBe(true);
 });

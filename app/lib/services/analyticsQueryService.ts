@@ -7,6 +7,7 @@ import {
   type AnalyticsFilters,
   type AnalyticsObservation,
   type AnalyticsRollingPoint,
+  type AnalyticsRoundAggregate,
   type AnalyticsRoundResult,
   type AnalyticsSeasonResult,
   type AnalyticsTrend,
@@ -69,6 +70,7 @@ export type AnalyticsQueryResult = {
   observationCount: number;
   raw?: AnalyticsObservation[];
   aggregate?: AnalyticsAggregate;
+  roundAggregate?: AnalyticsRoundAggregate;
   rounds?: AnalyticsRoundResult[];
   events?: AnalyticsEventResult[];
   seasons?: AnalyticsSeasonResult[];
@@ -243,6 +245,26 @@ const buildRollingAverages = (
   });
 };
 
+const buildRoundAggregate = (
+  observations: AnalyticsObservation[]
+): AnalyticsRoundAggregate => {
+  const rounds = calculateRoundStatistics(observations);
+  const roundTotalObservations: AnalyticsObservation[] = rounds
+    .filter((round) => round.aggregate.sum !== null)
+    .map((round) => ({
+      ...round.observations[0],
+      id: `round-total:${round.eventType}:${round.eventId}:${round.roundNumber}`,
+      value: round.aggregate.sum as number,
+    }));
+  return {
+    ...calculateAnalyticsAggregate(roundTotalObservations),
+    roundsPlayed: rounds.length,
+    eventsPlayed: new Set(
+      rounds.map((round) => `${round.eventType}:${round.eventId}`)
+    ).size,
+  };
+};
+
 const comparisonIdentity = (
   observation: AnalyticsObservation,
   dimension: AnalyticsComparisonDimension
@@ -351,9 +373,10 @@ export const executeAnalyticsQuery = (
   if (query.datasets.includes("raw")) result.raw = filtered;
   if (query.datasets.includes("aggregate")) {
     result.aggregate = calculateAnalyticsAggregate(filtered);
-    if (query.scope === "round") result.rounds = calculateRoundStatistics(filtered);
-    if (query.scope === "event") result.events = calculateEventStatistics(filtered);
-    if (query.scope === "season") result.seasons = calculateSeasonStatistics(filtered);
+    result.roundAggregate = buildRoundAggregate(filtered);
+    result.rounds = calculateRoundStatistics(filtered);
+    result.events = calculateEventStatistics(filtered);
+    result.seasons = calculateSeasonStatistics(filtered);
   }
   if (query.datasets.includes("trend")) {
     result.trend = calculateAnalyticsTrend(

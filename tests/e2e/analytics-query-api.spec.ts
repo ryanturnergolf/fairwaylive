@@ -124,6 +124,13 @@ test("API datasets reuse the engine for raw aggregate trend rolling comparison a
   const result = executeAnalyticsQuery(observations, query);
   expect(result.raw).toHaveLength(4);
   expect(result.aggregate).toMatchObject({ count: 4, sum: 10, average: 2.5 });
+  expect(result.roundAggregate).toMatchObject({
+    roundsPlayed: 4,
+    eventsPlayed: 1,
+    average: 2.5,
+    min: 1,
+    max: 4,
+  });
   expect(result.trend?.points).toHaveLength(4);
   expect(result.rolling?.map((point) => point.rollingAverage)).toEqual([1, 1.5, 2.5, 3.5]);
   expect(result.comparisons).toEqual([

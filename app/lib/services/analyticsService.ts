@@ -13,6 +13,7 @@ import { loadAnalyticsSourceData } from "../repositories/analyticsRepository";
 import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
 
 const legacyDefinitions = {
+  strokes: { name: "Score", inputType: "bounded_number" },
   fairway_hit: { name: "Fairway Hit", inputType: "yes_no" },
   green_in_regulation: { name: "Green in Regulation", inputType: "yes_no" },
   putts: { name: "Putts", inputType: "bounded_number" },
