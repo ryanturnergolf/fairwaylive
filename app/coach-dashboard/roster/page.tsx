@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { CoachBreadcrumbs, CoachHeader } from "../components/CoachChrome";
 
 export default function RosterLandingPage() {
   return (
-    <main className="min-h-screen bg-[#F6F1E6] px-6 py-12 text-[#0B3D2E]">
-      <div className="mx-auto max-w-4xl">
+    <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+      <CoachHeader />
+      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Rosters" }]} />
         <Link href="/coach-dashboard" className="text-sm font-bold">← Coach Dashboard</Link>
         <p className="mt-10 text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Roster Management</p>
         <h1 className="mt-2 text-4xl font-black">Choose a roster</h1>
@@ -16,4 +19,3 @@ export default function RosterLandingPage() {
     </main>
   );
 }
-

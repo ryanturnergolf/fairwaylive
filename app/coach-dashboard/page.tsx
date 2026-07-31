@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CoachHeader } from "./components/CoachChrome";
 import { useEffect, useState } from "react";
 import {
   loadCoachDashboardReadModel,
@@ -122,7 +123,8 @@ export default function CoachDashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="border-b border-[#E8DCC8] bg-[#FCFAF5]/90">
+      <CoachHeader />
+      <header className="hidden">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.2em] text-[#F6F1E6]">
@@ -182,9 +184,9 @@ export default function CoachDashboardPage() {
             <p className="text-sm font-black uppercase tracking-[0.32em] text-[#B8892D]">
               {isLoading ? "Loading" : dashboard.today.currentDate}
             </p>
-            <h2 className="mt-2 text-4xl font-black tracking-[-0.03em] text-[#0B3D2E]">
+            <h1 className="mt-2 text-4xl font-black tracking-[-0.03em] text-[#0B3D2E]">
               Coach Dashboard
-            </h2>
+            </h1>
           </div>
           <div className="rounded-[8px] border border-[#E8DCC8] bg-white px-4 py-3 text-sm font-semibold text-[#51635C]">
             Read-only program overview

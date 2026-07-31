@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AnalyticsComparisonResult } from "../../lib/analyticsModel";
 import type { StatisticEventType } from "../../lib/dynamicStatisticsModel";
+import { CoachBreadcrumbs, CoachHeader, CoachState } from "../components/CoachChrome";
 import {
   loadTeamPerformanceDashboard,
   type TeamPerformanceFilters,
@@ -124,8 +124,9 @@ export default function TeamPerformanceDashboard() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="border-b border-[#E8DCC8] bg-[#FCFAF5]/95"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8"><Link href="/coach-dashboard" className="font-black">Clubhouse HQ</Link><nav className="flex gap-4 text-sm font-bold"><Link href="/coach-dashboard/players">Players</Link><Link href="/coach-dashboard">Coach Dashboard</Link></nav></div></header>
+      <CoachHeader />
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Team Performance" }]} />
         <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Analytics</p>
         <h1 className="mt-2 text-4xl font-black tracking-tight">Team Performance Dashboard</h1>
         <p className="mt-2 text-[#51635C]">Read-only team performance from the authenticated Analytics API.</p>
@@ -140,8 +141,8 @@ export default function TeamPerformanceDashboard() {
           <label className="text-sm font-bold">Statistic<select aria-label="Statistic" value={statisticKey} onChange={(event) => setStatisticKey(event.target.value)} className="mt-2 w-full rounded-lg border border-[#D9D0C0] px-3 py-2">{statisticOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         </section>
 
-        {error ? <p role="alert" className="mt-5 rounded-lg border border-[#8A2E2E] bg-[#FFF4F1] p-4 font-bold text-[#8A2E2E]">{error}</p> : null}
-        {isLoading ? <p role="status" className="mt-5 text-sm font-bold text-[#51635C]">Loading team analytics...</p> : null}
+        {error ? <div className="mt-5"><CoachState title="Unable to load team performance" description={error} tone="error" /></div> : null}
+        {isLoading ? <div className="mt-5"><CoachState title="Loading team analytics" description="Applying team, season, event, and statistic filters." /></div> : null}
 
         <section aria-label="Team summary" className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[

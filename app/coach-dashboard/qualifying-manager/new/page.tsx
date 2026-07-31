@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CoachBreadcrumbs, CoachHeader } from "../../components/CoachChrome";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type {
@@ -124,8 +125,10 @@ export default function CreateQualifyingPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F6F1E6] px-5 py-8 text-[#0B3D2E]">
-      <div className="mx-auto max-w-5xl">
+    <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+      <CoachHeader />
+      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Qualifying", href: "/coach-dashboard/qualifying-manager" }, { label: "Create" }]} />
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Qualifying Setup</p>

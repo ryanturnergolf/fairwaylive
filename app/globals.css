@@ -25,6 +25,11 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #b8892d;
+  outline-offset: 2px;
+}
+
 @media print {
   body {
     background: #ffffff !important;

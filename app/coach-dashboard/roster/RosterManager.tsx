@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CoachBreadcrumbs, CoachHeader, CoachState } from "../components/CoachChrome";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   rosterPlayerStatuses,
@@ -242,7 +243,8 @@ export default function RosterManager({ rosterType }: { rosterType: RosterType }
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="border-b border-[#E8DCC8] bg-[#FCFAF5]/95">
+      <CoachHeader />
+      <header className="hidden">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-5 lg:px-8">
           <Link href="/coach-dashboard" className="font-black">Clubhouse HQ</Link>
           <nav className="flex items-center gap-4 text-sm font-bold">
@@ -254,6 +256,7 @@ export default function RosterManager({ rosterType }: { rosterType: RosterType }
       </header>
 
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Rosters", href: "/coach-dashboard/roster" }, { label: title }]} />
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Roster Management</p>
@@ -272,7 +275,7 @@ export default function RosterManager({ rosterType }: { rosterType: RosterType }
           </div>
         </div>
 
-        {error ? <p role="alert" className="mt-5 rounded-lg border border-[#8A2E2E]/30 bg-[#FFF4F1] p-3 font-semibold text-[#8A2E2E]">{error}</p> : null}
+        {error ? <div className="mt-5"><CoachState title="Unable to load roster" description={error} tone="error" /></div> : null}
         {message ? <p role="status" className="mt-5 rounded-lg border border-[#2E6F76]/30 bg-[#E6F3F1] p-3 font-semibold">{message}</p> : null}
 
         {showSeasonForm ? (
@@ -310,11 +313,11 @@ export default function RosterManager({ rosterType }: { rosterType: RosterType }
           <label className="mt-4 flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived players</label>
 
           {isLoading ? (
-            <p className="mt-6 text-sm font-semibold text-[#51635C]">Loading roster...</p>
+            <div className="mt-6"><CoachState title="Loading roster" description="Retrieving seasons, memberships, and archived identities." /></div>
           ) : !selectedSeasonId ? (
-            <p className="mt-6 rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-8 text-center font-semibold text-[#51635C]">Create a season to begin managing this roster.</p>
+            <div className="mt-6"><CoachState title="No season available" description="Create a season to begin managing this roster." /></div>
           ) : visiblePlayers.length === 0 ? (
-            <p className="mt-6 rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-8 text-center font-semibold text-[#51635C]">No players match this season and filter.</p>
+            <div className="mt-6"><CoachState title={showArchived ? "No players match" : "No active players match"} description="No players match this season and filter. Adjust the filters or show archived players." /></div>
           ) : (
             <div className="mt-6 grid gap-3">
               {visiblePlayers.map((player) => {

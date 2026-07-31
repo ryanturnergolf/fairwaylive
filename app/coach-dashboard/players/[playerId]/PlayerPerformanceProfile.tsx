@@ -14,6 +14,7 @@ import {
   loadPlayerStatisticDetail,
 } from "../../../lib/services/playerPerformanceProfileService";
 import { loadRosterFoundation } from "../../../lib/services/rosterFoundationService";
+import { CoachBreadcrumbs, CoachHeader, CoachState } from "../../components/CoachChrome";
 
 type ProfileData = Awaited<ReturnType<typeof loadPlayerPerformanceSummary>>;
 
@@ -189,18 +190,20 @@ export default function PlayerPerformanceProfile({ playerId }: { playerId: strin
   const customStatistics = comparisons.filter((item) => !builtInNames.has(item.label));
 
   if (!isLoading && !player) {
-    return <main className="min-h-screen bg-[#F6F1E6] p-8 text-[#0B3D2E]"><p role="alert">Player not found.</p></main>;
+    return <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]"><CoachHeader /><div className="mx-auto max-w-7xl px-5 py-8"><CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Players", href: "/coach-dashboard/players" }, { label: "Profile" }]} /><CoachState title="Player not found" description="This permanent roster identity is unavailable or you do not have access to it." tone="error" /></div></main>;
   }
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="border-b border-[#E8DCC8] bg-[#FCFAF5]/95">
+      <CoachHeader />
+      <header className="hidden">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
           <Link href="/coach-dashboard/players" className="font-black">← Players</Link>
           <Link href="/coach-dashboard" className="text-sm font-bold">Coach Dashboard</Link>
         </div>
       </header>
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Players", href: "/coach-dashboard/players" }, { label: player ? `${player.preferredName || player.firstName} ${player.lastName}` : "Profile" }]} />
         <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Player Performance Profile</p>
         <h1 className="mt-2 text-4xl font-black tracking-tight">
           {player ? `${player.preferredName || player.firstName} ${player.lastName}` : "Loading player..."}
@@ -219,8 +222,8 @@ export default function PlayerPerformanceProfile({ playerId }: { playerId: strin
           <label className="text-sm font-bold">Last N rounds<select aria-label="Last N rounds" value={lastNRounds} onChange={(event) => setLastNRounds(event.target.value)} className="mt-2 w-full rounded-lg border border-[#D9D0C0] px-3 py-2"><option value="">All rounds</option>{[5, 10, 20, 50].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
         </section>
 
-        {error ? <p role="alert" className="mt-5 rounded-lg border border-[#8A2E2E] bg-[#FFF4F1] p-4 font-bold text-[#8A2E2E]">{error}</p> : null}
-        {isLoading ? <p role="status" className="mt-5 text-sm font-bold text-[#51635C]">Loading performance analytics...</p> : null}
+        {error ? <div className="mt-5"><CoachState title="Unable to load performance" description={error} tone="error" /></div> : null}
+        {isLoading ? <div className="mt-5"><CoachState title="Loading performance analytics" description="Applying the selected season and round filters." /></div> : null}
 
         <section aria-label="Performance summary" className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CoachBreadcrumbs, CoachHeader, CoachState } from "../components/CoachChrome";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   statisticInputTypes,
@@ -307,8 +308,10 @@ export default function StatisticsManager() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F6F1E6] px-5 py-10 text-[#0B3D2E] sm:px-8">
-      <div className="mx-auto max-w-7xl">
+    <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+      <CoachHeader />
+      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Statistics Configuration" }]} />
         <Link href="/coach-dashboard" className="text-sm font-bold">← Coach Dashboard</Link>
         <div className="mt-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
@@ -339,11 +342,11 @@ export default function StatisticsManager() {
         </nav>
 
         <div aria-live="polite" className="mt-5">
-          {error ? <p className="rounded-lg border border-[#8A2E2E] bg-[#FFF4F1] p-3 font-bold text-[#8A2E2E]">{error}</p> : null}
+          {error ? <CoachState title="Unable to load statistics configuration" description={error} tone="error" /> : null}
           {message ? <p className="rounded-lg border border-[#2E6F76] bg-[#E6F3F1] p-3 font-bold">{message}</p> : null}
         </div>
 
-        {isLoading ? <p className="mt-8 font-semibold text-[#51635C]">Loading statistics configuration...</p> : null}
+        {isLoading ? <div className="mt-8"><CoachState title="Loading statistics configuration" description="Retrieving immutable definitions, packages, and event assignments." /></div> : null}
 
         {!isLoading && section === "definitions" ? (
           <section className="mt-6">
@@ -432,4 +435,3 @@ export default function StatisticsManager() {
     </main>
   );
 }
-
