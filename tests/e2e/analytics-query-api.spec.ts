@@ -134,8 +134,8 @@ test("API datasets reuse the engine for raw aggregate trend rolling comparison a
   expect(result.trend?.points).toHaveLength(4);
   expect(result.rolling?.map((point) => point.rollingAverage)).toEqual([1, 1.5, 2.5, 3.5]);
   expect(result.comparisons).toEqual([
-    expect.objectContaining({ label: "Men", aggregate: expect.objectContaining({ count: 3 }) }),
-    expect.objectContaining({ label: "Women", aggregate: expect.objectContaining({ count: 1 }) }),
+    expect.objectContaining({ label: "Men", aggregate: expect.objectContaining({ count: 3 }), roundAggregate: expect.objectContaining({ roundsPlayed: 3 }) }),
+    expect.objectContaining({ label: "Women", aggregate: expect.objectContaining({ count: 1 }), roundAggregate: expect.objectContaining({ roundsPlayed: 1 }) }),
   ]);
   expect(result.distribution?.reduce((total, bucket) => total + bucket.count, 0)).toBe(4);
 });

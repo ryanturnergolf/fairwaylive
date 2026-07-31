@@ -122,6 +122,7 @@ export type AnalyticsComparisonResult = {
   key: string;
   label: string;
   aggregate: AnalyticsAggregate;
+  roundAggregate?: AnalyticsRoundAggregate;
 };
 
 export type AnalyticsRoundAggregate = AnalyticsAggregate & {

@@ -306,6 +306,7 @@ const buildComparisons = (
       key,
       label: group.label,
       aggregate: calculateAnalyticsAggregate(group.values),
+      roundAggregate: buildRoundAggregate(group.values),
     }))
     .sort((left, right) => left.label.localeCompare(right.label) || left.key.localeCompare(right.key));
 };

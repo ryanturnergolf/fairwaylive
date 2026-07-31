@@ -154,6 +154,9 @@ export default function CoachDashboardPage() {
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/players">
               Players
             </Link>
+            <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/team-performance">
+              Team Performance
+            </Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/statistics">
               Stat Configuration
             </Link>
