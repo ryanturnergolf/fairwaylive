@@ -2,6 +2,13 @@
 
 ## 2026-08-01
 
+### Controlled Beta Phase 5 — Error Reporting And Health Foundation
+
+- Added native Next.js instrumentation for unhandled server, API-route, and opt-in client errors through one structured sensitive-data redaction boundary.
+- Added an uncached, production-safe `/api/health` endpoint exposing only availability, configuration readiness, and release identity.
+- Added clear production configuration validation while preserving development/test startup and requiring no service-role credential, database write, migration, or vendor SDK.
+- Added focused coverage for health output, missing production configuration, sensitive-data redaction, and disabled-by-default monitoring.
+
 ### Controlled Beta Phase 4B — Hosted CI Supabase Configuration
 
 - Added GitHub Actions secret injection for the client-safe Supabase URL and anonymous key required by the production build and intercepted Playwright requests.

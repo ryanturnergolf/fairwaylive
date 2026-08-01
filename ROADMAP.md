@@ -39,9 +39,11 @@ Status: **IN PROGRESS**
 - Phase 4C separates the local Playwright server origin from the public QR/share origin by using a reserved `.example` URL for hosted verification; a passing hosted run remains required.
 - Phase 4D reconciles the 240-test committed baseline and replaces a timing-sensitive mobile Review helper poll with a focused rendered-state assertion; hosted verification remains pending.
 - Phase 4E stabilizes the 18-hole rapid-save regression with per-hole editability assertions and a test-scoped execution budget; 15/15 CI-like repetitions and the 240/240 committed local suite pass, with hosted verification pending.
+- Controlled Beta Phase 5 — Centralized Error Reporting & Health Checks: **FOUNDATION IMPLEMENTED; PRODUCTION COLLECTION AND ALERTING PENDING**.
 - Opening beta remains gated on confirming the connected Supabase backup/PITR capabilities, assigning named recovery owners, and passing the documented isolated recovery drill.
 - Release readiness additionally requires a confirmed production host/rollback mechanism, named release owners, approved canary data, and a successful release/rollback drill.
 - Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.
+- Phase 5 adds native Next.js client/server exception capture, redacted structured output, release identity, production configuration validation, and `/api/health` without changing scoring or persistence. The selected production host/log collector must still retain the stream and deliver tested alerts.
 - CI readiness requires configuring `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in GitHub Actions, preferably from a current-schema test/staging project, followed by one successful hosted run. CI remains separate from production Supabase deployment and smoke verification.
 - Current verification baseline: production build passed; Playwright passed 244/244; production migrations are current; application UX baseline commit is `e3953c3180f5061a7557e1bc1542edcbecf2a341`.
 - The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.

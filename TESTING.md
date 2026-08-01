@@ -47,6 +47,16 @@ Mobile Review helpers race the two valid web-first completion states: an automat
 
 The rapid Save Hole persistence regression deliberately injects write latency across all 18 holes to exercise the serialized atomic save queue. It waits for both score inputs to become editable before each next entry and has a timeout scoped to that test only. This preserves the race-condition and adjacent-hole assertions while allowing the expected atomic-save workload to complete on slower hosted runners; the global Playwright timeout is unchanged.
 
+### Monitoring foundation
+
+`tests/e2e/monitoring-foundation.spec.ts` verifies `/api/health`, production environment validation, sensitive-data redaction, structured reporting, and the disabled-by-default client reporting endpoint. Production requires the three existing public application/Supabase variables. Monitoring is optional and configured with:
+
+- `MONITORING_ENABLED=true` for structured server/API reporting and acceptance of sanitized client reports,
+- `NEXT_PUBLIC_MONITORING_ENABLED=true` to install browser error listeners,
+- optional `APP_RELEASE` and `NEXT_PUBLIC_APP_RELEASE` labels when deployment commit metadata is not supplied automatically.
+
+Never place a service-role key, scoring code, share/access token, auth token, or monitoring payload containing private player/score data in test configuration.
+
 ## Current Tests
 
 - `tests/e2e/home.spec.ts`: verifies that the homepage loads.

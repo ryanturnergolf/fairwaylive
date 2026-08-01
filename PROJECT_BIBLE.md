@@ -92,11 +92,13 @@ Tournament-day freeze rules protect active scoring. Application rollback redeplo
 
 ## Controlled Beta Monitoring And Incident Response
 
-Status: **RUNBOOK COMPLETE; MONITORING CONFIGURATION AND DRILL REQUIRED**
+Status: **FOUNDATION IMPLEMENTED; COLLECTION, ALERTING, AND DRILL REQUIRED**
 
 The monitoring and incident-response contract is documented in `MONITORING_INCIDENT_RESPONSE.md`. It defines application, API, Supabase, authentication, score-save, live-scoring, and release-health signals; P1–P4 severity and response targets; tournament-day triage; rollback/recovery boundaries; communication; dashboards; privacy/redaction; and incident closure.
 
-The runbook is vendor-neutral because centralized telemetry, alert routing, and production health checks are not yet documented as deployed capabilities. Controlled beta remains gated on selecting and configuring monitoring, naming responders, verifying redaction and alert delivery, establishing safe canary checks, and passing the pre-beta incident drill.
+The application now uses native Next.js server/client instrumentation, a narrow same-origin client-error endpoint, a shared sensitive-data redaction boundary, structured release-aware server output, production environment validation, and an uncached `/api/health` endpoint. Monitoring is explicitly disabled when its environment flags are absent. No vendor SDK, service-role credential, database write, or schema change is involved.
+
+The foundation does not itself retain logs, deliver alerts, measure handled API outcomes/latency, or prove Supabase/scoring health. Controlled beta remains gated on configuring the production host or log collector, naming responders, verifying alert delivery and retention, establishing safe workflow canaries, and passing the pre-beta incident drill.
 
 ## Controlled Beta Continuous Integration
 

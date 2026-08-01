@@ -1,12 +1,12 @@
 # Clubhouse HQ Production Monitoring And Incident Response Runbook
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 ## Purpose And Current Boundary
 
-This runbook defines the monitoring, alerting, incident response, tournament-day triage, communication, and rehearsal required before Clubhouse HQ opens a controlled beta. It is vendor-neutral and does not claim that centralized telemetry, synthetic checks, paging, or a production health endpoint currently exists.
+This runbook defines the monitoring, alerting, incident response, tournament-day triage, communication, and rehearsal required before Clubhouse HQ opens a controlled beta. The application now provides a vendor-neutral error-reporting boundary and production health endpoint. A production log collector, alert routing, synthetic checks, paging, retention policy, and incident drill still require operator configuration.
 
-The application currently exposes browser/server console diagnostics and user-visible errors, while Supabase and the application hosting provider may expose their own operational views. Before beta, operators must select and configure monitoring that can collect the signals in this document, associate them with a deployed release, and notify the assigned responders.
+Next.js server and API exceptions pass through native instrumentation into structured, redacted server output. Opt-in browser instrumentation reports unhandled client errors through a narrow same-origin endpoint into the same output. The hosting provider must retain and centralize that output, associate it with a deployed release, and route alerts to assigned responders before beta. No third-party monitoring SDK or service is assumed.
 
 Monitoring must never record raw scoring codes, share tokens, access tokens, passwords, Supabase keys, authorization headers, database credentials, or complete player-sensitive payloads.
 
@@ -79,7 +79,9 @@ Monitor:
 - deployment start, completion, rollback, and post-release error-rate changes,
 - availability of the homepage, coach authentication, dashboard, scorecard, leaderboard, and finalized read-only views.
 
-The current application does not provide a dedicated health endpoint. Until one is deliberately implemented, synthetic monitoring should exercise safe existing read-only routes and must not treat a static homepage response as proof that Supabase-backed workflows are healthy.
+`GET /api/health` reports application availability, release identity when configured, and whether required public production configuration is present. It is uncached and exposes no configuration values, secrets, table data, or privileged database state. It is a process/configuration check, not a Supabase connectivity or scoring-authority check; synthetic monitoring must still exercise approved read-only workflow canaries.
+
+Production startup requires `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Development and test environments report incomplete readiness without failing startup. Monitoring requires explicit opt-in with `MONITORING_ENABLED=true`; browser capture additionally requires `NEXT_PUBLIC_MONITORING_ENABLED=true`. `APP_RELEASE` and `NEXT_PUBLIC_APP_RELEASE` are optional release labels, with supported deployment commit variables used as server fallbacks.
 
 ### API health
 
@@ -344,7 +346,7 @@ State service status, verified data impact, any values requiring coach confirmat
 
 ## Monitoring Dashboard Specification
 
-The monitoring vendor is not selected. The required operational views are:
+No monitoring vendor is selected. The application emits a vendor-neutral structured error contract; the production hosting/logging choice must provide these operational views:
 
 ### 1. Executive beta health
 
@@ -396,7 +398,7 @@ The monitoring vendor is not selected. The required operational views are:
 
 ### Log fields
 
-Where telemetry is later implemented, prefer:
+The implemented structured error boundary emits UTC timestamp, release, source, error name/message, route pathname, method, and digest after redaction. Broader telemetry should prefer:
 
 - UTC timestamp,
 - environment,
@@ -441,15 +443,15 @@ Do not close an incident merely because the visible error disappeared.
 
 - [ ] Monitoring vendor/tools and production projects are selected and access-controlled.
 - [ ] Monitoring Owner, Incident Commander backups, responders, Security Lead, Tournament Operations, and Communications contacts are named.
-- [ ] Production release commit/deployment identifier is visible in operator telemetry or provider metadata.
-- [ ] Application/server exceptions and API status/latency are centrally observable.
+- [ ] `APP_RELEASE`/deployment commit metadata is configured and visible in retained operator telemetry.
+- [ ] Structured application/server/API exceptions are collected from production output; route status/latency is centrally observable.
 - [ ] Supabase health, auth health, query errors, and backup age are observable.
 - [ ] Score-mutation and public access-path failures can trigger alerts without payload leakage.
 - [ ] P1/P2 alert routes and paging/contact methods are tested.
 - [ ] Synthetic read checks cover public, authenticated, scorecard, leaderboard, and finalized read-only workflows using safe canary data.
 - [ ] Alert thresholds and active-event schedule/freeze handling are configured.
 - [ ] Dashboard access and log retention are approved.
-- [ ] Secret/token/code redaction is verified with sample events.
+- [x] Application error payload redaction is covered for tokens, codes, UUIDs, email addresses, query strings, and long secret-like values.
 - [ ] Tournament-day paper/manual contingency is prepared.
 - [ ] `BACKUP_RECOVERY.md` ownership and drill requirements are satisfied or explicitly gated.
 - [ ] `RELEASE_ROLLBACK.md` ownership and drill requirements are satisfied or explicitly gated.
@@ -478,7 +480,7 @@ The drill passes only when monitoring detects the safe synthetic symptom, respon
 
 ## Unresolved Pre-Beta Assumptions
 
-- The centralized monitoring/error-reporting vendor and production projects.
+- The production host/log collector used to retain the vendor-neutral structured error stream and its access controls.
 - The hosting provider's logs, uptime, release metadata, and alert integrations.
 - Available Supabase plan metrics, log retention, database observability, and support response.
 - Whether a dedicated staging/preview environment exists for synthetic failures and drills.
@@ -486,6 +488,6 @@ The drill passes only when monitoring detects the safe synthetic symptom, respon
 - Named primary/backup responders and out-of-hours contact methods.
 - Approved telemetry retention, privacy, and access policy.
 - The safe canary coach/events used by synthetic monitoring.
-- Whether application changes are required later to expose correlation IDs, release identity, structured errors, or live-scoring freshness.
+- Whether later phases require correlation IDs, centralized live-scoring freshness, handled API outcome metrics, or a vendor SDK with source maps.
 
 These assumptions must be resolved and the checklist/drill must pass before opening controlled beta.
