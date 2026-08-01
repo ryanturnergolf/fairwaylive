@@ -1963,15 +1963,15 @@ function ReciprocalPlayerScorecardPage() {
   const isHoleSaved = savedHoles.includes(currentHole.holeNumber);
   const currentStatCapture = holeStats[currentHoleIndex] ?? emptyHoleStats();
   const statButtonClass = (isSelected: boolean) =>
-    `min-h-10 rounded-full border px-3 py-2 text-xs font-black uppercase tracking-[0.15em] transition duration-200 ${
+    `min-h-12 rounded-full border px-3 py-2 text-xs font-black uppercase tracking-[0.15em] transition duration-200 ${
       isSelected
         ? "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]"
         : "border-[#E8DCC8] bg-[#FCFAF5] text-[#0B3D2E]"
     } disabled:cursor-not-allowed disabled:opacity-50`;
 
   const sharedHeader = (
-    <header className="sticky top-0 z-10 border-b border-[#E8DCC8] bg-[#F6F1E6]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-md items-center justify-between px-4 py-4">
+    <header className="sticky top-0 z-20 border-b border-[#E8DCC8] bg-[#F6F1E6]/95 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur">
+      <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3 sm:px-5">
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
             HQ
@@ -2078,7 +2078,7 @@ function ReciprocalPlayerScorecardPage() {
     return (
       <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
         {sharedHeader}
-        <section className="mx-auto max-w-md px-4 py-5">
+        <section className="mx-auto max-w-lg px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-5">
           {isTournamentFinalized ? (
             <div className="mb-4 rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-semibold text-[#146233]">
               This tournament is finalized. Score entry is read-only for historical viewing.
@@ -2287,7 +2287,7 @@ function ReciprocalPlayerScorecardPage() {
     return (
       <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
         {sharedHeader}
-        <section className="mx-auto max-w-md px-4 py-5">
+        <section className="mx-auto max-w-lg px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-5">
           {isTournamentFinalized ? (
             <div className="mb-4 rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-semibold text-[#146233]">
               This tournament is finalized. Score entry is read-only for historical viewing.
@@ -2463,7 +2463,7 @@ function ReciprocalPlayerScorecardPage() {
               <button
                 type="button"
                 onClick={() => setView("scoring")}
-                className="w-full rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300"
+                className="min-h-12 w-full rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300"
               >
                 Edit Scores
               </button>
@@ -2471,7 +2471,7 @@ function ReciprocalPlayerScorecardPage() {
                 type="button"
                 onClick={() => setShowConfirm(true)}
                 disabled={!canSubmitVerification}
-                className={`w-full rounded-full px-6 py-4 text-sm font-black uppercase tracking-[0.25em] transition duration-300 ${
+                className={`min-h-12 w-full rounded-full px-6 py-4 text-sm font-black uppercase tracking-[0.2em] transition duration-300 ${
                   !canSubmitVerification
                     ? "cursor-not-allowed border border-[#E8DCC8] bg-[#F6F1E6] text-[#B8892D] opacity-50"
                     : "bg-[#B8892D] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 active:translate-y-0.5"
@@ -2506,14 +2506,14 @@ function ReciprocalPlayerScorecardPage() {
                   type="button"
                   onClick={handleConfirmSubmit}
                   disabled={isTournamentFinalized}
-                  className="w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-12 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Confirm Submit
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowConfirm(false)}
-                  className="w-full rounded-full border border-[#E8DCC8] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#51635C] transition duration-300"
+                  className="min-h-12 w-full rounded-full border border-[#E8DCC8] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#51635C] transition duration-300"
                 >
                   Cancel
                 </button>
@@ -2529,7 +2529,7 @@ function ReciprocalPlayerScorecardPage() {
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       {sharedHeader}
 
-      <section className="mx-auto max-w-md px-4 py-5">
+      <section className="mx-auto max-w-lg px-4 py-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-5 landscape:max-w-2xl">
         {isTournamentFinalized ? (
           <div className="mb-4 rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] p-4 text-sm font-semibold text-[#146233]">
             This tournament is finalized. Score entry is read-only for historical viewing.
@@ -2564,6 +2564,9 @@ function ReciprocalPlayerScorecardPage() {
 
           <div className="mt-3 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-[#51635C]">
             Through {totals.playedHoles}/{scorecard.holes.length}
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#E8DCC8]" aria-label={`Hole progress ${currentHoleIndex + 1} of ${scorecard.holes.length}`}>
+            <div className="h-full rounded-full bg-[#B8892D] transition-[width] duration-300" style={{ width: `${((currentHoleIndex + 1) / scorecard.holes.length) * 100}%` }} />
           </div>
         </div>
 
@@ -2609,6 +2612,7 @@ function ReciprocalPlayerScorecardPage() {
             {scorecard.playerName}'s Score
             <input
               type="number"
+              inputMode="numeric"
               min="1"
               max="12"
               value={scores[currentHoleIndex] === 0 ? "" : scores[currentHoleIndex]}
@@ -2624,6 +2628,7 @@ function ReciprocalPlayerScorecardPage() {
               {scorecard.markerPlayerName}'s Score
               <input
                 type="number"
+                inputMode="numeric"
                 min="1"
                 max="12"
                 value={markerScores[currentHoleIndex] === 0 ? "" : markerScores[currentHoleIndex]}
@@ -2830,12 +2835,12 @@ function ReciprocalPlayerScorecardPage() {
             type="button"
             onClick={handleSaveHole}
             disabled={!scoreControlsReady || isTournamentFinalized || isSavingHole || scores[currentHoleIndex] === 0}
-            className="mt-4 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-5 min-h-12 w-full rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Save Hole
           </button>
           {saveError ? (
-            <p className="mt-3 text-center text-sm font-semibold text-red-700">{saveError}</p>
+            <p role="alert" className="mt-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-center text-sm font-semibold text-red-700">{saveError}</p>
           ) : null}
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -2843,7 +2848,7 @@ function ReciprocalPlayerScorecardPage() {
               type="button"
               onClick={handlePreviousHole}
               disabled={!scoreControlsReady || isSavingHole || currentHoleIndex === 0}
-              className="rounded-full border border-[#B8892D] px-4 py-3 text-xs font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-12 rounded-full border border-[#B8892D] px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-[#0B3D2E] transition duration-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous Hole
             </button>
@@ -2851,7 +2856,7 @@ function ReciprocalPlayerScorecardPage() {
               type="button"
               onClick={handleNextHole}
               disabled={!scoreControlsReady || isSavingHole || currentHoleIndex === scorecard.holes.length - 1}
-              className="rounded-full border border-[#B8892D] px-4 py-3 text-xs font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-12 rounded-full border border-[#B8892D] px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-[#0B3D2E] transition duration-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next Hole
             </button>
@@ -2868,7 +2873,7 @@ function ReciprocalPlayerScorecardPage() {
             isReviewSynchronizing ||
             !allHolesScored
           }
-          className="mt-5 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mt-5 min-h-12 w-full rounded-full bg-[#B8892D] px-6 py-4 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] shadow-lg shadow-[#B8892D]/20 transition duration-300 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isTournamentFinalized
             ? "Tournament Finalized"

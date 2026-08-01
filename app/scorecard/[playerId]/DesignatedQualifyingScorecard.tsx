@@ -106,19 +106,19 @@ export default function DesignatedQualifyingScorecard({
     setBusy(false);
     if (response.ok) await load(); else setError("Unable to raise discrepancy.");
   };
-  if (error && !model) return <main className="min-h-screen bg-[#0B3D2E] p-6 text-white"><p role="alert">{error}</p></main>;
+  if (error && !model) return <main className="flex min-h-screen items-center bg-[#F6F1E6] px-4 py-8 text-[#0B3D2E]"><div role="alert" className="mx-auto w-full max-w-lg rounded-[24px] border border-red-300 bg-red-50 p-5 font-semibold text-red-800">{error}</div></main>;
   if (!model) return <main className="min-h-screen bg-[#F6F1E6] p-6">Loading designated scorecard…</main>;
   const complete = model.groupPlayers.every((player) => model.holes.filter((entry) =>
     entry.player_id === player.player_id && entry.entered_by_player_id === model.scorerPlayerId && entry.strokes > 0
   ).length >= model.holeCount);
   return (
-    <main className="min-h-screen bg-[#F6F1E6] px-4 py-6 text-[#0B3D2E]">
-      <div className="mx-auto max-w-xl">
+    <main className="min-h-screen bg-[#F6F1E6] px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))] text-[#0B3D2E]">
+      <div className="mx-auto max-w-xl landscape:max-w-3xl">
         <p className="text-xs font-black uppercase tracking-widest text-[#B8892D]">Designated Group Scoring</p>
         <h1 className="text-2xl font-black">{model.qualifyingName}</h1>
         <p className="font-bold">{model.playerName} · {model.roundName}</p>
         {model.finalized ? <p className="mt-3 rounded-lg bg-amber-100 p-3 font-black">Read-only · Finalized</p> : null}
-        <section className="mt-5 rounded-2xl bg-white p-5 shadow">
+        <section className="mt-5 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
           <h2 className="text-xl font-black">Hole {hole}</h2>
           {model.accessRole === "scorer" ? (
             <div className="mt-4 space-y-3">
@@ -128,13 +128,13 @@ export default function DesignatedQualifyingScorecard({
                   <input aria-label={`${player.player_name} score`} inputMode="numeric"
                     value={scores[player.player_id] ?? ""} onChange={(event) =>
                       setScores((current) => ({ ...current, [player.player_id]: event.target.value.replace(/\D/g, "") }))}
-                    className="w-20 rounded-lg border p-3 text-center text-xl font-black" />
+                    className="min-h-12 w-20 rounded-xl border border-[#E8DCC8] p-3 text-center text-xl font-black" />
                 </label>
               ))}
             </div>
           ) : <p className="mt-3">Your designated scorer records group scores. You may record your personal statistics.</p>}
           <h3 className="mt-5 font-black">My Statistics</h3>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <select aria-label="Fairway Hit" value={fairway} onChange={(e) => setFairway(e.target.value)} className="rounded border p-2">
               <option value="">Fairway —</option><option value="yes">Yes</option><option value="no">No</option>
             </select>
@@ -148,16 +148,16 @@ export default function DesignatedQualifyingScorecard({
             onClick={() => void save()} className="mt-5 min-h-12 w-full rounded-full bg-[#0B3D2E] font-black text-white disabled:opacity-50">
             {busy ? "Saving…" : "Save Hole"}
           </button>
-          <div className="mt-4 flex justify-between">
-            <button disabled={hole === 1} onClick={() => setHole((value) => value - 1)}>Previous Hole</button>
-            <button disabled={hole === model.holeCount} onClick={() => setHole((value) => value + 1)}>Next Hole</button>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button className="min-h-12 rounded-full border border-[#B8892D] px-4 font-black disabled:opacity-40" disabled={hole === 1} onClick={() => setHole((value) => value - 1)}>Previous Hole</button>
+            <button className="min-h-12 rounded-full border border-[#B8892D] px-4 font-black disabled:opacity-40" disabled={hole === model.holeCount} onClick={() => setHole((value) => value + 1)}>Next Hole</button>
           </div>
         </section>
         {complete ? (
-          <section className="mt-5 rounded-2xl bg-white p-5">
+          <section className="mt-5 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
             <h2 className="text-xl font-black">Review My Round</h2>
             <p className="mt-2">Verify the score recorded for {model.playerName}. Disagreements go to the existing Director Review Queue.</p>
-            <div className="mt-4 grid grid-cols-6 gap-2">
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
               {proposedScores.map((score, index) => (
                 <label key={index} className="text-center text-xs font-bold">
                   H{index + 1}
@@ -169,18 +169,18 @@ export default function DesignatedQualifyingScorecard({
               ))}
             </div>
             <button disabled={busy || model.finalized || model.review?.self_review_complete}
-              onClick={() => void verify()} className="mt-4 rounded-full bg-[#0B3D2E] px-5 py-3 font-black text-white disabled:opacity-50">
+              onClick={() => void verify()} className="mt-4 min-h-12 w-full rounded-full bg-[#0B3D2E] px-5 py-3 font-black text-white disabled:opacity-50">
               {model.review?.self_review_complete ? "Round Verified" : "Accept Scorer-Entered Score"}
             </button>
             {model.accessRole !== "scorer" ? (
               <button disabled={busy || model.finalized || proposedScores.some((score) => !Number(score))}
-                onClick={() => void dispute()} className="ml-2 mt-4 rounded-full border border-[#8A2E2E] px-5 py-3 font-black text-[#8A2E2E] disabled:opacity-50">
+                onClick={() => void dispute()} className="mt-3 min-h-12 w-full rounded-full border border-[#8A2E2E] px-5 py-3 font-black text-[#8A2E2E] disabled:opacity-50">
                 Raise Discrepancy
               </button>
             ) : null}
           </section>
         ) : null}
-        {error ? <p role="alert" className="mt-4 bg-red-50 p-3 text-red-800">{error}</p> : null}
+        {error ? <p role="alert" className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-3 font-semibold text-red-800">{error}</p> : null}
       </div>
     </main>
   );
