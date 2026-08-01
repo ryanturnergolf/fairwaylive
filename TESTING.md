@@ -12,6 +12,21 @@ npm run test:e2e
 
 The current configuration starts the app with `npm run start -- -p 3100`, so run a production build before running e2e tests.
 
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs for every pull request and every push to `main`. The verification job uses Node 20.x, which satisfies Next.js 16.2.9's Node `>=20.9.0` requirement, and enables npm dependency caching through `actions/setup-node`.
+
+CI runs, in order:
+
+```bash
+npm ci
+npx playwright install --with-deps chromium
+npm run build
+npm run test:e2e
+```
+
+The job stops on the first failing step. Playwright `test-results/` and `playwright-report/` artifacts are uploaded only when the job fails and are retained for seven days. The workflow uses no production Supabase credentials; the existing suite relies on deterministic fixtures, route interception, and public build-time fallbacks rather than direct CI writes to the connected production project.
+
 ## Current Tests
 
 - `tests/e2e/home.spec.ts`: verifies that the homepage loads.

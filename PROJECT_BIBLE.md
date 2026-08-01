@@ -98,6 +98,14 @@ The monitoring and incident-response contract is documented in `MONITORING_INCID
 
 The runbook is vendor-neutral because centralized telemetry, alert routing, and production health checks are not yet documented as deployed capabilities. Controlled beta remains gated on selecting and configuring monitoring, naming responders, verifying redaction and alert delivery, establishing safe canary checks, and passing the pre-beta incident drill.
 
+## Controlled Beta Continuous Integration
+
+Status: **IMPLEMENTED**
+
+GitHub Actions now runs the locked dependency install, production build, and complete Chromium Playwright suite on every pull request and every push to `main`. CI uses the supported Node 20 line, npm caching, least-privilege repository contents access, a bounded job timeout, and failure-only Playwright artifact retention. It does not receive or write production Supabase credentials.
+
+CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
+
 ## Durable Roster Foundation
 
 Status: **DATA FOUNDATION DEPLOYED**

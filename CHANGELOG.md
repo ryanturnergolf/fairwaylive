@@ -10,6 +10,7 @@
 - Added the controlled-beta backup and recovery runbook covering authoritative data scope, plan-dependent backup options, active-event and between-event RPO/RTO targets, targeted recovery scenarios, full restore, snapshot/cache reconciliation, tournament-day response, and a required pre-beta drill.
 - Added the controlled-beta release and rollback runbook covering ownership, prerequisites, build/Playwright and migration gates, deployment order, production smoke tests, tournament-day freezes, emergency hotfixes, application rollback, database forward fixes, communications, and rehearsal.
 - Added the controlled-beta production monitoring and incident-response runbook covering application/API/Supabase/auth/score/live/release health, P1–P4 alerting, tournament-day response, rollback/recovery boundaries, dashboards, privacy-safe logs, communications, postmortems, and rehearsal.
+- Added GitHub Actions continuous integration for every pull request and push to `main`, with Node 20.x, npm caching, locked dependency installation, production build verification, the full Chromium Playwright suite, and failure-only test artifacts.
 
 ### Verification
 

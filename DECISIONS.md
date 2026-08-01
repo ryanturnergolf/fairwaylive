@@ -18,6 +18,10 @@ Every release pins an application commit to a verified remote migration ledger. 
 
 Controlled-beta monitoring covers application, API, Supabase, authentication, score persistence, live scoring, and release health. It records release identity, operation/status/latency, redacted errors, and only the minimum access-controlled event identities needed for response. Raw scoring codes, share/access tokens, authorization headers, passwords, keys, and complete score payloads are prohibited from telemetry. Monitoring never becomes scoring or leaderboard authority; incident verification returns to durable rows and uses `RELEASE_ROLLBACK.md` or `BACKUP_RECOVERY.md` at their explicit boundaries.
 
+### Continuous integration is credential-free verification
+
+Pull requests and pushes to `main` must pass a locked dependency install, production build, and complete Playwright suite under the supported Node 20 line. CI uses no production Supabase credentials and performs no production deployment or migration. Failure artifacts are retained only for diagnosis. Hosted CI complements rather than replaces the release, real-Supabase, smoke-test, backup, monitoring, and drill gates.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.
