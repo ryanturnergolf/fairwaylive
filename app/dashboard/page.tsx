@@ -891,7 +891,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
+      <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
@@ -904,7 +904,7 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
+        <nav className="hidden items-center gap-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0B3D2E]/75 xl:flex">
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/">
             Homepage
           </Link>
@@ -946,14 +946,14 @@ export default function DashboardPage() {
         </nav>
       </header>
 
-      <section className="mx-auto max-w-7xl px-6 py-8 lg:px-8 lg:py-12">
-        <div className="rounded-[36px] border border-[#E8DCC8] bg-white/90 p-8 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur lg:p-10">
+      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
+        <div className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur sm:rounded-[36px] sm:p-8 lg:p-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
                 Operations
               </p>
-              <h2 className="mt-2 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
+              <h2 className="mt-2 text-3xl font-black tracking-[-0.03em] sm:text-5xl">
                 Tournament Dashboard
               </h2>
             </div>
@@ -1163,7 +1163,7 @@ export default function DashboardPage() {
                             type="button"
                             onClick={() => void handleFinalizeTournament(summary.tournamentId, summary.sharedTournamentId)}
                             disabled={!finalizationStatus?.eligible || Boolean(finalizationStatus?.finalizationRecord)}
-                            className="rounded-full bg-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                            className="min-h-11 rounded-full bg-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                           >
                             {finalizationStatus?.finalizationRecord ? "Tournament Finalized" : "Finalize Tournament"}
                           </button>
@@ -1339,7 +1339,15 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {!isClientMounted || tournaments.length === 0 ? (
+          {!isClientMounted ? (
+            <div role="status" aria-live="polite" className="mt-10 rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner sm:rounded-[32px] sm:p-10">
+              <div className="mx-auto h-2 w-32 overflow-hidden rounded-full bg-[#E8DCC8]">
+                <div className="h-full w-2/3 rounded-full bg-[#B8892D]" />
+              </div>
+              <h3 className="mt-5 text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">Loading tournaments</h3>
+              <p className="mt-2 text-sm font-semibold text-[#51635C]">Restoring the tournament catalog and Director status.</p>
+            </div>
+          ) : tournaments.length === 0 ? (
             <div className="mt-10 rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-10 text-center shadow-inner">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#0B3D2E] text-2xl font-black text-[#F0C96A]">
                 HQ
@@ -1361,7 +1369,7 @@ export default function DashboardPage() {
           ) : (
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
               {tournaments.map((tournament) => (
-                <div key={tournament.id} className="rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+                <article key={tournament.id} className="rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-5 shadow-[0_18px_45px_rgba(11,61,46,0.06)] sm:rounded-[32px] sm:p-8">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
@@ -1399,14 +1407,14 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       onClick={() => router.push(`/tournament/${tournament.id}`)}
-                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                      className="min-h-12 rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
                     >
                       Open Tournament
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSaveTournamentAsTemplate(tournament)}
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      className="min-h-12 rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                     >
                       Save as Template
                     </button>
@@ -1420,12 +1428,12 @@ export default function DashboardPage() {
                         saveTournaments(nextTournaments);
                         void refreshDirectorReadModel(nextTournaments);
                       }}
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                      className="min-h-12 rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                     >
                       Delete
                     </button>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           )}
@@ -1434,11 +1442,14 @@ export default function DashboardPage() {
 
       {isModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm sm:items-center"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
           onClick={closeModal}
         >
           <div
-            className="flex max-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-tournament-title"
+            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -1447,13 +1458,14 @@ export default function DashboardPage() {
                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                     New Tournament
                   </p>
-                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                  <h3 id="create-tournament-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
                     Create Tournament
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={closeModal}
+                  aria-label="Close tournament creation dialog"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
                 >
                   ×
@@ -1461,7 +1473,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <form className="min-h-0 overflow-y-auto px-7 py-7" onSubmit={handleCreateTournament}>
+            <form className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-7" onSubmit={handleCreateTournament}>
               {creationError ? <p role="alert" className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">{creationError}</p> : null}
               <div className="mb-5 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Create From Template</p>
@@ -1845,7 +1857,7 @@ export default function DashboardPage() {
                 </div>
               ) : null}
 
-              <div className="sticky bottom-0 -mx-7 -mb-7 mt-8 flex flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-7 py-5 sm:flex-row sm:justify-end">
+              <div className="sticky bottom-0 -mx-5 -mb-5 mt-8 flex flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-5 sm:-mx-7 sm:-mb-7 sm:flex-row sm:justify-end sm:px-7">
                 {currentStep > 1 ? (
                   <button
                     type="button"
