@@ -4,6 +4,12 @@ Last updated: 2026-07-31
 
 ## Active Decisions
 
+### Supabase durable rows are recovery authority
+
+Database recovery operates on a consistent authoritative graph: Tournament and Qualifying identity, players, rounds, pairings, durable scorecards, score and hole entries, Review state, official audit values, finalization, roster links, and Dynamic Statistics history. `tournament_state_snapshots` and browser localStorage may assist reconstruction and verification but may never overwrite or replace populated durable authority. Targeted recovery preserves original UUIDs and entered-by identities; it never maps players by name or manufactures compatibility rows.
+
+Managed backups and PITR are plan-dependent capabilities, not architectural assumptions. Before controlled beta, the selected backup mechanism must be verified against the documented RPO/RTO and exercised in an isolated recovery drill.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.

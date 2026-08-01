@@ -7,6 +7,7 @@
 - Completed Phase 9B Tournament Director presentation polish across workspace hierarchy, readiness, teams and players, pairings, scorecard generation, QR/share, team scoring codes, live scoring, Review Queue, finalization, and finalized read-only views.
 - Completed Phase 9C Mobile Scoring presentation polish across scorecard layout, hole navigation, touch targets, safe-area handling, status messaging, Review, submission, and responsive behavior.
 - Completed Phase 10A end-to-end Tournament UX audit and final polish, including distinct loading and empty states, responsive dashboard navigation, mobile tournament cards and actions, and an accessible viewport-bounded creation dialog.
+- Added the controlled-beta backup and recovery runbook covering authoritative data scope, plan-dependent backup options, active-event and between-event RPO/RTO targets, targeted recovery scenarios, full restore, snapshot/cache reconciliation, tournament-day response, and a required pre-beta drill.
 
 ### Verification
 
@@ -14,6 +15,7 @@
 - Production migrations remain current.
 - Confirmed the UX work changed presentation and focused tests only; scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, and database architecture remain unchanged.
 - Current latest commit: `e3953c3180f5061a7557e1bc1542edcbecf2a341`.
+- Backup documentation is complete; Supabase plan capability confirmation, named recovery owners, and a successful isolated recovery drill remain required before beta.
 
 ## 2026-07-28
 

@@ -10,6 +10,14 @@ Status: completed with no new business-logic blocker.
 
 The end-to-end presentation audit found and corrected dashboard loading/empty-state, responsive navigation, touch-target, and dialog-presentation issues. The production build and Playwright 244/244 baseline passed. No scoring, Review, official-resolution, finalization, analytics, persistence, synchronization, repository, service, API, migration, Supabase, or database defect was introduced or identified by this phase.
 
+## Controlled Beta Operational Risks
+
+### Backup capability and recovery drill require confirmation
+
+Status: runbook complete; pre-beta operational gate remains open.
+
+`BACKUP_RECOVERY.md` defines recovery authority, cadence, RPO/RTO, incident communication, targeted/full restore, snapshot reconciliation, validation, and the required drill. The connected Supabase plan's managed backup/PITR and isolated-restore capabilities have not been confirmed in this documentation milestone, recovery roles are not yet assigned by name, and the drill has not yet been executed. Controlled beta must not rely on optional PITR until those capabilities are verified.
+
 ## Open Bugs
 
 - Q8 blocks missing, duplicate, cross-group, and post-scoring scorer assignment changes at the database boundary; activation stays unavailable until every group/round assignment is valid.

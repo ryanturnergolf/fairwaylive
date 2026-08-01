@@ -74,6 +74,14 @@ Current verification baseline:
 - Production build: passed
 - Playwright: 244/244 passed
 
+## Controlled Beta Backup And Recovery
+
+Status: **RUNBOOK COMPLETE; CAPABILITY CONFIRMATION AND DRILL REQUIRED**
+
+The operational recovery contract is documented in `BACKUP_RECOVERY.md`. Supabase durable tables remain recovery authority; `tournament_state_snapshots` and browser localStorage remain cached compatibility/recovery inputs and may never replace durable player, round, pairing, scorecard, score, Review, official, or finalization rows. Recovery preserves stable UUIDs, self/marker identities, immutable official audit history, and Tournament/Qualifying authority.
+
+Controlled beta requires confirmed backup capability for the connected Supabase plan, named recovery owners, evidence that the active-tournament RPO/RTO targets can be met, and a successful isolated recovery drill. The documentation does not claim PITR is enabled or that a drill has already passed.
+
 ## Durable Roster Foundation
 
 Status: **DATA FOUNDATION DEPLOYED**
