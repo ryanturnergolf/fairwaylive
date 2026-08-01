@@ -45,6 +45,8 @@ The committed hosted baseline is 240 tests. A local untracked `tests/e2e/qualify
 
 Mobile Review helpers race the two valid web-first completion states: an automatically rendered `Verify Score` view or an enabled `Review & Submit Round` action. They follow the state that actually completes instead of inferring readiness from instantaneous button snapshots. The helper adds no sleeps and does not weaken Review assertions; its focused bound covers the existing sequential score and statistics hydration contract.
 
+The rapid Save Hole persistence regression deliberately injects write latency across all 18 holes to exercise the serialized atomic save queue. It waits for both score inputs to become editable before each next entry and has a timeout scoped to that test only. This preserves the race-condition and adjacent-hole assertions while allowing the expected atomic-save workload to complete on slower hosted runners; the global Playwright timeout is unchanged.
+
 ## Current Tests
 
 - `tests/e2e/home.spec.ts`: verifies that the homepage loads.

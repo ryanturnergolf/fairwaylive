@@ -30,6 +30,8 @@ Pull requests and pushes to `main` must pass a locked dependency install, produc
 
 Playwright synchronization must use web-first assertions against completed user-visible states instead of polling instantaneous locator snapshots or adding sleeps. Mobile Review certification accepts its two real entry states after authoritative hydration: Review may render automatically, or the Review action may become enabled and be activated. Focused bounds may cover that specific asynchronous contract; global timeouts, retries, skipped tests, and weakened assertions are not substitutes for synchronization.
 
+Long-running persistence regressions may use a test-scoped execution budget when their intentional workload exceeds the global UI-test budget under hosted resource timing. The test must still wait on observable application state, retain injected latency and persistence assertions, and must not alter application code or use arbitrary sleeps.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.

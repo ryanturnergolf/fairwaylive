@@ -21,6 +21,12 @@
 - Replaced a timing-sensitive 10-second mobile Review helper poll with a focused race between the two valid web-first states: rendered `Verify Score` or enabled `Review & Submit Round`.
 - Preserved scoring, persistence, Review behavior, assertions, and application code without sleeps, retries, skipped tests, or global timeout changes.
 
+### Controlled Beta Phase 4E — Hosted Rapid Save Test Stability
+
+- Confirmed from hosted failure artifacts that the Hole 17 score controls were rendered but correctly disabled while the preceding atomic save completed.
+- Added per-hole web-first editability checks and a timeout scoped only to the intentionally long 18-hole rapid-save persistence test.
+- Preserved the injected write latency, adjacent-hole persistence assertions, application behavior, and the 240-test committed CI baseline; the focused test passed 15 consecutive CI-like runs.
+
 ## 2026-07-31
 
 ### Changed

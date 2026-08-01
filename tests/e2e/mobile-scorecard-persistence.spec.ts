@@ -1036,6 +1036,7 @@ test("both incomplete-seed reciprocal scorecards resume on Hole 18 without hydra
 });
 
 test("rapid Save Hole actions preserve adjacent persisted hole positions", async ({ page }) => {
+  test.setTimeout(60_000);
   const sharedStore = await routeSharedScoreEntriesStore(page, 150);
 
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
@@ -1050,6 +1051,8 @@ test("rapid Save Hole actions preserve adjacent persisted hole positions", async
 
   for (let holeIndex = 0; holeIndex < selfScores.length; holeIndex += 1) {
     await expect(page.getByText(`Hole ${holeIndex + 1}`, { exact: true })).toBeVisible();
+    await expect(selfScoreInput).toBeEditable();
+    await expect(markerScoreInput).toBeEditable();
     await selfScoreInput.fill(String(selfScores[holeIndex]));
     await markerScoreInput.fill(String(markerScores[holeIndex]));
     await saveHoleButton.click();

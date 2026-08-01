@@ -38,6 +38,7 @@ Status: **IN PROGRESS**
 - Phase 4B supplies required client-safe Supabase configuration through GitHub Actions secrets and fails early when configuration is absent; service-role credentials remain prohibited.
 - Phase 4C separates the local Playwright server origin from the public QR/share origin by using a reserved `.example` URL for hosted verification; a passing hosted run remains required.
 - Phase 4D reconciles the 240-test committed baseline and replaces a timing-sensitive mobile Review helper poll with a focused rendered-state assertion; hosted verification remains pending.
+- Phase 4E stabilizes the 18-hole rapid-save regression with per-hole editability assertions and a test-scoped execution budget; 15/15 CI-like repetitions and the 240/240 committed local suite pass, with hosted verification pending.
 - Opening beta remains gated on confirming the connected Supabase backup/PITR capabilities, assigning named recovery owners, and passing the documented isolated recovery drill.
 - Release readiness additionally requires a confirmed production host/rollback mechanism, named release owners, approved canary data, and a successful release/rollback drill.
 - Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.
