@@ -8,6 +8,7 @@ const webServer = process.env.PLAYWRIGHT_MANAGED_SERVER
       reuseExistingServer: false,
       timeout: 120_000,
       gracefulShutdown: { signal: "SIGTERM" as const, timeout: 1000 },
+      env: { PLAYWRIGHT_MANAGED_SERVER: "1" },
     };
 
 export default defineConfig({

@@ -57,6 +57,10 @@ The rapid Save Hole persistence regression deliberately injects write latency ac
 
 Never place a service-role key, scoring code, share/access token, auth token, or monitoring payload containing private player/score data in test configuration.
 
+The managed test server sets `PLAYWRIGHT_MANAGED_SERVER=1` so production-mode Next.js execution retains test-origin support without weakening actual production validation. Hosted CI separately retains its `CI=true` context and reserved public QR origin. Neither marker should be set on an actual production deployment.
+
+Production environment coverage verifies valid/missing configuration, malformed and credential-bearing URLs, HTTP/loopback/reserved production rejection, hosted Supabase enforcement, monitoring flag alignment, release identity, safe error text, and public health output.
+
 ## Current Tests
 
 - `tests/e2e/home.spec.ts`: verifies that the homepage loads.

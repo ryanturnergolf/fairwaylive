@@ -22,6 +22,10 @@ Controlled-beta monitoring covers application, API, Supabase, authentication, sc
 
 The controlled-beta foundation uses stable Next.js instrumentation hooks and a same-origin client reporting endpoint rather than adding an unconfigured vendor SDK. All events cross one allowlisted, redacted model before structured server output; request bodies, headers, stacks, score payloads, and private player context are not accepted. Production operators must explicitly enable server and browser capture and configure their hosting/log collector for retention and alerts. `/api/health` reports process/configuration readiness only and never probes or exposes privileged database state.
 
+### Actual production configuration is stricter than test deployment configuration
+
+The validator derives an explicit deployment context. Actual production requires public HTTPS application and hosted Supabase origins and rejects loopback, reserved test/example hosts, embedded credentials, query strings, and fragments. CI and preview may use their approved test origins; managed Playwright is explicitly identified as test context even though Next.js runs its production server. Monitoring flags must align in actual production, and enabled monitoring requires release identity. Failures identify variables and violated rules but never echo values.
+
 ### Continuous integration uses client-safe Supabase configuration only
 
 Pull requests and pushes to `main` must pass a locked dependency install, production build, and complete Playwright suite under the supported Node 20 line. The browser client requires a Supabase project URL and anonymous key even when Playwright intercepts network behavior, so CI obtains only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from GitHub Actions secrets and fails early when either is absent. A current-schema test/staging project is preferred. Service-role credentials, privileged database writes, deployment, and migration execution are prohibited. Failure artifacts are retained only for diagnosis. Hosted CI complements rather than replaces the release, real-Supabase, smoke-test, backup, monitoring, and drill gates.

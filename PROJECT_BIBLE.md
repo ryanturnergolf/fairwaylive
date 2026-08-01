@@ -100,6 +100,8 @@ The application now uses native Next.js server/client instrumentation, a narrow 
 
 The foundation does not itself retain logs, deliver alerts, measure handled API outcomes/latency, or prove Supabase/scoring health. Controlled beta remains gated on configuring the production host or log collector, naming responders, verifying alert delivery and retention, establishing safe workflow canaries, and passing the pre-beta incident drill.
 
+Production environment validation distinguishes actual production from preview, CI, development, test, and the managed Playwright server. Actual production requires public HTTPS application and hosted Supabase origins, rejects loopback/reserved/credential-bearing URLs, requires aligned monitoring flags and release identity when monitoring is active, and emits operator-safe errors containing variable names and rules but never configured values. `/api/health` reflects this same readiness contract without claiming Supabase connectivity.
+
 ## Controlled Beta Continuous Integration
 
 Status: **IMPLEMENTED; HOSTED SECRET CONFIGURATION REQUIRED**

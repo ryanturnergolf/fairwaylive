@@ -81,7 +81,9 @@ Monitor:
 
 `GET /api/health` reports application availability, release identity when configured, and whether required public production configuration is present. It is uncached and exposes no configuration values, secrets, table data, or privileged database state. It is a process/configuration check, not a Supabase connectivity or scoring-authority check; synthetic monitoring must still exercise approved read-only workflow canaries.
 
-Production startup requires `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Development and test environments report incomplete readiness without failing startup. Monitoring requires explicit opt-in with `MONITORING_ENABLED=true`; browser capture additionally requires `NEXT_PUBLIC_MONITORING_ENABLED=true`. `APP_RELEASE` and `NEXT_PUBLIC_APP_RELEASE` are optional release labels, with supported deployment commit variables used as server fallbacks.
+Production startup requires `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Actual production requires HTTPS public origins, rejects loopback and reserved test/example hosts, rejects credentials/query strings/fragments in configured URLs, and requires a hosted `*.supabase.co` URL. Development and test environments report incomplete readiness without failing startup. Managed Playwright, CI, and preview contexts retain their approved test origins; non-Vercel preview hosts may set `DEPLOYMENT_ENV=preview`.
+
+Monitoring requires explicit, aligned production flags: `MONITORING_ENABLED=true` and `NEXT_PUBLIC_MONITORING_ENABLED=true`. When enabled, a release must be available from `APP_RELEASE`, deployment commit metadata, or the documented public release fallback. Invalid or mismatched flags fail production startup without including configured values in the error. `/api/health` reports only ready/incomplete status, never issue details or values.
 
 ### API health
 

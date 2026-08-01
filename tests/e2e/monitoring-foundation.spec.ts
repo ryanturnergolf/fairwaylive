@@ -22,15 +22,124 @@ test("health endpoint reports availability, release, and configuration without s
 
 test("missing required production configuration fails clearly but remains non-blocking outside production", () => {
   const incomplete = { NEXT_PUBLIC_APP_URL: "", NEXT_PUBLIC_SUPABASE_URL: "", NEXT_PUBLIC_SUPABASE_ANON_KEY: "" };
-  expect(getProductionEnvironmentReadiness(incomplete)).toEqual({
+  expect(getProductionEnvironmentReadiness(incomplete, "production")).toMatchObject({
     ready: false,
+    context: "production",
     missing: ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"],
+    issues: [],
   });
   expect(() => assertProductionEnvironment(incomplete, "production")).toThrow(
-    "Clubhouse HQ production configuration is incomplete"
+    "Clubhouse HQ production configuration is invalid"
   );
   expect(assertProductionEnvironment(incomplete, "development").ready).toBe(false);
   expect(assertProductionEnvironment(incomplete, "test").ready).toBe(false);
+});
+
+test("valid production configuration requires public HTTPS URLs and aligned monitoring release identity", () => {
+  const valid = {
+    NEXT_PUBLIC_APP_URL: "https://clubhouse-hq.example.org",
+    NEXT_PUBLIC_SUPABASE_URL: "https://project-ref.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "public-anon-key",
+    MONITORING_ENABLED: "true",
+    NEXT_PUBLIC_MONITORING_ENABLED: "true",
+    APP_RELEASE: "commit-123",
+  };
+  expect(getProductionEnvironmentReadiness(valid, "production")).toEqual({
+    ready: true,
+    context: "production",
+    missing: [],
+    issues: [],
+  });
+  expect(assertProductionEnvironment(valid, "production").ready).toBe(true);
+});
+
+test("malformed URLs and credentials fail without disclosing configured values", () => {
+  const invalid = {
+    NEXT_PUBLIC_APP_URL: "not-a-url-sensitive-value",
+    NEXT_PUBLIC_SUPABASE_URL: "https://user:private-value@project-ref.supabase.co?key=private-value",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "private-anon-value",
+  };
+  const readiness = getProductionEnvironmentReadiness(invalid, "production");
+  expect(readiness.ready).toBe(false);
+  expect(readiness.issues.map((issue) => issue.variable)).toEqual([
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+  ]);
+  let message = "";
+  try {
+    assertProductionEnvironment(invalid, "production");
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  expect(message).toContain("NEXT_PUBLIC_APP_URL");
+  expect(message).toContain("NEXT_PUBLIC_SUPABASE_URL");
+  expect(message).not.toContain("not-a-url-sensitive-value");
+  expect(message).not.toContain("private-value");
+  expect(message).not.toContain("private-anon-value");
+});
+
+test("configured application and Supabase URLs must be origins without paths", () => {
+  const invalid = {
+    NEXT_PUBLIC_APP_URL: "https://clubhouse-hq.example.org/application",
+    NEXT_PUBLIC_SUPABASE_URL: "https://project-ref.supabase.co/rest/v1",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "public-anon-key",
+  };
+  expect(getProductionEnvironmentReadiness(invalid, "production").issues).toEqual([
+    { variable: "NEXT_PUBLIC_APP_URL", reason: "must be an origin without a path" },
+    { variable: "NEXT_PUBLIC_SUPABASE_URL", reason: "must be an origin without a path" },
+  ]);
+});
+
+test("actual production rejects loopback and reserved origins while CI and preview preserve test origins", () => {
+  const local = {
+    NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100",
+    NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "local-anon-key",
+  };
+  expect(getProductionEnvironmentReadiness(local, "production").ready).toBe(false);
+  expect(getProductionEnvironmentReadiness({ ...local, NEXT_PUBLIC_APP_URL: "http://localhost:3100" }, "production").ready).toBe(false);
+
+  const ci = {
+    NEXT_PUBLIC_APP_URL: "https://ci.clubhouse-hq.example",
+    NEXT_PUBLIC_SUPABASE_URL: "https://project-ref.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "public-anon-key",
+    CI: "true",
+  };
+  expect(getProductionEnvironmentReadiness(ci, "production")).toMatchObject({ ready: true, context: "ci" });
+  expect(
+    getProductionEnvironmentReadiness({ ...ci, CI: "false", VERCEL_ENV: "preview" }, "production")
+  ).toMatchObject({ ready: true, context: "preview" });
+  expect(getProductionEnvironmentReadiness({ ...ci, CI: "false" }, "production").ready).toBe(false);
+  expect(
+    getProductionEnvironmentReadiness(
+      {
+        ...local,
+        PLAYWRIGHT_MANAGED_SERVER: "1",
+      },
+      "production"
+    )
+  ).toMatchObject({ ready: true, context: "test" });
+});
+
+test("production monitoring flags must be valid and aligned with release identity", () => {
+  const base = {
+    NEXT_PUBLIC_APP_URL: "https://clubhouse-hq.example.org",
+    NEXT_PUBLIC_SUPABASE_URL: "https://project-ref.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "public-anon-key",
+  };
+  expect(
+    getProductionEnvironmentReadiness({ ...base, MONITORING_ENABLED: "true", NEXT_PUBLIC_MONITORING_ENABLED: "false" }, "production")
+      .issues
+  ).toContainEqual(expect.objectContaining({ variable: "MONITORING_ENABLED/NEXT_PUBLIC_MONITORING_ENABLED" }));
+  expect(
+    getProductionEnvironmentReadiness({ ...base, MONITORING_ENABLED: "enabled", NEXT_PUBLIC_MONITORING_ENABLED: "false" }, "production")
+      .issues
+  ).toContainEqual(expect.objectContaining({ variable: "MONITORING_ENABLED" }));
+  expect(
+    getProductionEnvironmentReadiness({ ...base, MONITORING_ENABLED: "true", NEXT_PUBLIC_MONITORING_ENABLED: "true" }, "production")
+      .issues
+  ).toContainEqual(expect.objectContaining({ variable: "APP_RELEASE" }));
 });
 
 test("monitoring redacts tokens, codes, identifiers, email addresses, and query strings", () => {

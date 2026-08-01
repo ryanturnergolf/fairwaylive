@@ -113,6 +113,8 @@ Existing local artifacts such as `debug.log`, `supabase/.temp/`, `test-results/`
 - Confirm `NEXT_PUBLIC_APP_URL` is the exact public HTTPS origin.
 - Confirm `NEXT_PUBLIC_SUPABASE_URL` targets the expected production project.
 - Confirm `NEXT_PUBLIC_SUPABASE_ANON_KEY` is the intended public anon key.
+- Confirm the application and Supabase URLs pass the production validator: public HTTPS, no credentials/query/fragment, no loopback or reserved test/example host, and hosted `*.supabase.co` for Supabase.
+- Confirm `MONITORING_ENABLED` and `NEXT_PUBLIC_MONITORING_ENABLED` are explicit, valid, and aligned; when enabled, confirm release identity is available without recording its configured value.
 - Confirm no service-role or database credential is exposed to the browser.
 - Confirm Supabase authentication redirect URLs include the production origin and do not include unintended external origins.
 - Record that required variables exist; never record their secret values.
@@ -175,7 +177,7 @@ If the old application cannot safely run against the migrated schema, the releas
 2. **Announce release start.** Communications Lead notifies beta operators of the change and observation window.
 3. **Confirm recovery.** Record the pre-release backup/recovery point required by `BACKUP_RECOVERY.md`.
 4. **Verify repository.** Confirm `main`, `origin/main`, clean intended scope, reviewed diff, and release notes.
-5. **Verify environment.** Confirm production hostname, public app URL, Supabase URL, anon key identity, and auth redirects without exposing values.
+5. **Verify environment.** Confirm the production validator and `/api/health` report ready, then verify hostname, public app URL, Supabase project identity, monitoring alignment/release identity, and auth redirects without exposing values.
 6. **Build and test.** Run the production build and complete Playwright suite; record results.
 7. **Verify Supabase link and ledger.** Stop on any unexpected target or migration.
 8. **Deploy approved additive migrations first.** Use the repository's established linked Supabase deployment workflow only after confirming backward compatibility and backup evidence.

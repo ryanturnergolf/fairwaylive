@@ -9,6 +9,12 @@
 - Added clear production configuration validation while preserving development/test startup and requiring no service-role credential, database write, migration, or vendor SDK.
 - Added focused coverage for health output, missing production configuration, sensitive-data redaction, and disabled-by-default monitoring.
 
+### Controlled Beta Phase 6 — Production Environment Validation
+
+- Added context-aware validation for required application/Supabase configuration, absolute URL structure, production HTTPS, hosted Supabase origin, and forbidden loopback/reserved hosts.
+- Added production monitoring flag alignment and release-identity requirements while preserving preview, CI, development, test, and managed Playwright behavior.
+- Kept operator errors and `/api/health` value-free: they expose readiness and rule names without logging URLs, keys, tokens, or other configured values.
+
 ### Controlled Beta Phase 4B — Hosted CI Supabase Configuration
 
 - Added GitHub Actions secret injection for the client-safe Supabase URL and anonymous key required by the production build and intercepted Playwright requests.

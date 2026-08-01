@@ -78,7 +78,12 @@ const stopServer = async (server) => {
 let server = null;
 
 try {
-  server = spawnNode(["node_modules/next/dist/bin/next", "start", "-p", String(port)]);
+  server = spawnNode(["node_modules/next/dist/bin/next", "start", "-p", String(port)], {
+    env: {
+      ...process.env,
+      PLAYWRIGHT_MANAGED_SERVER: "1",
+    },
+  });
   await waitForServer();
   await warmupRoutes();
 
