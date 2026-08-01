@@ -18,6 +18,12 @@ Status: runbook complete; pre-beta operational gate remains open.
 
 `BACKUP_RECOVERY.md` defines recovery authority, cadence, RPO/RTO, incident communication, targeted/full restore, snapshot reconciliation, validation, and the required drill. The connected Supabase plan's managed backup/PITR and isolated-restore capabilities have not been confirmed in this documentation milestone, recovery roles are not yet assigned by name, and the drill has not yet been executed. Controlled beta must not rely on optional PITR until those capabilities are verified.
 
+### Production hosting rollback and release drill require confirmation
+
+Status: runbook complete; pre-beta operational gate remains open.
+
+`RELEASE_ROLLBACK.md` defines release ownership, verification gates, migration/application order, smoke testing, freeze policy, application rollback, database forward fixes, communications, and rehearsal. The production hosting project and supported rollback mechanism have not been recorded, release roles and canary data are not yet assigned, and the drill has not yet been executed. Controlled beta must not assume an application rollback is available until the actual hosting workflow is verified.
+
 ## Open Bugs
 
 - Q8 blocks missing, duplicate, cross-group, and post-scoring scorer assignment changes at the database boundary; activation stays unavailable until every group/round assignment is valid.

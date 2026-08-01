@@ -82,6 +82,14 @@ The operational recovery contract is documented in `BACKUP_RECOVERY.md`. Supabas
 
 Controlled beta requires confirmed backup capability for the connected Supabase plan, named recovery owners, evidence that the active-tournament RPO/RTO targets can be met, and a successful isolated recovery drill. The documentation does not claim PITR is enabled or that a drill has already passed.
 
+## Controlled Beta Release And Rollback
+
+Status: **RUNBOOK COMPLETE; HOSTING CONFIRMATION AND DRILL REQUIRED**
+
+The production release and rollback contract is documented in `RELEASE_ROLLBACK.md`. Every release records the candidate and previous known-good commits, linked Supabase project and migration ledger, recovery point, build and Playwright results, deployment outcome, smoke verification, and go/no-go decision. Normal releases use backward-compatible forward migrations followed by application deployment; applied migrations are never edited or casually rolled back.
+
+Tournament-day freeze rules protect active scoring. Application rollback redeploys the exact compatible known-good commit, while database defects use a reviewed corrective forward migration or the recovery process in `BACKUP_RECOVERY.md`. Controlled beta remains gated on confirming the production host and rollback mechanism, naming release owners, selecting canary data, and passing the release/rollback drill.
+
 ## Durable Roster Foundation
 
 Status: **DATA FOUNDATION DEPLOYED**

@@ -10,6 +10,10 @@ Database recovery operates on a consistent authoritative graph: Tournament and Q
 
 Managed backups and PITR are plan-dependent capabilities, not architectural assumptions. Before controlled beta, the selected backup mechanism must be verified against the documented RPO/RTO and exercised in an isolated recovery drill.
 
+### Production releases separate application rollback from database correction
+
+Every release pins an application commit to a verified remote migration ledger. Production migrations must be backward compatible with the previously deployed application during rollout. Application rollback redeploys the exact known-good compatible commit; it does not remove applied migrations. A defective deployed migration is corrected with a new reviewed forward migration, or with the `BACKUP_RECOVERY.md` process when authority cannot otherwise be restored. No routine release occurs during the tournament-day freeze defined in `RELEASE_ROLLBACK.md`.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.
