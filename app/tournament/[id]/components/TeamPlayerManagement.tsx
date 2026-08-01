@@ -285,11 +285,14 @@ export default function TeamPlayerManagement({
 
       {isPlayerImportModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
           onClick={onClosePlayerImportModal}
         >
           <div
-            className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="player-import-title"
+            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)] sm:rounded-[32px]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -298,13 +301,14 @@ export default function TeamPlayerManagement({
                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                     Player Import
                   </p>
-                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                  <h3 id="player-import-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
                     Import Players
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={onClosePlayerImportModal}
+                  aria-label="Close player import dialog"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
                 >
                   ×
@@ -312,7 +316,7 @@ export default function TeamPlayerManagement({
               </div>
             </div>
 
-            <div className="px-7 py-7">
+            <div className="overflow-y-auto px-5 py-5 sm:px-7 sm:py-7">
               <p className="text-base leading-8 text-[#51635C]">
                 Download the CSV template, upload a completed file, preview imported players, and confirm the import into your tournament roster.
               </p>
@@ -402,6 +406,9 @@ export default function TeamPlayerManagement({
           onClick={onCloseTeamModal}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="team-editor-title"
             className="flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
             onClick={(event) => event.stopPropagation()}
           >
@@ -411,13 +418,14 @@ export default function TeamPlayerManagement({
                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                     Team Management
                   </p>
-                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                  <h3 id="team-editor-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
                     {editingTeamId ? "Edit Team" : "Add Team"}
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={onCloseTeamModal}
+                  aria-label="Close team editor dialog"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
                 >
                   ×
@@ -468,6 +476,9 @@ export default function TeamPlayerManagement({
           onClick={onClosePlayerModal}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="player-editor-title"
             className="flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
             onClick={(event) => event.stopPropagation()}
           >
@@ -477,13 +488,14 @@ export default function TeamPlayerManagement({
                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                     Player Management
                   </p>
-                  <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                  <h3 id="player-editor-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
                     {editingPlayerId ? "Edit Player" : "Add Player"}
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={onClosePlayerModal}
+                  aria-label="Close player editor dialog"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
                 >
                   ×

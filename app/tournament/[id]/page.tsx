@@ -1296,7 +1296,7 @@ export default function TournamentPage() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
+      <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <Link href="/dashboard" onClick={(event) => void handleTournamentNavigation(event, "/dashboard")} className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
@@ -1319,15 +1319,15 @@ export default function TournamentPage() {
         </nav>
       </header>
 
-      <section className="mx-auto max-w-7xl px-6 py-6 lg:px-8 lg:py-10">
-        <div className="overflow-hidden rounded-[36px] border border-[#E8DCC8] bg-white/90 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur">
-          <div className="bg-[#0B3D2E] px-8 py-8 text-[#F6F1E6] lg:px-10">
+      <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-10">
+        <div className="overflow-hidden rounded-[24px] border border-[#E8DCC8] bg-white/90 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur sm:rounded-[36px]">
+          <div className="bg-[#0B3D2E] px-5 py-6 text-[#F6F1E6] sm:px-8 sm:py-8 lg:px-10">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                   Tournament Details
                 </p>
-                <h2 className="mt-2 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
+                <h2 className="mt-2 break-words text-3xl font-black tracking-[-0.03em] sm:text-5xl">
                   {tournament.name}
                 </h2>
               </div>
@@ -1380,13 +1380,14 @@ export default function TournamentPage() {
                 </Link>
               </div>
             ) : null}
-            <div className="flex flex-wrap gap-3">
+            <nav aria-label="Tournament workspace sections" className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0">
               {visibleTabs.map((tab) => (
                 <button
                   key={tab}
                   type="button"
+                  aria-pressed={activeTab === tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em] transition duration-300 ${
+                  className={`min-h-11 shrink-0 rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] transition duration-300 ${
                     activeTab === tab
                       ? "bg-[#0B3D2E] text-[#F6F1E6]"
                       : "bg-transparent text-[#51635C] hover:bg-[#E8DCC8]"
@@ -1395,9 +1396,10 @@ export default function TournamentPage() {
                   {tab}
                 </button>
               ))}
-            </div>
+            </nav>
 
-            <section className="mt-4 rounded-[24px] border border-[#D6E0D8] bg-white p-5 shadow-sm">
+            <section aria-labelledby="round-control-title" className="mt-4 rounded-[24px] border border-[#D6E0D8] bg-white p-5 shadow-sm">
+              <h3 id="round-control-title" className="sr-only">Active round controls</h3>
               <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div className="grid gap-3 md:grid-cols-[220px_minmax(220px,1fr)]">
                   <label className="block">
@@ -1458,13 +1460,13 @@ export default function TournamentPage() {
               </div>
             </section>
 
-            <section className="mt-4 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
+            <section aria-labelledby="tournament-readiness-title" className="mt-4 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                    <h3 id="tournament-readiness-title" className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
                       Tournament Readiness
-                    </p>
+                    </h3>
                     <span className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] ${tournamentReadiness ? readinessStatusStyles[tournamentReadiness.status] : readinessStatusStyles.Syncing}`}>
                       {tournamentReadiness?.status ?? "Syncing"}
                     </span>
@@ -1496,7 +1498,7 @@ export default function TournamentPage() {
                         const hasPassed = Boolean(tournamentReadiness?.checks[checkKey]);
 
                         return (
-                          <div key={checkKey} className="flex items-center justify-between gap-3 rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
+                          <div key={checkKey} className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 ${hasPassed ? "border-[#B9D8C3] bg-[#ECF8EF]" : "border-[#E2D2B5] bg-[#FFF9ED]"}`}>
                             <span className="text-xs font-bold text-[#0B3D2E]">{label}</span>
                             <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${hasPassed ? "bg-[#ECF8EF] text-[#146233]" : "bg-[#F6F1E6] text-[#725D37]"}`}>
                               {hasPassed ? "Pass" : "Open"}
@@ -1536,7 +1538,7 @@ export default function TournamentPage() {
             </section>
           </div>
 
-          <div className="px-6 py-8 lg:px-10 lg:py-10">
+          <div aria-label={`${activeTab} workspace`} className="px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
             {activeTab === "Teams" || activeTab === "Players" ? (
               <TeamPlayerManagement
                 activeTab={activeTab}

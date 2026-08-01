@@ -119,7 +119,7 @@ export default function LiveScoringLeaderboard({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-label="Tournament live scoring workspace">
       <PairingsScorecardGeneration
         activeTab="Live Scoring"
         normalizedRoundSetup={normalizedRoundSetup}

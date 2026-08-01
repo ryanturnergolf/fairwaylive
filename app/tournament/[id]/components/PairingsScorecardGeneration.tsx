@@ -78,13 +78,13 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
     return (
       <>
         <div className="space-y-6">
-        <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+        <section aria-labelledby="pairings-title" className="rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-5 shadow-[0_18px_45px_rgba(11,61,46,0.06)] sm:rounded-[28px] sm:p-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
                 Pairings
               </p>
-              <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+              <h3 id="pairings-title" className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
                 Create and refine your tee-time flow.
               </h3>
             </div>
@@ -112,7 +112,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
             Pairings will be generated from your tournament field and updated as your event evolves. This experience is UI-only for now.
           </p>
 
-          <div className="mt-6 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-6 shadow-inner">
+            <div className="mt-6 rounded-[20px] border border-[#E8DCC8] bg-white/80 p-4 shadow-inner sm:rounded-[24px] sm:p-6">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
               Draft Schedule Preview
             </p>
@@ -192,16 +192,19 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
               </div>
             )}
           </div>
-        </div>
+        </section>
         </div>
 
         {isAutoRepairModalOpen ? (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B3D2E]/70 px-4 py-6 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
             onClick={onCloseAutoRepairModal}
           >
             <div
-              className="w-full max-w-2xl overflow-hidden rounded-[32px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)]"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="auto-repair-title"
+              className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)] sm:rounded-[32px]"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -210,7 +213,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                     <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#F0C96A]">
                       Pairings Automation
                     </p>
-                    <h3 className="mt-2 text-2xl font-black tracking-[-0.02em]">
+                    <h3 id="auto-repair-title" className="mt-2 text-2xl font-black tracking-[-0.02em]">
                       Auto Re-Pair by Results
                     </h3>
                   </div>
@@ -218,13 +221,14 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                     type="button"
                     onClick={onCloseAutoRepairModal}
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl font-semibold transition duration-300 hover:bg-white/15"
+                    aria-label="Close auto re-pair dialog"
                   >
                     ×
                   </button>
                 </div>
               </div>
 
-              <form className="px-7 py-7" onSubmit={onAutoRepairSubmit}>
+              <form className="overflow-y-auto px-5 py-5 sm:px-7 sm:py-7" onSubmit={onAutoRepairSubmit}>
                 <p className="text-base leading-8 text-[#51635C]">
                   After a completed round, Clubhouse HQ will automatically reorder teams and players based on results. Worst teams go out first. Leading teams go out last. Players are also reordered within team groups from highest score to lowest score.
                 </p>
@@ -317,13 +321,13 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
   } = props;
 
   return (
-    <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-7 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+    <section aria-labelledby="scorecard-generation-title" className="rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-5 shadow-[0_18px_45px_rgba(11,61,46,0.06)] sm:rounded-[28px] sm:p-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
             Live Scoring
           </p>
-          <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
+          <h3 id="scorecard-generation-title" className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
             Round Setup
           </h3>
         </div>
@@ -346,7 +350,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
         <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
           <span>Round Number</span>
           <input
@@ -401,6 +405,6 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
           />
         </label>
       </div>
-    </div>
+    </section>
   );
 }

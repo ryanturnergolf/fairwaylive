@@ -105,7 +105,7 @@ export default function TeamScoringCodes({
   };
 
   return (
-    <section aria-labelledby="team-scoring-codes-title" className="mb-6 rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)] print:shadow-none">
+    <section aria-labelledby="team-scoring-codes-title" className="mb-6 rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-5 shadow-[0_18px_45px_rgba(11,61,46,0.06)] sm:rounded-[28px] sm:p-6 print:shadow-none">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between print:hidden">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.3em] text-[#B8892D]">Player Access</p>
@@ -129,9 +129,9 @@ export default function TeamScoringCodes({
       {!isLoading && !error ? <div className="mt-6 grid gap-4 md:grid-cols-2 print:block">
         {orderedTeams.map((team) => {
           const assignment = assignmentsByTeam.get(team.id);
-          return <article key={team.id} className="rounded-2xl border border-[#E8DCC8] bg-white p-5 print:mb-6 print:break-inside-avoid print:border-black">
+          return <article key={team.id} className="rounded-2xl border border-[#E8DCC8] bg-white p-5 shadow-sm print:mb-6 print:break-inside-avoid print:border-black print:shadow-none">
             <p className="font-black text-[#0B3D2E] print:text-black">{team.name}</p>
-            <p aria-label={`${team.name} team scoring code`} className="mt-3 select-all font-mono text-3xl font-black tracking-[0.22em] text-[#0B3D2E] print:text-5xl print:text-black">{assignment?.code || "Not generated"}</p>
+            <p aria-label={`${team.name} team scoring code`} className="mt-3 select-all break-all font-mono text-2xl font-black tracking-[0.18em] text-[#0B3D2E] sm:text-3xl sm:tracking-[0.22em] print:text-5xl print:text-black">{assignment?.code || "Not generated"}</p>
             <p className="mt-3 hidden text-sm print:block">Go to Clubhouse HQ, choose Player Tournament Login, enter your team code, then select your name.</p>
             <div className="mt-4 flex flex-wrap gap-2 print:hidden">
               {assignment ? <>
@@ -144,8 +144,8 @@ export default function TeamScoringCodes({
         })}
       </div> : null}
 
-      {confirming ? <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#0B3D2E]/70 px-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="regenerate-code-title">
-        <div className="w-full max-w-lg rounded-[28px] bg-[#F6F1E6] p-7 shadow-2xl">
+      {confirming ? <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-4 sm:items-center print:hidden" role="dialog" aria-modal="true" aria-labelledby="regenerate-code-title">
+        <div className="my-auto w-full max-w-lg rounded-[28px] bg-[#F6F1E6] p-5 shadow-2xl sm:p-7">
           <h4 id="regenerate-code-title" className="text-2xl font-black text-[#0B3D2E]">Regenerate {confirming.teamName}&apos;s code?</h4>
           <p className="mt-4 leading-7 text-[#51635C]">The old code will stop working immediately. Players using it will need the new code. Already-open scorecards remain governed by their existing scoped share token.</p>
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
