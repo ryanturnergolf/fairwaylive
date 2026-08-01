@@ -100,9 +100,11 @@ The runbook is vendor-neutral because centralized telemetry, alert routing, and 
 
 ## Controlled Beta Continuous Integration
 
-Status: **IMPLEMENTED**
+Status: **IMPLEMENTED; HOSTED SECRET CONFIGURATION REQUIRED**
 
-GitHub Actions now runs the locked dependency install, production build, and complete Chromium Playwright suite on every pull request and every push to `main`. CI uses the supported Node 20 line, npm caching, least-privilege repository contents access, a bounded job timeout, and failure-only Playwright artifact retention. It does not receive or write production Supabase credentials.
+GitHub Actions runs the locked dependency install, production build, and complete Chromium Playwright suite on every pull request and every push to `main`. CI uses the supported Node 20 line, npm caching, least-privilege repository contents access, a bounded job timeout, and failure-only Playwright artifact retention.
+
+The browser bundle requires the client-safe `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` values at build time, including when Playwright intercepts Supabase requests. Hosted CI reads those values only from GitHub Actions secrets and fails before installation when they are absent. It must never receive a service-role key. A current-schema test/staging Supabase project is preferred; CI does not perform privileged database writes or deployment.
 
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 

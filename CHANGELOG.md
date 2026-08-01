@@ -1,5 +1,14 @@
 # Clubhouse HQ Changelog
 
+## 2026-08-01
+
+### Controlled Beta Phase 4B — Hosted CI Supabase Configuration
+
+- Added GitHub Actions secret injection for the client-safe Supabase URL and anonymous key required by the production build and intercepted Playwright requests.
+- Added an early CI configuration check so missing secrets produce a direct error instead of broad Supabase-dependent test failures.
+- Kept service-role credentials, privileged database writes, deployment, and migrations out of CI.
+- Documented the preferred dedicated test/staging project boundary and the temporary public-key-only production fallback.
+
 ## 2026-07-31
 
 ### Changed

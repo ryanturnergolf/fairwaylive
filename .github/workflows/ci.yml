@@ -14,10 +14,32 @@ jobs:
     name: Build and Playwright
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Validate CI Supabase configuration
+        shell: bash
+        run: |
+          if [[ -z "${NEXT_PUBLIC_SUPABASE_URL}" ]]; then
+            echo "::error::Missing required GitHub Actions secret: NEXT_PUBLIC_SUPABASE_URL"
+            exit 1
+          fi
+
+          if [[ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY}" ]]; then
+            echo "::error::Missing required GitHub Actions secret: NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            exit 1
+          fi
+
+          if [[ ! "${NEXT_PUBLIC_SUPABASE_URL}" =~ ^https://[^/]+\.supabase\.co/?$ ]]; then
+            echo "::error::NEXT_PUBLIC_SUPABASE_URL must be a valid hosted Supabase project URL."
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

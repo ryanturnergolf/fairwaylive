@@ -19,13 +19,25 @@ The current configuration starts the app with `npm run start -- -p 3100`, so run
 CI runs, in order:
 
 ```bash
+validate required Supabase configuration
 npm ci
 npx playwright install --with-deps chromium
 npm run build
 npm run test:e2e
 ```
 
-The job stops on the first failing step. Playwright `test-results/` and `playwright-report/` artifacts are uploaded only when the job fails and are retained for seven days. The workflow uses no production Supabase credentials; the existing suite relies on deterministic fixtures, route interception, and public build-time fallbacks rather than direct CI writes to the connected production project.
+The job stops on the first failing step. Playwright `test-results/` and `playwright-report/` artifacts are uploaded only when the job fails and are retained for seven days.
+
+The application must receive Supabase client configuration at build time so the browser client is created and Playwright can intercept its `/auth/v1` and `/rest/v1` requests. Configure these GitHub Actions repository secrets:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+These are client-safe configuration values, not privileged server credentials. Never add a service-role key to this workflow. `NEXT_PUBLIC_APP_URL` is set by the workflow to `http://127.0.0.1:3100`, matching the CI production server. The validation step fails before dependency installation when either required secret is absent or the URL is not a hosted Supabase project URL.
+
+The suite primarily uses deterministic fixtures, route interception, and static migration/service contracts. It does not require a service-role credential and must not perform privileged production writes. A dedicated test or staging Supabase project with the current migration ledger is preferred for CI isolation. If the production project is used temporarily, only its public URL and anonymous key may be configured, and existing RLS remains the security boundary.
+
+GitHub does not expose repository secrets to pull requests from forks. Those runs will fail at the explicit configuration step rather than silently skipping Supabase-dependent coverage.
 
 ## Current Tests
 

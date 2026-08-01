@@ -18,9 +18,9 @@ Every release pins an application commit to a verified remote migration ledger. 
 
 Controlled-beta monitoring covers application, API, Supabase, authentication, score persistence, live scoring, and release health. It records release identity, operation/status/latency, redacted errors, and only the minimum access-controlled event identities needed for response. Raw scoring codes, share/access tokens, authorization headers, passwords, keys, and complete score payloads are prohibited from telemetry. Monitoring never becomes scoring or leaderboard authority; incident verification returns to durable rows and uses `RELEASE_ROLLBACK.md` or `BACKUP_RECOVERY.md` at their explicit boundaries.
 
-### Continuous integration is credential-free verification
+### Continuous integration uses client-safe Supabase configuration only
 
-Pull requests and pushes to `main` must pass a locked dependency install, production build, and complete Playwright suite under the supported Node 20 line. CI uses no production Supabase credentials and performs no production deployment or migration. Failure artifacts are retained only for diagnosis. Hosted CI complements rather than replaces the release, real-Supabase, smoke-test, backup, monitoring, and drill gates.
+Pull requests and pushes to `main` must pass a locked dependency install, production build, and complete Playwright suite under the supported Node 20 line. The browser client requires a Supabase project URL and anonymous key even when Playwright intercepts network behavior, so CI obtains only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from GitHub Actions secrets and fails early when either is absent. A current-schema test/staging project is preferred. Service-role credentials, privileged database writes, deployment, and migration execution are prohibited. Failure artifacts are retained only for diagnosis. Hosted CI complements rather than replaces the release, real-Supabase, smoke-test, backup, monitoring, and drill gates.
 
 ### Tournament UX polish remains presentation-only
 
