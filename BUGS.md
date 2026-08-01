@@ -24,6 +24,12 @@ Status: runbook complete; pre-beta operational gate remains open.
 
 `RELEASE_ROLLBACK.md` defines release ownership, verification gates, migration/application order, smoke testing, freeze policy, application rollback, database forward fixes, communications, and rehearsal. The production hosting project and supported rollback mechanism have not been recorded, release roles and canary data are not yet assigned, and the drill has not yet been executed. Controlled beta must not assume an application rollback is available until the actual hosting workflow is verified.
 
+### Centralized monitoring and incident drill require configuration
+
+Status: runbook complete; pre-beta operational gate remains open.
+
+`MONITORING_INCIDENT_RESPONSE.md` defines health signals, P1–P4 alerts, response targets, investigation, tournament-day triage, mitigation, verification, dashboards, redaction, communication, and postmortems. Centralized telemetry and paging are not documented as deployed, monitoring/responding roles are not yet assigned, canary checks and retention are not approved, and the incident drill has not been executed. Console warnings alone do not satisfy controlled-beta monitoring readiness.
+
 ## Open Bugs
 
 - Q8 blocks missing, duplicate, cross-group, and post-scoring scorer assignment changes at the database boundary; activation stays unavailable until every group/round assignment is valid.

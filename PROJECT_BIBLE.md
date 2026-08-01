@@ -70,7 +70,7 @@ These phases changed presentation and focused UX regression coverage only. They 
 
 Current verification baseline:
 
-- Latest commit: `e3953c3180f5061a7557e1bc1542edcbecf2a341`
+- Application UX baseline commit: `e3953c3180f5061a7557e1bc1542edcbecf2a341`
 - Production build: passed
 - Playwright: 244/244 passed
 
@@ -89,6 +89,14 @@ Status: **RUNBOOK COMPLETE; HOSTING CONFIRMATION AND DRILL REQUIRED**
 The production release and rollback contract is documented in `RELEASE_ROLLBACK.md`. Every release records the candidate and previous known-good commits, linked Supabase project and migration ledger, recovery point, build and Playwright results, deployment outcome, smoke verification, and go/no-go decision. Normal releases use backward-compatible forward migrations followed by application deployment; applied migrations are never edited or casually rolled back.
 
 Tournament-day freeze rules protect active scoring. Application rollback redeploys the exact compatible known-good commit, while database defects use a reviewed corrective forward migration or the recovery process in `BACKUP_RECOVERY.md`. Controlled beta remains gated on confirming the production host and rollback mechanism, naming release owners, selecting canary data, and passing the release/rollback drill.
+
+## Controlled Beta Monitoring And Incident Response
+
+Status: **RUNBOOK COMPLETE; MONITORING CONFIGURATION AND DRILL REQUIRED**
+
+The monitoring and incident-response contract is documented in `MONITORING_INCIDENT_RESPONSE.md`. It defines application, API, Supabase, authentication, score-save, live-scoring, and release-health signals; P1–P4 severity and response targets; tournament-day triage; rollback/recovery boundaries; communication; dashboards; privacy/redaction; and incident closure.
+
+The runbook is vendor-neutral because centralized telemetry, alert routing, and production health checks are not yet documented as deployed capabilities. Controlled beta remains gated on selecting and configuring monitoring, naming responders, verifying redaction and alert delivery, establishing safe canary checks, and passing the pre-beta incident drill.
 
 ## Durable Roster Foundation
 

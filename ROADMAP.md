@@ -29,13 +29,16 @@ Status: **IN PROGRESS**
 - Phase 10A — End-to-End Tournament UX Audit and Final Polish: **COMPLETE**.
 - Controlled Beta Phase 1 — Backup & Recovery Operational Readiness documentation: **COMPLETE; PLAN CONFIRMATION AND RECOVERY DRILL PENDING**.
 - Controlled Beta Phase 2 — Release & Rollback Operational Readiness documentation: **COMPLETE; HOSTING CONFIRMATION AND RELEASE DRILL PENDING**.
+- Controlled Beta Phase 3 — Production Monitoring & Incident Response documentation: **COMPLETE; TOOLING CONFIGURATION AND INCIDENT DRILL PENDING**.
 - Added the authoritative `BACKUP_RECOVERY.md` runbook covering backup scope/cadence, RPO/RTO, targeted and full restore procedures, snapshot/cache reconciliation, tournament-day response, and post-restore validation.
 - Added the authoritative `RELEASE_ROLLBACK.md` runbook covering release roles, prerequisites, build/Playwright and migration gates, deployment sequence, production smoke tests, tournament-day freezes, application rollback, database forward-fix policy, communications, and rehearsal.
+- Added the authoritative `MONITORING_INCIDENT_RESPONSE.md` runbook covering health signals, P1–P4 alerts, investigation, tournament-day triage, mitigation, recovery verification, vendor-neutral dashboard/log requirements, communications, postmortems, and readiness checks.
 - Opening beta remains gated on confirming the connected Supabase backup/PITR capabilities, assigning named recovery owners, and passing the documented isolated recovery drill.
 - Release readiness additionally requires a confirmed production host/rollback mechanism, named release owners, approved canary data, and a successful release/rollback drill.
-- Current verification baseline: production build passed; Playwright passed 244/244; production migrations are current; latest commit is `e3953c3180f5061a7557e1bc1542edcbecf2a341`.
+- Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.
+- Current verification baseline: production build passed; Playwright passed 244/244; production migrations are current; application UX baseline commit is `e3953c3180f5061a7557e1bc1542edcbecf2a341`.
 - The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.
-- Next planned milestone: execute and record the Phase 1 recovery and Phase 2 release/rollback drills, then continue Controlled Beta Preparation with monitoring and incident-response readiness.
+- Next planned milestone: configure and verify the Phase 1–3 operational capabilities, execute the recovery, release/rollback, and incident drills, then reassess controlled-beta readiness.
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 

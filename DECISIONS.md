@@ -14,6 +14,10 @@ Managed backups and PITR are plan-dependent capabilities, not architectural assu
 
 Every release pins an application commit to a verified remote migration ledger. Production migrations must be backward compatible with the previously deployed application during rollout. Application rollback redeploys the exact known-good compatible commit; it does not remove applied migrations. A defective deployed migration is corrected with a new reviewed forward migration, or with the `BACKUP_RECOVERY.md` process when authority cannot otherwise be restored. No routine release occurs during the tournament-day freeze defined in `RELEASE_ROLLBACK.md`.
 
+### Monitoring protects authority without collecting credentials
+
+Controlled-beta monitoring covers application, API, Supabase, authentication, score persistence, live scoring, and release health. It records release identity, operation/status/latency, redacted errors, and only the minimum access-controlled event identities needed for response. Raw scoring codes, share/access tokens, authorization headers, passwords, keys, and complete score payloads are prohibited from telemetry. Monitoring never becomes scoring or leaderboard authority; incident verification returns to durable rows and uses `RELEASE_ROLLBACK.md` or `BACKUP_RECOVERY.md` at their explicit boundaries.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.
