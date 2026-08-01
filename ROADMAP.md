@@ -36,6 +36,7 @@ Status: **IN PROGRESS**
 - Added the authoritative `MONITORING_INCIDENT_RESPONSE.md` runbook covering health signals, P1–P4 alerts, investigation, tournament-day triage, mitigation, recovery verification, vendor-neutral dashboard/log requirements, communications, postmortems, and readiness checks.
 - Added GitHub Actions verification for every pull request and push to `main`, using Node 20.x, npm caching, `npm ci`, the production build, the complete Chromium Playwright suite, and failure-only artifacts.
 - Phase 4B supplies required client-safe Supabase configuration through GitHub Actions secrets and fails early when configuration is absent; service-role credentials remain prohibited.
+- Phase 4C separates the local Playwright server origin from the public QR/share origin by using a reserved `.example` URL for hosted verification; a passing hosted run remains required.
 - Opening beta remains gated on confirming the connected Supabase backup/PITR capabilities, assigning named recovery owners, and passing the documented isolated recovery drill.
 - Release readiness additionally requires a confirmed production host/rollback mechanism, named release owners, approved canary data, and a successful release/rollback drill.
 - Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.

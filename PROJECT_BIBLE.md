@@ -106,6 +106,8 @@ GitHub Actions runs the locked dependency install, production build, and complet
 
 The browser bundle requires the client-safe `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` values at build time, including when Playwright intercepts Supabase requests. Hosted CI reads those values only from GitHub Actions secrets and fails before installation when they are absent. It must never receive a service-role key. A current-schema test/staging Supabase project is preferred; CI does not perform privileged database writes or deployment.
 
+CI keeps two URL roles separate: Playwright uses `http://127.0.0.1:3100` to reach its managed production server, while `NEXT_PUBLIC_APP_URL` uses a reserved `.example` origin to verify externally shareable QR links. Production supplies its real public deployment origin; application code never hardcodes that domain.
+
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 
 ## Durable Roster Foundation

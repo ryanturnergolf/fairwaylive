@@ -9,6 +9,12 @@
 - Kept service-role credentials, privileged database writes, deployment, and migrations out of CI.
 - Documented the preferred dedicated test/staging project boundary and the temporary public-key-only production fallback.
 
+### Controlled Beta Phase 4C — Hosted CI QR Base URL Configuration
+
+- Separated Playwright's local managed-server origin from the public app origin embedded in QR/share links.
+- Configured hosted CI with a reserved, non-routable `.example` public origin so the existing anti-localhost QR regression remains meaningful.
+- Preserved production URL configuration, centralized QR generation, Playwright server routing, and test coverage without application changes.
+
 ## 2026-07-31
 
 ### Changed

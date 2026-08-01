@@ -22,6 +22,10 @@ Controlled-beta monitoring covers application, API, Supabase, authentication, sc
 
 Pull requests and pushes to `main` must pass a locked dependency install, production build, and complete Playwright suite under the supported Node 20 line. The browser client requires a Supabase project URL and anonymous key even when Playwright intercepts network behavior, so CI obtains only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from GitHub Actions secrets and fails early when either is absent. A current-schema test/staging project is preferred. Service-role credentials, privileged database writes, deployment, and migration execution are prohibited. Failure artifacts are retained only for diagnosis. Hosted CI complements rather than replaces the release, real-Supabase, smoke-test, backup, monitoring, and drill gates.
 
+### Public QR origins are distinct from browser test origins
+
+`NEXT_PUBLIC_APP_URL` is the externally shareable origin used by centralized QR URL generation. It must not be inferred from or equated with Playwright's local managed-server origin. Hosted CI uses a reserved `.example` public origin while the browser still executes against `127.0.0.1`; production supplies the actual deployment origin through environment configuration. The deterministic CI public origin is not a secret.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.

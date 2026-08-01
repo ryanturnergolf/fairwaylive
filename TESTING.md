@@ -33,7 +33,9 @@ The application must receive Supabase client configuration at build time so the 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-These are client-safe configuration values, not privileged server credentials. Never add a service-role key to this workflow. `NEXT_PUBLIC_APP_URL` is set by the workflow to `http://127.0.0.1:3100`, matching the CI production server. The validation step fails before dependency installation when either required secret is absent or the URL is not a hosted Supabase project URL.
+These are client-safe configuration values, not privileged server credentials. Never add a service-role key to this workflow. The validation step fails before dependency installation when either required secret is absent or the URL is not a hosted Supabase project URL.
+
+Playwright reaches the local production server through `http://127.0.0.1:3100`; that browser test origin is intentionally separate from `NEXT_PUBLIC_APP_URL`. The latter is the externally shareable origin embedded in generated QR links. Hosted CI sets it to the reserved, non-routable test origin `https://ci.clubhouse-hq.example`, while production must provide its actual public deployment URL. This value is public configuration and does not require a GitHub secret or variable for the deterministic CI suite.
 
 The suite primarily uses deterministic fixtures, route interception, and static migration/service contracts. It does not require a service-role credential and must not perform privileged production writes. A dedicated test or staging Supabase project with the current migration ledger is preferred for CI isolation. If the production project is used temporarily, only its public URL and anonymous key may be configured, and existing RLS remains the security boundary.
 
