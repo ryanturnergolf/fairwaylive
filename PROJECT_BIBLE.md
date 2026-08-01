@@ -1,6 +1,6 @@
 # Clubhouse HQ Project Bible
 
-Last updated: 2026-07-27
+Last updated: 2026-07-31
 
 ## Product Vision
 
@@ -59,6 +59,20 @@ Certified final rankings:
 - T5 Jordan Lee — 37 (+1)
 
 The certified architecture keeps Tournament Engine tables authoritative for players, rounds, pairings, scorecards, scores, statistics, Reviews, official outcomes, and finalization. Qualifying remains an orchestration and read-model layer over those durable objects rather than a second scoring engine.
+
+## Tournament Experience Polish Certification
+
+Status: **PHASES 9B, 9C, AND 10A COMPLETE**
+
+The certified Tournament workflow has completed its presentation-only polish pass across the Tournament Director workspace, mobile scoring experience, and the end-to-end Tournament journey. Phase 9B standardized Tournament Director hierarchy, readiness, teams and players, pairings, scorecard generation, QR/share dialogs, team scoring codes, live scoring, Review Queue, finalization, and finalized read-only presentation. Phase 9C standardized mobile scorecard spacing, typography, touch targets, safe-area handling, progress and save states, Review, submission, and success presentation. Phase 10A completed the full workflow audit and corrected the remaining dashboard, loading/empty-state, responsive navigation, touch-target, and tournament-creation dialog issues.
+
+These phases changed presentation and focused UX regression coverage only. They did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. Production migrations remain current.
+
+Current verification baseline:
+
+- Latest commit: `e3953c3180f5061a7557e1bc1542edcbecf2a341`
+- Production build: passed
+- Playwright: 244/244 passed
 
 ## Durable Roster Foundation
 

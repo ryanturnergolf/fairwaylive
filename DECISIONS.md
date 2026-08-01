@@ -1,8 +1,12 @@
 # Clubhouse HQ Decisions
 
-Last updated: 2026-07-27
+Last updated: 2026-07-31
 
 ## Active Decisions
+
+### Tournament UX polish remains presentation-only
+
+Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.
 
 - Q8 Designated Group Scorer is a Qualifying-only strategy. Scorer-authored scores retain `(golfer, designated scorer)` identity, personal statistics retain `(golfer, golfer)` identity, and ordinary Tournament and reciprocal paths do not branch on designated behavior.
 - Qualifying finalization dispatches readiness by scoring policy: reciprocal delegates unchanged to the Q7 gate, while designated sessions require assignment-matched scorer rows and each golfer's self verification.

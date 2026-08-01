@@ -6,7 +6,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 - Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
 
-Last updated: 2026-07-27
+Last updated: 2026-07-31
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -20,11 +20,16 @@ Status: **COMPLETE**
 - Final certification event: Qualifying `dd6a0929-a035-4f10-9185-54324f82a5f2`, Tournament `11ddab64-36fa-4522-b9b5-cb07372bd214`, finalized `2026-07-27T02:41:33.69Z`.
 - Baseline: production build passed; Playwright passed 169/169; `main` synchronized with `origin/main`.
 
-### Next Phase - Controlled Beta Preparation
+### Controlled Beta Preparation
 
-Status: **NEXT**
+Status: **IN PROGRESS**
 
-- Prioritize UX polish, coach onboarding, roster preparation, operational documentation, and controlled-beta support.
+- Phase 9B — Tournament Director Experience UX Polish: **COMPLETE**.
+- Phase 9C — Mobile Scoring Experience UX Polish: **COMPLETE**.
+- Phase 10A — End-to-End Tournament UX Audit and Final Polish: **COMPLETE**.
+- Current verification baseline: production build passed; Playwright passed 244/244; production migrations are current; latest commit is `e3953c3180f5061a7557e1bc1542edcbecf2a341`.
+- The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.
+- Next planned milestone: continue the existing Controlled Beta Preparation phase with operational documentation and controlled-beta support.
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 
