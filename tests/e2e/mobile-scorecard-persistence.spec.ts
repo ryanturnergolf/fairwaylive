@@ -754,10 +754,11 @@ const openSharedSnapshotReview = async (
   await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=review-snapshot-token`);
   const reviewButton = page.getByRole("button", { name: "Review & Submit Round" });
   const verifyScore = page.getByText("Verify Score", { exact: true });
-  await expect
-    .poll(async () => (await verifyScore.isVisible()) || (await reviewButton.isEnabled()), { timeout: 10_000 })
-    .toBe(true);
-  if (!(await verifyScore.isVisible())) await reviewButton.click();
+  const reviewEntryState = await Promise.any([
+    expect(verifyScore).toBeVisible({ timeout: 20_000 }).then(() => "review" as const),
+    expect(reviewButton).toBeEnabled({ timeout: 20_000 }).then(() => "button" as const),
+  ]);
+  if (reviewEntryState === "button") await reviewButton.click();
   await expect(verifyScore).toBeVisible();
   return { ...sharedStore, savedHoleRows: holeStatsStore.savedHoleRows };
 };

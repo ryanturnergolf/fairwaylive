@@ -41,6 +41,10 @@ The suite primarily uses deterministic fixtures, route interception, and static 
 
 GitHub does not expose repository secrets to pull requests from forks. Those runs will fail at the explicit configuration step rather than silently skipping Supabase-dependent coverage.
 
+The committed hosted baseline is 240 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. Local workspace totals may therefore report 244 without changing the authoritative hosted baseline.
+
+Mobile Review helpers race the two valid web-first completion states: an automatically rendered `Verify Score` view or an enabled `Review & Submit Round` action. They follow the state that actually completes instead of inferring readiness from instantaneous button snapshots. The helper adds no sleeps and does not weaken Review assertions; its focused bound covers the existing sequential score and statistics hydration contract.
+
 ## Current Tests
 
 - `tests/e2e/home.spec.ts`: verifies that the homepage loads.

@@ -15,6 +15,12 @@
 - Configured hosted CI with a reserved, non-routable `.example` public origin so the existing anti-localhost QR regression remains meaningful.
 - Preserved production URL configuration, centralized QR generation, Playwright server routing, and test coverage without application changes.
 
+### Controlled Beta Phase 4D — Hosted Mobile Review Test Stability
+
+- Reconciled the 240 committed hosted tests with four additional tests in an intentionally untracked local Qualifying foundation spec.
+- Replaced a timing-sensitive 10-second mobile Review helper poll with a focused race between the two valid web-first states: rendered `Verify Score` or enabled `Review & Submit Round`.
+- Preserved scoring, persistence, Review behavior, assertions, and application code without sleeps, retries, skipped tests, or global timeout changes.
+
 ## 2026-07-31
 
 ### Changed

@@ -108,6 +108,8 @@ The browser bundle requires the client-safe `NEXT_PUBLIC_SUPABASE_URL` and `NEXT
 
 CI keeps two URL roles separate: Playwright uses `http://127.0.0.1:3100` to reach its managed production server, while `NEXT_PUBLIC_APP_URL` uses a reserved `.example` origin to verify externally shareable QR links. Production supplies its real public deployment origin; application code never hardcodes that domain.
 
+The authoritative hosted suite contains 240 committed tests. Four additional local tests live in an untracked Qualifying foundation spec and are not part of CI. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot.
+
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 
 ## Durable Roster Foundation

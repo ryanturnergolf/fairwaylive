@@ -26,6 +26,10 @@ Pull requests and pushes to `main` must pass a locked dependency install, produc
 
 `NEXT_PUBLIC_APP_URL` is the externally shareable origin used by centralized QR URL generation. It must not be inferred from or equated with Playwright's local managed-server origin. Hosted CI uses a reserved `.example` public origin while the browser still executes against `127.0.0.1`; production supplies the actual deployment origin through environment configuration. The deterministic CI public origin is not a secret.
 
+### Hosted UI synchronization waits for observable completion state
+
+Playwright synchronization must use web-first assertions against completed user-visible states instead of polling instantaneous locator snapshots or adding sleeps. Mobile Review certification accepts its two real entry states after authoritative hydration: Review may render automatically, or the Review action may become enabled and be activated. Focused bounds may cover that specific asynchronous contract; global timeouts, retries, skipped tests, and weakened assertions are not substitutes for synchronization.
+
 ### Tournament UX polish remains presentation-only
 
 Phases 9B, 9C, and 10A refine layout, hierarchy, responsive behavior, accessibility semantics, loading and empty states, dialogs, touch targets, and focused UX regression coverage. They do not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture. The certified Tournament Engine remains behaviorally authoritative beneath the polished presentation.
