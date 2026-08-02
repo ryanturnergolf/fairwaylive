@@ -1308,7 +1308,7 @@ function ReciprocalPlayerScorecardPage() {
     return (
       <main className="min-h-screen bg-[#F6F1E6] px-4 py-8 text-[#0B3D2E]">
         <div className="mx-auto max-w-md rounded-[28px] border border-[#E8DCC8] bg-white/90 p-6 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
               HQ
             </div>
@@ -1318,7 +1318,7 @@ function ReciprocalPlayerScorecardPage() {
                 Mobile Scorecard
               </p>
             </div>
-          </div>
+          </Link>
 
           <p className="mt-6 text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
             Loading Scorecard
@@ -1338,7 +1338,7 @@ function ReciprocalPlayerScorecardPage() {
     return (
       <main className="min-h-screen bg-[#F6F1E6] px-4 py-8 text-[#0B3D2E]">
         <div className="mx-auto max-w-md rounded-[28px] border border-[#E8DCC8] bg-white/90 p-6 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-xs font-black tracking-[0.25em] text-[#F6F1E6]">
               HQ
             </div>
@@ -1348,7 +1348,7 @@ function ReciprocalPlayerScorecardPage() {
                 Mobile Scorecard
               </p>
             </div>
-          </div>
+          </Link>
 
           <p className="mt-6 text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
             Mobile Score Entry Unavailable
