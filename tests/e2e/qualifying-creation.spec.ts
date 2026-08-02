@@ -4,9 +4,12 @@ import { join } from "node:path";
 import type { CreateQualifyingSessionInput } from "../../app/lib/qualifyingModel";
 import {
   autoBalanceQualifyingGroups,
-  getQualifyingRoster,
   validateQualifyingCreation,
 } from "../../app/lib/services/qualifyingCreationService";
+import {
+  buildQualifyingRosterPlayers,
+  selectCurrentActiveRosterSeason,
+} from "../../app/lib/services/rosterFoundationService";
 import { routeValidCoachSession } from "./authSessionTestHelper";
 
 test.beforeEach(async ({ page }) => {
@@ -41,6 +44,31 @@ const installCoachSession = (page: Page) =>
       },
     }));
   }, { token: accessToken, userId: coachId });
+
+const seasonId = "22222222-2222-4222-8222-222222222222";
+const menPlayerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const womenPlayerIds = [
+  "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+];
+
+const routeDurableRosters = async (page: Page) => {
+  const now = "2026-08-02T12:00:00.000Z";
+  const seasons = [{ id: seasonId, owner_id: coachId, name: "2026-2027", starts_on: "2026-08-01", ends_on: "2027-06-30", status: "active", created_at: now, updated_at: now }];
+  const players = [
+    { id: menPlayerId, owner_id: coachId, source_player_id: null, first_name: "Real", last_name: "Man", preferred_name: null, roster_type: "men", status: "active", archived_at: null, created_at: now, updated_at: now },
+    { id: womenPlayerIds[0], owner_id: coachId, source_player_id: null, first_name: "Real", last_name: "Woman", preferred_name: null, roster_type: "women", status: "active", archived_at: null, created_at: now, updated_at: now },
+    { id: womenPlayerIds[1], owner_id: coachId, source_player_id: null, first_name: "Incoming", last_name: "Player", preferred_name: "Preferred Player", roster_type: "women", status: "incoming", archived_at: null, created_at: now, updated_at: now },
+  ];
+  const memberships = players.map((player, index) => ({ id: `dddddddd-dddd-4ddd-8ddd-ddddddddddd${index}`, owner_id: coachId, season_id: seasonId, roster_player_id: player.id, status: index === 2 ? "incoming" : "active", class_year: index === 2 ? "Freshman" : "Senior", created_at: now, updated_at: now }));
+  await page.route("**/rest/v1/**", (route) => {
+    const table = new URL(route.request().url()).pathname.split("/").at(-1);
+    if (table === "seasons") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(seasons) });
+    if (table === "roster_players") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(players) });
+    if (table === "season_roster_memberships") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(memberships) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+};
 
 const foundationResponse = (input: CreateQualifyingSessionInput) => ({
   sessions: [{
@@ -80,6 +108,7 @@ test("Coach Dashboard exposes Qualifying and Create Qualifying entry points", as
 
 test("qualifying wizard validates, configures, reviews, saves, and reloads a draft", async ({ page }) => {
   await installCoachSession(page);
+  await routeDurableRosters(page);
   let savedInput: CreateQualifyingSessionInput | null = null;
   await page.route("**/api/qualifying-sessions", async (route) => {
     if (route.request().method() === "POST") {
@@ -109,7 +138,7 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("p[role='alert']")).toContainText("Select at least one player");
   await page.getByRole("button", { name: "Select All" }).click();
-  await expect(page.getByText("5 selected")).toBeVisible();
+  await expect(page.getByText("2 selected")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
   await page.getByLabel("Number of qualifying days").fill("2");
@@ -144,20 +173,24 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   await page.getByRole("button", { name: "Save Qualifying" }).click();
   await expect(page).toHaveURL(/\/coach-dashboard\/qualifying-manager\?created=1$/);
   await expect(page.getByRole("heading", { name: "Fall Team Qualifying" })).toBeVisible();
-  await expect(page.getByText("Women's · 5 players · 2 days")).toBeVisible();
+  await expect(page.getByText("Women's · 2 players · 2 days")).toBeVisible();
 
   expect(savedInput).toMatchObject({
     name: "Fall Team Qualifying",
     rosterType: "women",
     scoringMode: "designated_scorer",
   });
-  expect(savedInput?.selectedPlayers).toHaveLength(5);
+  expect(savedInput?.selectedPlayers).toHaveLength(2);
+  expect(savedInput?.selectedPlayers.map((player) => player.rosterPlayerId).sort()).toEqual([...womenPlayerIds].sort());
   expect(savedInput?.groups).toHaveLength(2);
   expect(savedInput?.days).toHaveLength(2);
 });
 
 test("creation validation rejects duplicates, empty groups, and incomplete assignments", () => {
-  const players = getQualifyingRoster("men").slice(0, 2);
+  const players = [
+    { id: menPlayerId, rosterPlayerId: menPlayerId, name: "Real Man", rosterType: "men" as const, classYear: "Senior" },
+    { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", rosterPlayerId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", name: "Second Man", rosterType: "men" as const, classYear: "Junior" },
+  ];
   const valid: CreateQualifyingSessionInput = {
     name: "Men's Qualifying",
     rosterType: "men",
@@ -190,6 +223,55 @@ test("creation validation rejects duplicates, empty groups, and incomplete assig
     ...valid,
     days: [{ ...valid.days[0], courseName: "" }],
   }).errors).toContain("Every qualifying day requires a date, holes, course, tee, and valid starting hole.");
+});
+
+test("qualifying roster projection selects the current active season and eligible permanent identities", () => {
+  const baseSeason = { ownerId: coachId, createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+  const season = selectCurrentActiveRosterSeason([
+    { ...baseSeason, id: "past", name: "Past", startsOn: "2025-08-01", endsOn: "2026-05-31", status: "active" },
+    { ...baseSeason, id: seasonId, name: "Current", startsOn: "2026-08-01", endsOn: "2027-05-31", status: "active" },
+    { ...baseSeason, id: "planned", name: "Planned", startsOn: "2026-08-01", endsOn: "2027-05-31", status: "planned" },
+  ], new Date("2026-08-02T12:00:00Z"));
+  expect(season?.id).toBe(seasonId);
+
+  const basePlayer = { ownerId: coachId, sourcePlayerId: null, preferredName: null, rosterType: "men" as const, archivedAt: null, createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+  const players = [
+    { ...basePlayer, id: menPlayerId, firstName: "Eligible", lastName: "Player", status: "active" as const },
+    { ...basePlayer, id: "inactive", firstName: "Inactive", lastName: "Player", status: "inactive" as const },
+    { ...basePlayer, id: "archived", firstName: "Archived", lastName: "Player", status: "active" as const, archivedAt: "2026-07-01" },
+  ];
+  const baseMembership = { ownerId: coachId, seasonId, classYear: "Senior", createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+  const memberships = players.map((player) => ({ ...baseMembership, id: `membership-${player.id}`, rosterPlayerId: player.id, status: player.status }));
+  expect(buildQualifyingRosterPlayers({ players, memberships, rosterType: "men" })).toEqual([{
+    id: menPlayerId,
+    rosterPlayerId: menPlayerId,
+    name: "Eligible Player",
+    rosterType: "men",
+    classYear: "Senior",
+  }]);
+});
+
+test("roster-link migration validates ownership, persists links, and propagates them to tournament snapshots", () => {
+  const migration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260807000000_link_qualifying_participants_to_roster.sql"),
+    "utf8"
+  );
+  expect(migration).toContain("player ->> 'rosterPlayerId'");
+  expect(migration).toContain("roster_player.owner_id = coach_id");
+  expect(migration).toContain("set roster_player_id = (player.player_data ->> 'rosterPlayerId')::uuid");
+  expect(migration).toContain("participant.roster_player_id");
+  expect(migration).toContain("roster_player_id = excluded.roster_player_id");
+  expect(migration).not.toContain("security definer");
+});
+
+test("production qualifying creation service contains no hard-coded roster fixtures", () => {
+  const source = readFileSync(
+    join(process.cwd(), "app/lib/services/qualifyingCreationService.ts"),
+    "utf8"
+  );
+  for (const fixtureName of ["Avery Brooks", "Cam Riley", "Jordan Lee", "Morgan", "Taylor"]) {
+    expect(source).not.toContain(fixtureName);
+  }
 });
 
 test("empty Qualifying Sessions page shows the creation action", async ({ page }) => {

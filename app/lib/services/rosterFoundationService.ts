@@ -15,11 +15,78 @@ import {
   type CreateRosterPlayerInput,
   type CreateSeasonInput,
   type EventRosterIdentityLink,
+  type RosterPlayer,
   type RosterPlayerStatus,
   type SaveSeasonRosterMembershipInput,
+  type Season,
   type SeasonRosterMembership,
   type UpdateRosterPlayerInput,
 } from "../rosterModel";
+
+const qualifyingRosterStatuses = new Set<RosterPlayerStatus>([
+  "incoming",
+  "active",
+  "redshirt",
+]);
+
+export const selectCurrentActiveRosterSeason = (
+  seasons: Season[],
+  today = new Date()
+) => {
+  const dateKey = today.toISOString().slice(0, 10);
+  return [...seasons]
+    .filter((season) => season.status === "active")
+    .sort((left, right) => {
+      const leftCurrent = left.startsOn <= dateKey && dateKey <= left.endsOn ? 1 : 0;
+      const rightCurrent = right.startsOn <= dateKey && dateKey <= right.endsOn ? 1 : 0;
+      return rightCurrent - leftCurrent || right.startsOn.localeCompare(left.startsOn) || left.id.localeCompare(right.id);
+    })[0] ?? null;
+};
+
+export const buildQualifyingRosterPlayers = (input: {
+  players: RosterPlayer[];
+  memberships: SeasonRosterMembership[];
+  rosterType: "men" | "women";
+}) => {
+  const membershipByPlayerId = new Map(
+    input.memberships
+      .filter((membership) => qualifyingRosterStatuses.has(membership.status))
+      .map((membership) => [membership.rosterPlayerId, membership])
+  );
+
+  return input.players
+    .filter((player) =>
+      player.rosterType === input.rosterType &&
+      player.archivedAt === null &&
+      qualifyingRosterStatuses.has(player.status) &&
+      membershipByPlayerId.has(player.id)
+    )
+    .map((player) => ({
+      id: player.id,
+      rosterPlayerId: player.id,
+      name: player.preferredName?.trim() || `${player.firstName} ${player.lastName}`.trim(),
+      rosterType: player.rosterType,
+      classYear: membershipByPlayerId.get(player.id)?.classYear ?? "",
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+};
+
+export const loadCurrentQualifyingRoster = async (
+  rosterType: "men" | "women",
+  today = new Date()
+) => {
+  const seasons = await listSeasons();
+  const season = selectCurrentActiveRosterSeason(seasons, today);
+  if (!season) return { season: null, players: [] };
+  const [players, memberships] = await Promise.all([
+    listRosterPlayers(false),
+    listSeasonRosterMemberships(season.id),
+  ]);
+  return {
+    season,
+    players: buildQualifyingRosterPlayers({ players, memberships, rosterType }),
+  };
+};
 
 export const requireRosterText = (value: string, label: string) => {
   const normalized = value.trim();

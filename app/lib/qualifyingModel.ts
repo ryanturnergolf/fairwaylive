@@ -32,6 +32,7 @@ export type QualifyingSession = {
 
 export type QualifyingRosterPlayer = {
   id: string;
+  rosterPlayerId?: string | null;
   name: string;
   rosterType: QualifyingRosterType;
   classYear: string;

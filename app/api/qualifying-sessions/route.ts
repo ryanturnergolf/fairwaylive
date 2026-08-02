@@ -54,7 +54,7 @@ export async function GET(request: Request) {
           .order("day_number"),
         supabase
           .from("qualifying_participants")
-          .select("id,qualifying_session_id,player_id,player_name,roster_type,display_order")
+          .select("id,qualifying_session_id,roster_player_id,player_id,player_name,roster_type,display_order")
           .in("qualifying_session_id", sessionIds)
           .order("display_order"),
         supabase
@@ -94,6 +94,7 @@ export async function GET(request: Request) {
         const selectedPlayers = relationalParticipants.length > 0
           ? relationalParticipants.map((participant) => ({
               id: participant.player_id,
+              rosterPlayerId: participant.roster_player_id,
               name: participant.player_name,
               rosterType: participant.roster_type,
               classYear: "",

@@ -1,5 +1,6 @@
 import type {
   CreateQualifyingSessionInput,
+  QualifyingRosterPlayer,
 } from "../qualifyingModel";
 import {
   saveScoreEntry,
@@ -14,7 +15,6 @@ import { activateQualifyingSession } from "./qualifyingActivationService";
 import { manageQualifyingAccessCode } from "./qualifyingAccessService";
 import {
   autoBalanceQualifyingGroups,
-  getQualifyingRoster,
 } from "./qualifyingCreationService";
 import { provisionQualifyingSession } from "./qualifyingProvisioningService";
 import { requireQaSeedAccess } from "./qaSeedAccessService";
@@ -64,7 +64,14 @@ export const qaSeedTemplates: QaSeedTemplateDefinition[] = [
   },
 ];
 
-const testQualifierPlayers = () => getQualifyingRoster("men").slice(0, 6);
+const testQualifierPlayers = (): QualifyingRosterPlayer[] => [
+  ["men-avery-brooks", "Avery Brooks", "Senior"],
+  ["men-cam-riley", "Cam Riley", "Junior"],
+  ["men-jordan-lee", "Jordan Lee", "Sophomore"],
+  ["men-drew-patel", "Drew Patel", "Junior"],
+  ["men-sam-carter", "Sam Carter", "Freshman"],
+  ["men-noah-wilson", "Noah Wilson", "Senior"],
+].map(([id, name, classYear]) => ({ id, rosterPlayerId: null, name, classYear, rosterType: "men" }));
 
 export const buildTestQualifierDraft = (
   timestamp = new Date().toISOString()

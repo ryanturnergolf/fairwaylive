@@ -2,7 +2,6 @@ import type {
   CreateQualifyingSessionInput,
   QualifyingGroup,
   QualifyingRosterPlayer,
-  QualifyingRosterType,
 } from "../qualifyingModel";
 import { buildQualifyingRoundPlan } from "./qualifyingScheduleService";
 
@@ -10,27 +9,6 @@ export type QualifyingCreationValidation = {
   ok: boolean;
   errors: string[];
 };
-
-const rosterPlayers: Record<QualifyingRosterType, QualifyingRosterPlayer[]> = {
-  men: [
-    { id: "men-avery-brooks", name: "Avery Brooks", rosterType: "men", classYear: "Senior" },
-    { id: "men-cam-riley", name: "Cam Riley", rosterType: "men", classYear: "Junior" },
-    { id: "men-jordan-lee", name: "Jordan Lee", rosterType: "men", classYear: "Sophomore" },
-    { id: "men-drew-patel", name: "Drew Patel", rosterType: "men", classYear: "Junior" },
-    { id: "men-sam-carter", name: "Sam Carter", rosterType: "men", classYear: "Freshman" },
-    { id: "men-noah-wilson", name: "Noah Wilson", rosterType: "men", classYear: "Senior" },
-  ],
-  women: [
-    { id: "women-morgan-chen", name: "Morgan Chen", rosterType: "women", classYear: "Senior" },
-    { id: "women-taylor-quinn", name: "Taylor Quinn", rosterType: "women", classYear: "Freshman" },
-    { id: "women-riley-adams", name: "Riley Adams", rosterType: "women", classYear: "Junior" },
-    { id: "women-casey-smith", name: "Casey Smith", rosterType: "women", classYear: "Sophomore" },
-    { id: "women-ella-hayes", name: "Ella Hayes", rosterType: "women", classYear: "Senior" },
-  ],
-};
-
-export const getQualifyingRoster = (rosterType: QualifyingRosterType) =>
-  rosterPlayers[rosterType].map((player) => ({ ...player }));
 
 export const autoBalanceQualifyingGroups = (
   players: QualifyingRosterPlayer[],

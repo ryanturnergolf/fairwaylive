@@ -3,19 +3,20 @@
 import Link from "next/link";
 import { CoachBreadcrumbs, CoachHeader } from "../../components/CoachChrome";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   CreateQualifyingSessionInput,
   QualifyingGroup,
   QualifyingHolesPerDay,
+  QualifyingRosterPlayer,
   QualifyingRosterType,
   QualifyingScoringMode,
 } from "../../../lib/qualifyingModel";
 import {
   autoBalanceQualifyingGroups,
-  getQualifyingRoster,
   validateQualifyingCreation,
 } from "../../../lib/services/qualifyingCreationService";
+import { loadCurrentQualifyingRoster } from "../../../lib/services/rosterFoundationService";
 import { buildQualifyingRoundPlan } from "../../../lib/services/qualifyingScheduleService";
 import { createQualifyingSessionDraft } from "../../../lib/services/qualifyingSessionService";
 
@@ -44,10 +45,33 @@ export default function CreateQualifyingPage() {
   const [scoringMode, setScoringMode] = useState<QualifyingScoringMode>("reciprocal");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [rosters, setRosters] = useState<Record<QualifyingRosterType, QualifyingRosterPlayer[]>>({ men: [], women: [] });
+  const [rosterSeasonName, setRosterSeasonName] = useState("");
+  const [isRosterLoading, setIsRosterLoading] = useState(true);
+  const [rosterError, setRosterError] = useState("");
 
-  const roster = useMemo(() => getQualifyingRoster(rosterType), [rosterType]);
+  const roster = rosters[rosterType];
   const selectedPlayers = roster.filter((player) => selectedPlayerIds.includes(player.id));
   const input: CreateQualifyingSessionInput = { name, rosterType, selectedPlayers, days, groups, scoringMode };
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsRosterLoading(true);
+    setRosterError("");
+    void Promise.all([
+      loadCurrentQualifyingRoster("men"),
+      loadCurrentQualifyingRoster("women"),
+    ]).then(([men, women]) => {
+      if (cancelled) return;
+      setRosters({ men: men.players, women: women.players });
+      setRosterSeasonName(men.season?.name ?? women.season?.name ?? "");
+    }).catch((loadError) => {
+      if (!cancelled) setRosterError(loadError instanceof Error ? loadError.message : "Unable to load coach rosters.");
+    }).finally(() => {
+      if (!cancelled) setIsRosterLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const changeRoster = (nextRoster: QualifyingRosterType) => {
     setRosterType(nextRoster);
@@ -174,6 +198,10 @@ export default function CreateQualifyingPage() {
                   {selectedPlayerIds.length === roster.length ? "Clear All" : "Select All"}
                 </button>
               </div>
+              {rosterSeasonName ? <p className="mt-2 text-sm text-[#51635C]">Season: {rosterSeasonName}</p> : null}
+              {isRosterLoading ? <p className="mt-5 text-sm font-semibold text-[#51635C]">Loading roster…</p> : null}
+              {rosterError ? <p role="alert" className="mt-5 text-sm font-semibold text-[#8A2E2E]">{rosterError}</p> : null}
+              {!isRosterLoading && !rosterError && roster.length === 0 ? <p className="mt-5 rounded-lg bg-[#FCFAF5] p-4 text-sm text-[#51635C]">No eligible players are available on this roster for the active season.</p> : null}
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 {roster.map((player) => (
                   <label key={player.id} className="rounded-lg border border-[#D9D0C0] p-4">
