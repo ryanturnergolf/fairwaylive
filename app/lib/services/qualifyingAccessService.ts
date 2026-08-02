@@ -12,6 +12,16 @@ export type QualifyingAccessResolution = {
   players: Array<{ playerId: string; playerName: string; accessRole?: "scorer" | "verifier" }>;
 };
 
+export type QualifyingTournamentAccessContext = {
+  sessionId: string;
+  sessionName: string;
+  sessionStatus: string;
+  backingTournamentId: string;
+  code: string;
+  active: boolean;
+  codeHint: string;
+};
+
 export const normalizeQualifyingCode = (value: string) =>
   value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, QUALIFYING_CODE_LENGTH);
 
@@ -44,6 +54,23 @@ export const loadQualifyingAccessCode = async (qualifyingSessionId: string) => {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to load qualifying access.");
   return body as { code: string; active: boolean; codeHint: string };
+};
+
+export const loadQualifyingTournamentAccessContext = async (
+  backingTournamentId: string
+): Promise<QualifyingTournamentAccessContext | null> => {
+  const accessToken = await getSupabaseAuthAccessToken();
+  if (!accessToken) return null;
+  const response = await fetch(
+    `/api/qualifying-access-codes?backingTournamentId=${encodeURIComponent(backingTournamentId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
+  );
+  const body = await response.json() as {
+    qualifyingContext?: QualifyingTournamentAccessContext | null;
+    error?: string;
+  };
+  if (!response.ok) throw new Error(body.error || "Unable to load Qualifying access context.");
+  return body.qualifyingContext ?? null;
 };
 
 export const manageQualifyingAccessCode = async (

@@ -439,6 +439,19 @@ export const getTournamentRound = async (
   return data as TournamentRoundReadRow | null;
 };
 
+export const getTournamentRounds = async (
+  tournamentId: string,
+  options: ShareTokenReadOptions = {}
+): Promise<TournamentRoundReadRow[]> => {
+  const supabase = await getReadClient(options);
+  const { data, error } = await supabase.from("tournament_rounds")
+    .select("tournament_id,round_number,hole_count,qualifying_session_id")
+    .eq("tournament_id", tournamentId)
+    .order("round_number");
+  if (error) throw error;
+  return (data ?? []) as TournamentRoundReadRow[];
+};
+
 export const getTournamentScorecards = async (
   tournamentId: string,
   roundNumber: number,

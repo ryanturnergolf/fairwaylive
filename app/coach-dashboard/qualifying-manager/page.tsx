@@ -6,7 +6,10 @@ import { useEffect, useState } from "react";
 import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
 import { activateQualifyingSession } from "../../lib/services/qualifyingActivationService";
 import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
-import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingSessionService";
+import {
+  getQualifyingTournamentWorkspaceHref,
+  listQualifyingSessionFoundations,
+} from "../../lib/services/qualifyingSessionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
 import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
@@ -176,7 +179,9 @@ export default function QualifyingSessionsPage() {
                       ) : null}
                       {session.tournamentId || provisionedTournamentIds[session.id] ? (
                         <Link
-                          href={`/tournament/${session.tournamentId || provisionedTournamentIds[session.id]}`}
+                          href={getQualifyingTournamentWorkspaceHref(
+                            session.tournamentId || provisionedTournamentIds[session.id]
+                          )}
                           className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
                         >
                           Open Tournament

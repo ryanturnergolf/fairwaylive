@@ -9,7 +9,10 @@ import type {
   QualifyingStatisticsSummary,
 } from "../../lib/qualifyingModel";
 import { finalizeQualifyingSession } from "../../lib/services/qualifyingFinalizationService";
-import { loadQualifyingResults } from "../../lib/services/qualifyingSessionService";
+import {
+  getQualifyingTournamentWorkspaceHref,
+  loadQualifyingResults,
+} from "../../lib/services/qualifyingSessionService";
 
 const formatToPar = (value: number | null) => {
   if (value === null) return "—";
@@ -147,7 +150,7 @@ export default function QualifyingResultsPanel({
         <div className="flex flex-wrap gap-2">
           {effectiveTournamentId ? (
             <Link
-              href={`/tournament/${effectiveTournamentId}`}
+              href={getQualifyingTournamentWorkspaceHref(effectiveTournamentId)}
               className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
             >
               Open Tournament Workspace

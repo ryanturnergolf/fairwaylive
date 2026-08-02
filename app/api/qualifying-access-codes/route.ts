@@ -19,15 +19,39 @@ const digest = (code: string) =>
 export async function GET(request: Request) {
   try {
     const client = await authenticated(request);
-    const sessionId = new URL(request.url).searchParams.get("qualifyingSessionId") ?? "";
-    const { data: session, error } = await client.from("qualifying_sessions")
-      .select("id,status").eq("id", sessionId).single();
-    if (error || session.status !== "active") throw new Error("Active qualifying session required.");
+    const searchParams = new URL(request.url).searchParams;
+    const sessionId = searchParams.get("qualifyingSessionId") ?? "";
+    const backingTournamentId = searchParams.get("backingTournamentId") ?? "";
+    const sessionQuery = client.from("qualifying_sessions")
+      .select("id,name,status,tournament_id");
+    const { data: session, error } = backingTournamentId
+      ? await sessionQuery.eq("tournament_id", backingTournamentId).maybeSingle()
+      : await sessionQuery.eq("id", sessionId).maybeSingle();
+    if (error) throw error;
+    if (backingTournamentId && !session) {
+      return NextResponse.json({ qualifyingContext: null });
+    }
+    if (!session || (!backingTournamentId && session.status !== "active")) {
+      throw new Error("Active qualifying session required.");
+    }
     const { data } = await client.from("qualifying_access_codes")
-      .select("generation,active,code_hint").eq("qualifying_session_id", sessionId).maybeSingle();
+      .select("generation,active,code_hint").eq("qualifying_session_id", session.id).maybeSingle();
+    if (backingTournamentId) {
+      return NextResponse.json({
+        qualifyingContext: {
+          sessionId: session.id,
+          sessionName: session.name,
+          sessionStatus: session.status,
+          backingTournamentId: session.tournament_id,
+          code: data ? generateQualifyingCode(session.id, data.generation) : "",
+          active: Boolean(data?.active),
+          codeHint: data?.code_hint ?? "",
+        },
+      });
+    }
     if (!data) return NextResponse.json({ code: "", active: false, codeHint: "" });
     return NextResponse.json({
-      code: generateQualifyingCode(sessionId, data.generation),
+      code: generateQualifyingCode(session.id, data.generation),
       active: data.active,
       codeHint: data.code_hint,
     });

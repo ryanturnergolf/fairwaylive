@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  buildTournamentRoundManagerReadModel,
   reconcileSnapshotWithDurableTournamentState,
 } from "../../app/lib/services/tournamentService";
 import type {
@@ -204,6 +205,7 @@ test("durable Tournament Engine collections enrich an empty cached snapshot", ()
   ]);
   expect(reconciled?.uiState.scorecards.scorecardsGenerated).toBe(true);
   expect(reconciled?.uiState.scorecards.scorecardRows).toHaveLength(2);
+  expect(buildTournamentRoundManagerReadModel(reconciled, 1).roundOptions[0].scorecardsCount).toBe(2);
 });
 
 test("complete snapshot presentation and saved scores remain unchanged", () => {
@@ -229,6 +231,83 @@ test("complete snapshot presentation and saved scores remain unchanged", () => {
 
   expect(second).toBe(first);
   expect(second?.uiState.scorecards.scorecardRows[0].scores[0]).toBe(3);
+});
+
+test("non-empty partial collections reconcile by durable identity coverage without losing scores", () => {
+  const snapshot = emptySnapshot();
+  snapshot.tournament.players = [{
+    id: "legacy-alex",
+    firstName: "Alex",
+    lastName: "Morgan",
+    teamId: "team-1",
+    isIndividual: false,
+    statistics: { teamName: "Durable University" },
+  }];
+  snapshot.tournament.pairings = [{
+    id: "preserved-pairing-id",
+    roundId: "round-1",
+    groupNumber: 1,
+    teeTime: "8:17 AM",
+    startingHole: "1",
+    players: [{
+      playerId: "player-alex",
+      playerName: "Alex Morgan",
+      teamName: "Durable University",
+    }],
+  }];
+  snapshot.tournament.scores = [{
+    playerId: "player-alex",
+    roundId: "round-1",
+    holeScores: [3, 4],
+    total: 7,
+    status: "live",
+    enteredBy: "marker",
+  }];
+  snapshot.uiState.players = [{
+    id: 41,
+    firstName: "Alex",
+    lastName: "Morgan",
+    teamId: "team-1",
+    teamName: "Durable University",
+    handicap: "0",
+    email: "",
+  }];
+  snapshot.uiState.pairings = [{
+    groupNumber: 1,
+    teeTime: "8:17 AM",
+    startingHole: "1",
+    players: snapshot.tournament.pairings[0].players,
+  }];
+  snapshot.uiState.scorecards.scorecardsGenerated = true;
+  snapshot.uiState.scorecards.scorecardRows = [{
+    id: 41,
+    playerName: "Alex Morgan",
+    team: "Durable University",
+    scores: [3, ...Array.from({ length: 17 }, () => 4)],
+  }];
+  const savedScores = structuredClone(snapshot.tournament.scores);
+  const savedAlexScores = [...snapshot.uiState.scorecards.scorecardRows[0].scores];
+  const rows = playerRows().map((row) => ({ ...row, team_name: "Durable University" }));
+
+  const reconciled = reconcileSnapshotWithDurableTournamentState({
+    envelope: snapshot,
+    tournament,
+    roundNumber: 1,
+    playerRows: rows,
+    durableRound: durableRound(),
+    durableScorecards: durableScorecards(),
+  });
+
+  expect(reconciled?.tournament.players).toHaveLength(2);
+  expect(reconciled?.tournament.pairings[0].players).toHaveLength(2);
+  expect(reconciled?.tournament.pairings[0].id).toBe("preserved-pairing-id");
+  expect(reconciled?.uiState.scorecards.scorecardRows).toHaveLength(2);
+  expect(reconciled?.uiState.scorecards.scorecardRows[0]).toMatchObject({
+    id: 41,
+    playerName: "Alex Morgan",
+    scores: savedAlexScores,
+  });
+  expect(reconciled?.tournament.scores).toEqual(savedScores);
 });
 
 test("durable scorecard coverage repairs stale generated flags without replacing presentation rows", () => {

@@ -92,6 +92,7 @@ import TournamentPrintExport, {
 } from "./components/TournamentPrintExport";
 import TournamentStatisticsDashboard from "./components/TournamentStatisticsDashboard";
 import OfficialResultsDashboard from "./components/OfficialResultsDashboard";
+import QualifyingAccessContext from "./components/QualifyingAccessContext";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 const officialResultsTab = "Official Results";
@@ -1536,6 +1537,9 @@ export default function TournamentPage() {
                 </div>
               </div>
             </section>
+            {isCoachAuthenticated ? (
+              <QualifyingAccessContext backingTournamentId={sharedTournamentId || tournamentId} />
+            ) : null}
           </div>
 
           <div aria-label={`${activeTab} workspace`} className="px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">

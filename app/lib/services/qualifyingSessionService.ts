@@ -15,6 +15,9 @@ import {
 import { getSupabaseAuthAccessToken } from "../supabaseClient";
 import { resolveQualifyingParticipantGroupConfiguration } from "./qualifyingParticipantGroupService";
 
+export const getQualifyingTournamentWorkspaceHref = (backingTournamentId: string) =>
+  `/tournament/${encodeURIComponent(backingTournamentId)}`;
+
 export const loadQualifyingSessionFoundation = async (
   sessionId: string
 ): Promise<QualifyingSessionFoundation | null> => {
