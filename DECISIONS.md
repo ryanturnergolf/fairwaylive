@@ -4,6 +4,10 @@ Last updated: 2026-07-31
 
 ## Active Decisions
 
+### Coach onboarding state uses account metadata and certified readiness
+
+Onboarding dismissal and resumption are coach-owned UI preferences stored in Supabase Auth user metadata. This avoids a schema migration and avoids treating local browser storage as durable account state. Default visibility is derived from account experience, while explicit resumption remains available. First-tournament progress consumes `TournamentReadiness` checks and `isSafeToShare`; the onboarding UI does not calculate readiness independently and does not gate normal coach workflows.
+
 ### Supabase durable rows are recovery authority
 
 Database recovery operates on a consistent authoritative graph: Tournament and Qualifying identity, players, rounds, pairings, durable scorecards, score and hole entries, Review state, official audit values, finalization, roster links, and Dynamic Statistics history. `tournament_state_snapshots` and browser localStorage may assist reconstruction and verification but may never overwrite or replace populated durable authority. Targeted recovery preserves original UUIDs and entered-by identities; it never maps players by name or manufactures compatibility rows.

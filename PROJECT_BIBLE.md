@@ -118,6 +118,10 @@ The Phase 7 candidate hosted suite contains 255 tests. Four additional local tes
 
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 
+## Controlled Beta Coach Onboarding
+
+The Coach Dashboard provides a concise, non-blocking first-event guide for new or incomplete accounts. Dismissal and explicit resumption are durable coach-account preferences stored in Supabase Auth user metadata; browser storage is not the authority. Experienced coaches are not interrupted by default. The first-tournament share checklist projects the certified `TournamentReadiness` result for player sync, pairings, scorecards, and safe-to-share state, so the UI does not duplicate readiness calculations. The guide links to existing workflows without changing Tournament or Qualifying behavior.
+
 ## Durable Roster Foundation
 
 Status: **DATA FOUNDATION DEPLOYED**

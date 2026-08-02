@@ -2,6 +2,13 @@
 
 ## 2026-08-01
 
+### Controlled Beta Phase 8 — Coach Onboarding And First-Tournament Guidance
+
+- Added concise first-event guidance for roster setup, statistics, event choice, setup, pairings, scorecards, sharing, Review, and finalization.
+- Added durable Supabase Auth metadata preferences for dismissing and resuming the guide without using browser storage as authority.
+- Added a share-readiness checklist projected directly from the existing Tournament readiness service, with no duplicate readiness logic.
+- Added focused visibility, persistence, experienced-coach, progression, and compatibility coverage.
+
 ### Controlled Beta Phase 5 — Error Reporting And Health Foundation
 
 - Added native Next.js instrumentation for unhandled server, API-route, and opt-in client errors through one structured sensitive-data redaction boundary.

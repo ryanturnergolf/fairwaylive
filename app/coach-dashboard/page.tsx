@@ -10,6 +10,12 @@ import {
   type CoachDashboardReadModel,
 } from "../lib/services/coachDashboardService";
 import { loadTournamentsFromStorage } from "../lib/tournamentStorage";
+import {
+  dismissCoachOnboarding,
+  loadCoachOnboardingReadModel,
+  resumeCoachOnboarding,
+  type CoachOnboardingReadModel,
+} from "../lib/services/coachOnboardingService";
 
 const emptyDashboard: CoachDashboardReadModel = {
   generatedAt: "",
@@ -32,6 +38,7 @@ const emptyDashboard: CoachDashboardReadModel = {
     recentlyCompletedPractices: [],
     recentPlayerUpdates: [],
   },
+  onboarding: { tournamentCount: 0, finalizedTournamentCount: 0, rosterPlayerCount: 0, readiness: null, tournamentHref: "/dashboard" },
 };
 
 const alertStyles: Record<CoachDashboardAlert["severity"], string> = {
@@ -97,6 +104,8 @@ function ItemList({ items, emptyLabel }: { items: CoachDashboardListItem[]; empt
 export default function CoachDashboardPage() {
   const [dashboard, setDashboard] = useState<CoachDashboardReadModel>(emptyDashboard);
   const [isLoading, setIsLoading] = useState(true);
+  const [onboarding, setOnboarding] = useState<CoachOnboardingReadModel | null>(null);
+  const [onboardingPending, setOnboardingPending] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -105,6 +114,9 @@ export default function CoachDashboardPage() {
       .then((readModel) => {
         if (!isCancelled) {
           setDashboard(readModel);
+          void loadCoachOnboardingReadModel(readModel.onboarding).then((model) => {
+            if (!isCancelled) setOnboarding(model);
+          }).catch(() => undefined);
         }
       })
       .catch((error) => {
@@ -120,6 +132,16 @@ export default function CoachDashboardPage() {
       isCancelled = true;
     };
   }, []);
+
+  const setOnboardingVisibility = async (visible: boolean) => {
+    setOnboardingPending(true);
+    try {
+      await (visible ? resumeCoachOnboarding() : dismissCoachOnboarding());
+      setOnboarding((current) => current ? { ...current, visible, dismissed: !visible } : current);
+    } finally {
+      setOnboardingPending(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
@@ -192,6 +214,37 @@ export default function CoachDashboardPage() {
             Read-only program overview
           </div>
         </div>
+
+        {onboarding?.visible ? (
+          <section aria-labelledby="coach-onboarding-title" className="mb-5 rounded-[8px] border border-[#B8892D]/50 bg-white p-5 shadow-[0_16px_45px_rgba(11,61,46,0.06)]">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#B8892D]">Getting started</p>
+                <h2 id="coach-onboarding-title" className="mt-2 text-2xl font-black">Your first event, step by step</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#51635C]">Follow the next incomplete step. This guide never blocks the normal coach workflow.</p>
+              </div>
+              <button type="button" disabled={onboardingPending} onClick={() => void setOnboardingVisibility(false)} className="min-h-11 rounded-[8px] border border-[#0B3D2E] px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B8892D]">
+                Dismiss guide
+              </button>
+            </div>
+            <ol className="mt-5 grid gap-3 md:grid-cols-2" aria-label="Coach onboarding steps">
+              {onboarding.steps.map((step, index) => (
+                <li key={step.id} className="rounded-[8px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
+                  <div className="flex gap-3">
+                    <span aria-hidden="true" className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${step.complete ? "bg-[#0B3D2E] text-white" : "bg-[#F0C96A] text-[#0B3D2E]"}`}>{step.complete ? "✓" : index + 1}</span>
+                    <div><Link href={step.href} className="font-black underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B8892D]">{step.label}</Link><p className="mt-1 text-sm text-[#51635C]">{step.detail}</p></div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-5 rounded-[8px] border border-[#2E6F76]/40 bg-[#E6F3F1] p-4">
+              <h3 className="font-black">First-tournament share checklist</h3>
+              {onboarding.readinessChecks.length ? <ul className="mt-3 grid gap-2 sm:grid-cols-2">{onboarding.readinessChecks.map((item) => <li key={item.id} className="text-sm font-semibold"><span aria-hidden="true">{item.complete ? "✓" : "○"}</span> {item.label}</li>)}</ul> : <p className="mt-2 text-sm text-[#51635C]">Create a Tournament to begin the readiness checklist.</p>}
+            </div>
+          </section>
+        ) : onboarding ? (
+          <div className="mb-5 flex justify-end"><button type="button" disabled={onboardingPending} onClick={() => void setOnboardingVisibility(true)} className="min-h-11 rounded-[8px] border border-[#0B3D2E] bg-white px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B8892D]">Resume setup guide</button></div>
+        ) : null}
 
         <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
           <SectionShell eyebrow="Today" title="Daily Command Center">

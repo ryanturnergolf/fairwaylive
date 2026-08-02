@@ -10,6 +10,7 @@ import {
   type TournamentAggregate,
 } from "./tournamentService";
 import { loadPracticePlannerReadModel } from "./practicePlannerService";
+import { loadRosterFoundation } from "./rosterFoundationService";
 
 export type CoachDashboardListItem = {
   id: string;
@@ -60,6 +61,13 @@ export type CoachDashboardReadModel = {
     recentlyFinalizedTournaments: CoachDashboardListItem[];
     recentlyCompletedPractices: CoachDashboardListItem[];
     recentPlayerUpdates: CoachDashboardListItem[];
+  };
+  onboarding: {
+    tournamentCount: number;
+    finalizedTournamentCount: number;
+    rosterPlayerCount: number;
+    readiness: DirectorTournamentSummary["readiness"] | null;
+    tournamentHref: string;
   };
 };
 
@@ -394,7 +402,7 @@ export const loadCoachDashboardReadModel = async (
 ): Promise<CoachDashboardReadModel> => {
   const generatedAt = new Date().toISOString();
   const today = new Date();
-  const [aggregates, directorReadModel] = await Promise.all([
+  const [aggregates, directorReadModel, rosterFoundation] = await Promise.all([
     loadSharedTournamentAggregates().catch((error) => {
       console.warn("[CoachDashboardService] Unable to load shared tournament aggregates.", error);
       return [];
@@ -402,6 +410,10 @@ export const loadCoachDashboardReadModel = async (
     loadDirectorDashboardReadModel(localTournaments).catch((error) => {
       console.warn("[CoachDashboardService] Unable to load director read model for coach dashboard.", error);
       return { generatedAt, tournaments: [] };
+    }),
+    loadRosterFoundation().catch((error) => {
+      console.warn("[CoachDashboardService] Unable to load roster foundation for onboarding.", error);
+      return { seasons: [], players: [], memberships: [] };
     }),
   ]);
   const seasonStatistics = await loadSeasonStatisticsReadModels({ aggregates }).catch((error) => {
@@ -480,6 +492,15 @@ export const loadCoachDashboardReadModel = async (
       recentPlayerUpdates: [
         emptyPlaceholder("player-updates-placeholder", "No player updates yet", "Roster changes will appear here in a later phase."),
       ],
+    },
+    onboarding: {
+      tournamentCount: sources.length,
+      finalizedTournamentCount: sources.filter((source) => Boolean(source.finalizedAt)).length,
+      rosterPlayerCount: rosterFoundation.players.filter((player) => !player.archivedAt).length,
+      readiness: directorReadModel.tournaments[0]?.readiness ?? null,
+      tournamentHref: directorReadModel.tournaments.length > 0
+        ? `/tournament/${encodeURIComponent(directorReadModel.tournaments[0].tournamentId || directorReadModel.tournaments[0].sharedTournamentId)}`
+        : "/dashboard",
     },
   };
 };
