@@ -41,9 +41,11 @@ The suite primarily uses deterministic fixtures, route interception, and static 
 
 GitHub does not expose repository secrets to pull requests from forks. Those runs will fail at the explicit configuration step rather than silently skipping Supabase-dependent coverage.
 
-The Phase 8 candidate hosted baseline is 260 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. An unfiltered local workspace run may therefore report 264 without changing the intended hosted baseline.
+The Phase 9 candidate hosted baseline is 265 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. An unfiltered local workspace run may therefore report 269 without changing the intended hosted baseline.
 
 Focused coach onboarding coverage verifies first-time visibility, durable dismiss/resume behavior, experienced-coach defaults, direct projection of certified readiness, and preservation of existing coach routes. Tests mock the authenticated Supabase account boundary and owner-scoped reads; they do not replace readiness calculations.
+
+Focused beta-support coverage verifies Coach Menu visibility, accessible workflow/troubleshooting content, 390×844 layout, safe contact fallback and validation, and the absence of operational mutations from support UX.
 
 Mobile Review helpers race the two valid web-first completion states: an automatically rendered `Verify Score` view or an enabled `Review & Submit Round` action. They follow the state that actually completes instead of inferring readiness from instantaneous button snapshots. The helper adds no sleeps and does not weaken Review assertions; its focused bound covers the existing sequential score and statistics hydration contract.
 

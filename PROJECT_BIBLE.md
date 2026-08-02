@@ -122,6 +122,10 @@ CI is a required verification signal for release approval, but it does not repla
 
 The Coach Dashboard provides a concise, non-blocking first-event guide for new or incomplete accounts. Dismissal and explicit resumption are durable coach-account preferences stored in Supabase Auth user metadata; browser storage is not the authority. Experienced coaches are not interrupted by default. The first-tournament share checklist projects the certified `TournamentReadiness` result for player sync, pairings, scorecards, and safe-to-share state, so the UI does not duplicate readiness calculations. The guide links to existing workflows without changing Tournament or Qualifying behavior.
 
+## Controlled Beta Support And Limitations
+
+`BETA_SUPPORT.md` defines controlled-beta support ownership, urgency, response targets, tournament-day escalation, issue details, communication, and incident handoff while deferring incident authority to `MONITORING_INCIDENT_RESPONSE.md`. `CONTROLLED_BETA_LIMITATIONS.md` is the authoritative beta limitations list, and `BETA_ISSUE_TEMPLATE.md` is the privacy-safe intake format. The Coach Help & Support page provides concise workflow and troubleshooting links without mutations. `NEXT_PUBLIC_BETA_SUPPORT_CONTACT` may expose a monitored email or HTTPS intake URL; when absent or invalid, coaches are directed to their designated beta support owner.
+
 ## Durable Roster Foundation
 
 Status: **DATA FOUNDATION DEPLOYED**

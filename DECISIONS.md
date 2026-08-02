@@ -4,6 +4,10 @@ Last updated: 2026-07-31
 
 ## Active Decisions
 
+### Beta support uses one operational authority and optional public contact
+
+`MONITORING_INCIDENT_RESPONSE.md` remains authoritative for severity and incident handling; the support guide references rather than duplicates that process. Known limitations have one authoritative controlled-beta document, and intake uses a privacy-safe template. The Coach Help page is read-only. An optional `NEXT_PUBLIC_BETA_SUPPORT_CONTACT` accepts a monitored email or HTTPS URL; invalid or missing configuration falls back to the coach's designated beta support owner. Personal contact details and secrets are never hardcoded.
+
 ### Coach onboarding state uses account metadata and certified readiness
 
 Onboarding dismissal and resumption are coach-owned UI preferences stored in Supabase Auth user metadata. This avoids a schema migration and avoids treating local browser storage as durable account state. Default visibility is derived from account experience, while explicit resumption remains available. First-tournament progress consumes `TournamentReadiness` checks and `isSafeToShare`; the onboarding UI does not calculate readiness independently and does not gate normal coach workflows.

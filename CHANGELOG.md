@@ -2,6 +2,13 @@
 
 ## 2026-08-01
 
+### Controlled Beta Phase 9 — Beta Support And Known Limitations
+
+- Added authoritative support, known-limitations, and issue-intake documentation for the invitation-only beta.
+- Added an accessible, mobile-responsive Coach Help & Support page covering the existing event workflow and safe troubleshooting.
+- Added optional `NEXT_PUBLIC_BETA_SUPPORT_CONTACT` public configuration with a safe designated-owner fallback.
+- Added focused navigation, content, mobile, contact-validation, and no-workflow-mutation coverage.
+
 ### Controlled Beta Phase 8 — Coach Onboarding And First-Tournament Guidance
 
 - Added concise first-event guidance for roster setup, statistics, event choice, setup, pairings, scorecards, sharing, Review, and finalization.

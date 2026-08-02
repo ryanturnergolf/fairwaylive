@@ -33,6 +33,7 @@ const groups = [
       ["Tasks", "/coach-dashboard/tasks"],
       ["Calendar", "/coach-dashboard/calendar"],
       ["Practice Planner", "/coach-dashboard/practice-planner"],
+      ["Help & Support", "/coach-dashboard/help"],
     ],
   },
 ] as const;
