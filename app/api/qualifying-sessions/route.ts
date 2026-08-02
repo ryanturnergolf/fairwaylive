@@ -171,17 +171,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validation.errors[0], errors: validation.errors }, { status: 400 });
     }
 
-    const rpcName = input.days.every((day) => Array.isArray(day.rounds) && day.rounds.length > 0)
-      ? "create_qualifying_session_draft_flexible"
-      : "create_qualifying_session_draft";
-    const { data, error } = await supabase.rpc(rpcName, {
+    const hasFlexibleRounds = input.days.every((day) => Array.isArray(day.rounds) && day.rounds.length > 0);
+    const hasStatisticSelection = Array.isArray(input.statisticDefinitionVersionIds);
+    const rpcName = hasStatisticSelection
+      ? "create_qualifying_session_draft_with_statistics"
+      : hasFlexibleRounds
+        ? "create_qualifying_session_draft_flexible"
+        : "create_qualifying_session_draft";
+    const rpcArguments: Record<string, unknown> = {
       input_name: input.name.trim(),
       input_roster_type: input.rosterType,
       input_scoring_mode: input.scoringMode,
       input_selected_players: input.selectedPlayers,
       input_groups: input.groups,
       input_days: input.days,
-    });
+    };
+    if (hasStatisticSelection) {
+      rpcArguments.input_statistic_definition_version_ids = input.statisticDefinitionVersionIds;
+    }
+    const { data, error } = await supabase.rpc(rpcName, rpcArguments);
     if (error) throw error;
     return NextResponse.json({ id: String(data) }, { status: 201 });
   } catch (error) {

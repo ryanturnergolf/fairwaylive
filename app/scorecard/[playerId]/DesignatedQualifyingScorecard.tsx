@@ -1,8 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { StatisticValue } from "../../lib/dynamicStatisticsModel";
+import {
+  loadMobileDynamicStatistics,
+  missingRequiredMobileStatistics,
+  saveMobileDynamicStatistics,
+  type MobileDynamicStatistics,
+  type MobileStatisticItem,
+} from "../../lib/services/mobileDynamicStatisticsService";
 
 type Model = {
+  tournamentId: string;
   qualifyingName: string; finalized: boolean; roundNumber: number; roundName: string; holeCount: number; startingHole?: number; holeSequence?: number[];
   playerId: string; playerName: string; scorerPlayerId: string; accessRole: "scorer" | "verifier";
   groupPlayers: Array<{ player_id: string; player_name: string }>;
@@ -23,12 +32,20 @@ export default function DesignatedQualifyingScorecard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [proposedScores, setProposedScores] = useState<string[]>([]);
+  const [dynamicStatistics, setDynamicStatistics] = useState<MobileDynamicStatistics | null>(null);
+  const [dynamicValues, setDynamicValues] = useState<Record<string, StatisticValue | null>>({});
   const load = useCallback(async () => {
     const query = new URLSearchParams({ shareToken, playerId, round: String(roundNumber) });
     const response = await fetch(`/api/qualifying-designated-scorecard?${query}`);
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "Unable to load scorecard.");
     setModel(body);
+    setDynamicStatistics(await loadMobileDynamicStatistics({
+      shareToken,
+      tournamentId: body.tournamentId,
+      roundNumber,
+      playerId,
+    }));
     const scorer = body.scorerPlayerId as string;
     const firstIncomplete = Array.from({ length: body.holeCount as number }, (_, index) => index + 1)
       .find((holeNumber) => body.groupPlayers.some((player: { player_id: string }) =>
@@ -59,13 +76,25 @@ export default function DesignatedQualifyingScorecard({
     setGir(stats?.green_in_regulation == null ? "" : stats.green_in_regulation ? "yes" : "no");
     setFairway(stats?.fairway_hit == null ? "" : stats.fairway_hit ? "yes" : "no");
     setPutts(stats?.putts == null ? "" : String(stats.putts));
-  }, [hole, model, playerId]);
+    if (dynamicStatistics?.assignment) {
+      setDynamicValues(Object.fromEntries(dynamicStatistics.items.map((item) => {
+        const latest = dynamicStatistics.values
+          .filter((value) => value.definitionVersionId === item.definitionVersionId && value.holeNumber === hole)
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))[0];
+        return [item.key, latest?.value ?? null];
+      })));
+    }
+  }, [dynamicStatistics, hole, model, playerId]);
   const currentScores = useMemo(() => model?.groupPlayers.map((player) => Number(scores[player.player_id])) ?? [], [model, scores]);
 
   const save = async () => {
     if (!model) return;
     setBusy(true); setError("");
     try {
+      if (dynamicStatistics?.assignment) {
+        const missing = missingRequiredMobileStatistics(dynamicStatistics.items, 4, dynamicValues);
+        if (missing.length > 0) throw new Error(`Complete required statistics: ${missing.map((item) => item.name).join(", ")}.`);
+      }
       const response = await fetch("/api/qualifying-designated-scorecard", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -73,13 +102,30 @@ export default function DesignatedQualifyingScorecard({
           scores: model.accessRole === "scorer" ? Object.fromEntries(
             model.groupPlayers.map((player) => [player.player_id, Number(scores[player.player_id])])
           ) : {},
-          greenInRegulation: gir === "" ? undefined : gir === "yes",
-          fairwayHit: fairway === "" ? undefined : fairway === "yes",
-          putts: putts === "" ? undefined : Number(putts),
+          greenInRegulation: dynamicStatistics?.assignment ? undefined : gir === "" ? undefined : gir === "yes",
+          fairwayHit: dynamicStatistics?.assignment ? undefined : fairway === "" ? undefined : fairway === "yes",
+          putts: dynamicStatistics?.assignment ? undefined : putts === "" ? undefined : Number(putts),
         }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Unable to save hole.");
+      if (dynamicStatistics?.assignment) {
+        await saveMobileDynamicStatistics({
+          shareToken,
+          tournamentId: model.tournamentId,
+          roundNumber,
+          playerId,
+          values: dynamicStatistics.items.flatMap((item) => {
+            const value = dynamicValues[item.key];
+            return value == null ? [] : [{
+              definitionVersionId: item.definitionVersionId,
+              holeNumber: hole,
+              value,
+              operationKey: crypto.randomUUID(),
+            }];
+          }),
+        });
+      }
       await load();
       if (hole < model.holeCount) setHole((value) => value + 1);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save hole."); }
@@ -133,8 +179,19 @@ export default function DesignatedQualifyingScorecard({
               ))}
             </div>
           ) : <p className="mt-3">Your designated scorer records group scores. You may record your personal statistics.</p>}
-          <h3 className="mt-5 font-black">My Statistics</h3>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {dynamicStatistics?.assignment ? (
+            dynamicStatistics.items.length > 0 ? <>
+              <h3 className="mt-5 font-black">My Statistics</h3>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {dynamicStatistics.items.map((item) => (
+                  <DynamicStatisticInput key={item.definitionVersionId} item={item} value={dynamicValues[item.key] ?? null}
+                    onChange={(value) => setDynamicValues((current) => ({ ...current, [item.key]: value }))} />
+                ))}
+              </div>
+            </> : <p className="mt-5 text-sm font-semibold text-[#51635C]">Score-only Qualifying · no hole statistics selected</p>
+          ) : <>
+            <h3 className="mt-5 font-black">My Statistics</h3>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <select aria-label="Fairway Hit" value={fairway} onChange={(e) => setFairway(e.target.value)} className="rounded border p-2">
               <option value="">Fairway —</option><option value="yes">Yes</option><option value="no">No</option>
             </select>
@@ -143,7 +200,8 @@ export default function DesignatedQualifyingScorecard({
             </select>
             <input aria-label="Putts" inputMode="numeric" value={putts} onChange={(e) => setPutts(e.target.value.replace(/\D/g, ""))}
               className="rounded border p-2" placeholder="Putts" />
-          </div>
+            </div>
+          </>}
           <button disabled={busy || model.finalized || (model.accessRole === "scorer" && currentScores.some((score) => !score))}
             onClick={() => void save()} className="mt-5 min-h-12 w-full rounded-full bg-[#0B3D2E] font-black text-white disabled:opacity-50">
             {busy ? "Saving…" : "Save Hole"}
@@ -184,4 +242,32 @@ export default function DesignatedQualifyingScorecard({
       </div>
     </main>
   );
+}
+
+function DynamicStatisticInput({ item, value, onChange }: {
+  item: MobileStatisticItem;
+  value: StatisticValue | null;
+  onChange: (value: StatisticValue | null) => void;
+}) {
+  const label = `${item.name}${item.isRequired ? " (required)" : ""}`;
+  if (item.inputType === "bounded_number") {
+    return <label className="font-bold">{label}<input aria-label={item.name} type="number"
+      min={item.configuration.minimum} max={item.configuration.maximum}
+      value={typeof value === "number" ? value : ""}
+      onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
+      className="mt-1 min-h-12 w-full rounded border p-2" /></label>;
+  }
+  if (item.inputType === "option_list") {
+    return <label className="font-bold">{label}<select aria-label={item.name}
+      value={typeof value === "string" ? value : ""}
+      onChange={(event) => onChange(event.target.value || null)} className="mt-1 min-h-12 w-full rounded border p-2">
+      <option value="">Select…</option>{item.configuration.options?.map((option) => <option key={option} value={option}>{option}</option>)}
+    </select></label>;
+  }
+  return <label className="font-bold">{label}<select aria-label={item.name}
+    value={typeof value === "boolean" ? String(value) : ""}
+    onChange={(event) => onChange(event.target.value === "" ? null : event.target.value === "true")}
+    className="mt-1 min-h-12 w-full rounded border p-2">
+    <option value="">Select…</option><option value="true">Yes</option><option value="false">No</option>
+  </select></label>;
 }

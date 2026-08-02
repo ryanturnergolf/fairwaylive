@@ -51,6 +51,12 @@ const womenPlayerIds = [
   "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
 ];
+const statisticVersions = {
+  fairway_hit: "20000000-0000-4000-8000-000000000001",
+  green_in_regulation: "20000000-0000-4000-8000-000000000002",
+  putts: "20000000-0000-4000-8000-000000000003",
+  penalty_strokes: "20000000-0000-4000-8000-000000000004",
+};
 
 const routeDurableRosters = async (page: Page) => {
   const now = "2026-08-02T12:00:00.000Z";
@@ -66,6 +72,30 @@ const routeDurableRosters = async (page: Page) => {
     if (table === "seasons") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(seasons) });
     if (table === "roster_players") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(players) });
     if (table === "season_roster_memberships") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(memberships) });
+    if (table === "statistic_definitions") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(Object.entries(statisticVersions).map(([key], index) => ({
+      id: `10000000-0000-4000-8000-00000000000${index + 1}`,
+      owner_id: null,
+      key,
+      name: key,
+      description: null,
+      input_type: key === "putts" || key === "penalty_strokes" ? "bounded_number" : "yes_no",
+      is_built_in: true,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    }))) });
+    if (table === "statistic_definition_versions") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(Object.entries(statisticVersions).map(([key, id], index) => ({
+      id,
+      definition_id: `10000000-0000-4000-8000-00000000000${index + 1}`,
+      owner_id: null,
+      version: 1,
+      name: ({ fairway_hit: "Fairway Hit", green_in_regulation: "Green in Regulation", putts: "Putts", penalty_strokes: "Penalty Strokes" } as Record<string, string>)[key],
+      description: null,
+      input_type: key === "putts" || key === "penalty_strokes" ? "bounded_number" : "yes_no",
+      configuration: {},
+      applicability: {},
+      created_at: now,
+    }))) });
     return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   });
 };
@@ -161,6 +191,13 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   await page.getByLabel("Designated Group Scorer").check();
   await page.getByRole("button", { name: "Continue" }).click();
 
+  await expect(page.getByRole("heading", { name: "Record During Qualifying" })).toBeVisible();
+  await expect(page.getByLabel("Fairway Hit")).toBeChecked();
+  await expect(page.getByLabel("Green in Regulation")).toBeChecked();
+  await expect(page.getByLabel("Putts")).toBeChecked();
+  await expect(page.getByLabel("Penalty Strokes")).not.toBeChecked();
+  await page.getByRole("button", { name: "Continue" }).click();
+
   await expect(page.getByRole("heading", { name: "Review qualifying" })).toBeVisible();
   await expect(page.getByText("Fall Team Qualifying", { exact: true })).toBeVisible();
   await expect(page.getByText("Women's roster", { exact: true })).toBeVisible();
@@ -183,6 +220,11 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   expect(savedInput?.selectedPlayers.map((player) => player.rosterPlayerId).sort()).toEqual([...womenPlayerIds].sort());
   expect(savedInput?.groups).toHaveLength(2);
   expect(savedInput?.days).toHaveLength(2);
+  expect(savedInput?.statisticDefinitionVersionIds).toEqual([
+    statisticVersions.fairway_hit,
+    statisticVersions.green_in_regulation,
+    statisticVersions.putts,
+  ]);
 });
 
 test("creation validation rejects duplicates, empty groups, and incomplete assignments", () => {

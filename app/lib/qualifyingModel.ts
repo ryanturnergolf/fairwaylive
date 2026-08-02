@@ -133,6 +133,7 @@ export type CreateQualifyingSessionInput = {
   scoringMode: QualifyingScoringMode;
   selectedPlayers: QualifyingRosterPlayer[];
   groups: QualifyingGroup[];
+  statisticDefinitionVersionIds?: string[];
   days: Array<{
     dayNumber: number;
     playDate: string;

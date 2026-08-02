@@ -18,10 +18,15 @@ import {
 import { loadCurrentQualifyingRoster } from "../../../lib/services/rosterFoundationService";
 import { buildQualifyingPresetRounds, buildQualifyingRoundPlan } from "../../../lib/services/qualifyingScheduleService";
 import { createQualifyingSessionDraft } from "../../../lib/services/qualifyingSessionService";
+import {
+  getDefaultQualifyingStatisticKeys,
+  loadQualifyingStatisticChoices,
+  type QualifyingStatisticChoice,
+} from "../../../lib/services/qualifyingStatisticsSelectionService";
 
 type DayDraft = CreateQualifyingSessionInput["days"][number] & { rounds: NonNullable<CreateQualifyingSessionInput["days"][number]["rounds"]> };
 
-const steps = ["Basics", "Players", "Schedule", "Groups", "Scoring", "Review"];
+const steps = ["Basics", "Players", "Schedule", "Groups", "Scoring", "Statistics", "Review"];
 const inputClass = "mt-2 w-full rounded-lg border border-[#D9D0C0] bg-white px-3 py-2 text-[#0B3D2E]";
 const emptyDay = (dayNumber: number): DayDraft => ({
   dayNumber,
@@ -49,10 +54,19 @@ export default function CreateQualifyingPage() {
   const [rosterSeasonName, setRosterSeasonName] = useState("");
   const [isRosterLoading, setIsRosterLoading] = useState(true);
   const [rosterError, setRosterError] = useState("");
+  const [statistics, setStatistics] = useState<QualifyingStatisticChoice[]>([]);
+  const [selectedStatisticKeys, setSelectedStatisticKeys] = useState<Set<string>>(getDefaultQualifyingStatisticKeys);
+  const [statisticsError, setStatisticsError] = useState("");
+  const [isStatisticsLoading, setIsStatisticsLoading] = useState(true);
 
   const roster = rosters[rosterType];
   const selectedPlayers = roster.filter((player) => selectedPlayerIds.includes(player.id));
-  const input: CreateQualifyingSessionInput = { name, rosterType, selectedPlayers, days, groups, scoringMode };
+  const statisticDefinitionVersionIds = statistics
+    .filter((statistic) => selectedStatisticKeys.has(statistic.key))
+    .map((statistic) => statistic.definitionVersionId);
+  const input: CreateQualifyingSessionInput = {
+    name, rosterType, selectedPlayers, days, groups, scoringMode, statisticDefinitionVersionIds,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +84,20 @@ export default function CreateQualifyingPage() {
     }).finally(() => {
       if (!cancelled) setIsRosterLoading(false);
     });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsStatisticsLoading(true);
+    void loadQualifyingStatisticChoices()
+      .then((choices) => { if (!cancelled) setStatistics(choices); })
+      .catch((loadError) => {
+        if (!cancelled) setStatisticsError(loadError instanceof Error ? loadError.message : "Unable to load statistics.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsStatisticsLoading(false);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -129,6 +157,8 @@ export default function CreateQualifyingPage() {
         return "Assign every selected player to exactly one group.";
       }
     }
+    if (step === 5 && isStatisticsLoading) return "Wait for statistics to finish loading.";
+    if (step === 5 && statisticsError) return statisticsError;
     return "";
   };
 
@@ -139,7 +169,7 @@ export default function CreateQualifyingPage() {
       return;
     }
     setError("");
-    setStep((current) => Math.min(5, current + 1));
+    setStep((current) => Math.min(6, current + 1));
   };
 
   const save = async () => {
@@ -173,7 +203,7 @@ export default function CreateQualifyingPage() {
           <Link href="/coach-dashboard/qualifying-manager" className="text-sm font-bold text-[#51635C]">Cancel</Link>
         </div>
 
-        <ol className="mt-7 grid grid-cols-3 gap-2 md:grid-cols-6" aria-label="Creation progress">
+        <ol className="mt-7 grid grid-cols-3 gap-2 md:grid-cols-7" aria-label="Creation progress">
           {steps.map((label, index) => (
             <li key={label} className={`rounded-lg px-2 py-2 text-center text-xs font-black ${index === step ? "bg-[#0B3D2E] text-white" : "bg-white text-[#51635C]"}`}>
               {index + 1}. {label}
@@ -304,12 +334,51 @@ export default function CreateQualifyingPage() {
 
           {step === 5 && (
             <div>
+              <h2 className="text-2xl font-black">Record During Qualifying</h2>
+              <p className="mt-2 text-sm text-[#51635C]">Choose the hole statistics players will record. Clear every selection for a score-only Qualifying.</p>
+              {isStatisticsLoading ? <p className="mt-5 text-sm font-semibold text-[#51635C]">Loading statistics…</p> : null}
+              {statisticsError ? <p role="alert" className="mt-5 text-sm font-semibold text-[#8A2E2E]">{statisticsError}</p> : null}
+              {!isStatisticsLoading && !statisticsError ? (
+                <div className="mt-5 grid gap-5">
+                  {([
+                    ["Built-in statistics", statistics.filter((statistic) => statistic.group === "Built-in statistics")],
+                    ["Custom statistics", statistics.filter((statistic) => statistic.group === "Custom statistics")],
+                  ] as const).map(([label, definitions]) => definitions.length > 0 ? (
+                    <fieldset key={label} className="rounded-lg border border-[#D9D0C0] p-4">
+                      <legend className="px-2 font-black">{label}</legend>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {definitions.map((statistic) => (
+                          <label key={statistic.definitionId} className="rounded-lg bg-[#FCFAF5] p-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedStatisticKeys.has(statistic.key)}
+                              onChange={(event) => setSelectedStatisticKeys((current) => {
+                                const next = new Set(current);
+                                if (event.target.checked) next.add(statistic.key); else next.delete(statistic.key);
+                                return next;
+                              })}
+                            />{" "}<span className="font-black">{statistic.name}</span>
+                            {statistic.description ? <span className="mt-1 block text-sm text-[#51635C]">{statistic.description}</span> : null}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  ) : null)}
+                  {statistics.length === 0 ? <p className="rounded-lg bg-[#FCFAF5] p-4 text-sm text-[#51635C]">No statistics are currently available. This Qualifying will be score-only.</p> : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {step === 6 && (
+            <div>
               <h2 className="text-2xl font-black">Review qualifying</h2>
               <dl className="mt-5 grid gap-4 sm:grid-cols-2">
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Name</dt><dd className="mt-1 font-bold">{name}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Team</dt><dd className="mt-1 font-bold">{rosterType === "men" ? "Men's roster" : "Women's roster"}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Players</dt><dd className="mt-1">{selectedPlayers.map((player) => player.name).join(", ")}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Scoring mode</dt><dd className="mt-1 font-bold">{scoringMode === "reciprocal" ? "Reciprocal" : "Designated Group Scorer"}</dd></div>
+                <div><dt className="text-xs font-black uppercase text-[#B8892D]">Statistics</dt><dd className="mt-1 font-bold">{statisticDefinitionVersionIds.length > 0 ? statistics.filter((statistic) => selectedStatisticKeys.has(statistic.key)).map((statistic) => statistic.name).join(", ") : "Score only"}</dd></div>
               </dl>
               <h3 className="mt-6 font-black">Days and hole mapping</h3>
               <div className="mt-2 grid gap-2">
@@ -326,7 +395,7 @@ export default function CreateQualifyingPage() {
           {error && <p role="alert" className="mt-5 rounded-lg bg-[#FFF4F1] p-3 font-bold text-[#8A2E2E]">{error}</p>}
           <div className="mt-7 flex justify-between gap-3">
             <button type="button" disabled={step === 0 || isSaving} className="rounded-lg border border-[#0B3D2E] px-5 py-2 font-black disabled:opacity-40" onClick={() => { setError(""); setStep((current) => Math.max(0, current - 1)); }}>Back</button>
-            {step < 5 ? (
+            {step < 6 ? (
               <button type="button" className="rounded-lg bg-[#0B3D2E] px-5 py-2 font-black text-white" onClick={next}>Continue</button>
             ) : (
               <button type="button" disabled={isSaving} className="rounded-lg bg-[#0B3D2E] px-5 py-2 font-black text-white disabled:opacity-50" onClick={() => void save()}>{isSaving ? "Saving…" : "Save Qualifying"}</button>

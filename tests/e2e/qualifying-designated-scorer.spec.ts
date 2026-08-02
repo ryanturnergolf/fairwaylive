@@ -115,13 +115,24 @@ test("designated scorer access opens the existing scorecard route with an explic
 
 test("designated scorecard separates scorer group entry from verifier statistics access", async ({ page }) => {
   await page.route("**/api/qualifying-designated-scorecard?**", (route) => route.fulfill({ json: {
-    qualifyingName: "Q8 Test", finalized: false, roundNumber: 1, roundName: "Round 1", holeCount: 9,
+    tournamentId: "tournament-q8", qualifyingName: "Q8 Test", finalized: false, roundNumber: 1, roundName: "Round 1", holeCount: 9,
     playerId: "alex", playerName: "Alex", scorerPlayerId: "alex", accessRole: "scorer",
     groupPlayers: [{ player_id: "alex", player_name: "Alex" }, { player_id: "jordan", player_name: "Jordan" }],
     holes: [], review: null,
+  }}));
+  await page.route("**/api/mobile-dynamic-statistics", (route) => route.fulfill({ json: {
+    assignment: { eventType: "qualifying", eventId: "q8", packageVersionId: "package-q8" },
+    items: [{
+      definitionVersionId: "version-confidence", key: "confidence", name: "Confidence",
+      description: null, inputType: "option_list", configuration: { options: ["Low", "High"] },
+      applicability: {}, displayOrder: 0, isRequired: false,
+    }],
+    values: [],
   }}));
   await page.goto("/scorecard/alex?round=1&shareToken=q8-token&qualifyingPolicy=designated_scorer&accessRole=scorer");
   await expect(page.getByLabel("Alex score")).toBeVisible();
   await expect(page.getByLabel("Jordan score")).toBeVisible();
   await expect(page.getByText("My Statistics")).toBeVisible();
+  await expect(page.getByLabel("Confidence")).toBeVisible();
+  await expect(page.getByLabel("Fairway Hit")).toHaveCount(0);
 });
