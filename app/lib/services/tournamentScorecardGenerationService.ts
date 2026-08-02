@@ -2,7 +2,7 @@ export type TournamentScorecardArtifact = {
   tournamentId: string;
   roundNumber: number;
   playerId: string;
-  holeCount: 9 | 18;
+  holeCount: number;
 };
 
 export const validateTournamentScorecardArtifacts = (

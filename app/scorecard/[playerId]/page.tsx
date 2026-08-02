@@ -43,6 +43,7 @@ import {
 
 type Hole = {
   holeNumber: number;
+  courseHoleNumber?: number;
   par: number;
   yardage: number;
 };
@@ -170,6 +171,14 @@ const defaultHoles: Hole[] = [
   { holeNumber: 17, par: 5, yardage: 556 },
   { holeNumber: 18, par: 4, yardage: 421 },
 ];
+
+const buildRoundHoles = (startingHole: number, holeCount: number) =>
+  Array.from({ length: holeCount }, (_, index) => {
+    const courseHoleNumber = ((startingHole - 1 + index) % 18) + 1;
+    return { ...defaultHoles[courseHoleNumber - 1], holeNumber: index + 1, courseHoleNumber };
+  });
+
+const getDisplayHoleNumber = (hole: Hole) => hole.courseHoleNumber ?? hole.holeNumber;
 
 const sampleScorecards: Record<string, PlayerScorecard> = {
   "101": {
@@ -548,7 +557,10 @@ function ReciprocalPlayerScorecardPage() {
           playerName: selectedPlayer.playerName,
           team: selectedPlayer.teamName,
           round: tournamentState.scorecards?.roundSetup?.roundNumber || "1",
-          holes: defaultHoles.slice(0, holeCount),
+          holes: buildRoundHoles(
+            Math.max(1, Math.min(18, Number(pairing.startingHole) || 1)),
+            holeCount
+          ),
           markerPlayerId,
           markerPlayerName: markerPlayer?.playerName,
           markerTeam: markerPlayer?.teamName,
@@ -2262,7 +2274,7 @@ function ReciprocalPlayerScorecardPage() {
                         !isMatch && selfScore > 0 && markerScore > 0 ? "bg-red-100" : selfScore > 0 && markerScore > 0 ? "bg-green-50" : ""
                       }`}
                     >
-                      <td className="px-2 py-2 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
+                      <td className="px-2 py-2 font-black text-[#0B3D2E]">{getDisplayHoleNumber(hole)}</td>
                       <td className="px-2 py-2 text-center font-black text-[#0B3D2E]">
                         {selfScore > 0 ? selfScore : "—"}
                       </td>
@@ -2311,7 +2323,7 @@ function ReciprocalPlayerScorecardPage() {
                 <div className="mt-2 space-y-1">
                   {discrepancies.map((d) => (
                     <p key={d.holeNumber} className="text-xs text-red-800">
-                      Hole {d.holeNumber}: Self {d.self} vs Marker {d.marker}
+                      Hole {scorecard.holes[d.holeNumber - 1] ? getDisplayHoleNumber(scorecard.holes[d.holeNumber - 1]) : d.holeNumber}: Self {d.self} vs Marker {d.marker}
                     </p>
                   ))}
                 </div>
@@ -2573,7 +2585,7 @@ function ReciprocalPlayerScorecardPage() {
         <div className="mt-5 rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
-              Hole {currentHole.holeNumber}
+              Hole {getDisplayHoleNumber(currentHole)}
             </p>
             {isHoleSaved ? (
               <span className="rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
@@ -2585,7 +2597,7 @@ function ReciprocalPlayerScorecardPage() {
           <div className="mt-4 grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Hole</p>
-              <p className="mt-2 text-lg font-black text-[#0B3D2E]">{currentHole.holeNumber}</p>
+              <p className="mt-2 text-lg font-black text-[#0B3D2E]">{getDisplayHoleNumber(currentHole)}</p>
             </div>
             <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-center">
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Par</p>

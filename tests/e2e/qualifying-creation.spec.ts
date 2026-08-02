@@ -143,15 +143,14 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
 
   await page.getByLabel("Number of qualifying days").fill("2");
   await page.getByLabel("Day 1 date").fill("2026-08-01");
-  await page.getByLabel("Day 1 holes").selectOption("27");
+  await page.getByRole("button", { name: "27-hole preset" }).first().click();
   await page.getByLabel("Day 1 course").fill("North Course");
   await page.getByLabel("Day 1 tee").fill("Gold");
-  await page.getByLabel("Day 1 starting hole").fill("1");
   await page.getByLabel("Day 2 date").fill("2026-08-02");
-  await page.getByLabel("Day 2 holes").selectOption("18");
+  await page.getByRole("button", { name: "18-hole preset" }).nth(1).click();
   await page.getByLabel("Day 2 course").fill("South Course");
   await page.getByLabel("Day 2 tee").fill("Blue");
-  await page.getByLabel("Day 2 starting hole").fill("10");
+  await page.getByLabel("Day 2 Round 1 start hole").fill("10");
   await page.getByRole("button", { name: "Continue" }).click();
 
   await page.getByRole("button", { name: "Continue" }).click();
@@ -165,9 +164,9 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   await expect(page.getByRole("heading", { name: "Review qualifying" })).toBeVisible();
   await expect(page.getByText("Fall Team Qualifying", { exact: true })).toBeVisible();
   await expect(page.getByText("Women's roster", { exact: true })).toBeVisible();
-  await expect(page.getByText("Round 1: Day 1, Segment 1, 18 holes")).toBeVisible();
-  await expect(page.getByText("Round 2: Day 1, Segment 2, 9 holes")).toBeVisible();
-  await expect(page.getByText("Round 3: Day 2, Segment 1, 18 holes")).toBeVisible();
+  await expect(page.getByText("Round 1: Day 1, Round 1, holes 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18")).toBeVisible();
+  await expect(page.getByText("Round 2: Day 1, Round 2, holes 1, 2, 3, 4, 5, 6, 7, 8, 9")).toBeVisible();
+  await expect(page.getByText("Round 3: Day 2, Day 2, holes 10, 11, 12, 13, 14, 15, 16, 17, 18, 1, 2, 3, 4, 5, 6, 7, 8, 9")).toBeVisible();
   await expect(page.getByText("Designated Group Scorer", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Save Qualifying" }).click();

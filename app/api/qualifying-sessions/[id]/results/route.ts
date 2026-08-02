@@ -82,7 +82,7 @@ export async function GET(
         .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,created_at,updated_at")
         .eq("qualifying_session_id", id).order("day_number"),
       supabase.from("tournament_rounds")
-        .select("id,tournament_id,round_number,name,hole_count,qualifying_session_id,qualifying_day,qualifying_segment,created_at,updated_at")
+        .select("id,tournament_id,round_number,name,hole_count,qualifying_session_id,qualifying_day,qualifying_segment,starting_hole,ending_hole,hole_sequence,created_at,updated_at")
         .eq("qualifying_session_id", id).order("round_number"),
       supabase.from("qualifying_participants")
         .select("player_id,player_name,display_order")
@@ -157,6 +157,9 @@ export async function GET(
       roundNumber: Number(round.round_number),
       name: String(round.name),
       holeCount: round.hole_count,
+      startingHole: Number(round.starting_hole ?? 1),
+      endingHole: Number(round.ending_hole ?? (((Number(round.starting_hole ?? 1) + Number(round.hole_count) - 2) % 18) + 1)),
+      holeSequence: Array.isArray(round.hole_sequence) ? round.hole_sequence.map(Number) : Array.from({ length: Number(round.hole_count) }, (_, index) => ((Number(round.starting_hole ?? 1) - 1 + index) % 18) + 1),
       qualifyingSessionId: String(round.qualifying_session_id),
       qualifyingDay: Number(round.qualifying_day),
       qualifyingSegment: Number(round.qualifying_segment),

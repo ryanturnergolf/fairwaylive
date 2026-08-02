@@ -45,13 +45,18 @@ export async function GET(request: Request) {
     if (sessionError) throw sessionError;
 
     const sessionIds = (sessions ?? []).map((session) => String(session.id));
-    const [{ data: days, error: dayError }, { data: participants, error: participantError }, { data: groups, error: groupError }] = sessionIds.length > 0
+    const [{ data: days, error: dayError }, { data: configuredRounds, error: roundError }, { data: participants, error: participantError }, { data: groups, error: groupError }] = sessionIds.length > 0
       ? await Promise.all([
         supabase
           .from("qualifying_days")
           .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,created_at,updated_at")
           .in("qualifying_session_id", sessionIds)
           .order("day_number"),
+        supabase
+          .from("qualifying_rounds")
+          .select("id,qualifying_session_id,qualifying_day_id,round_order,display_name,starting_hole,hole_count,ending_hole,hole_sequence")
+          .in("qualifying_session_id", sessionIds)
+          .order("round_order"),
         supabase
           .from("qualifying_participants")
           .select("id,qualifying_session_id,roster_player_id,player_id,player_name,roster_type,display_order")
@@ -64,11 +69,12 @@ export async function GET(request: Request) {
           .order("display_order"),
       ])
       : [
-        { data: [], error: null },
+        { data: [], error: null }, { data: [], error: null },
         { data: [], error: null },
         { data: [], error: null },
       ];
     if (dayError) throw dayError;
+    if (roundError) throw roundError;
     if (participantError) throw participantError;
     if (groupError) throw groupError;
 
@@ -137,6 +143,12 @@ export async function GET(request: Request) {
             courseName: day.course_name,
             teeName: day.tee_name,
             startingHole: day.starting_hole,
+            rounds: (configuredRounds ?? []).filter((round) => round.qualifying_day_id === day.id).map((round) => ({
+              roundOrder: round.round_order,
+              startingHole: round.starting_hole,
+              holeCount: round.hole_count,
+              displayName: round.display_name,
+            })),
             createdAt: day.created_at,
             updatedAt: day.updated_at,
           })),
@@ -159,7 +171,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validation.errors[0], errors: validation.errors }, { status: 400 });
     }
 
-    const { data, error } = await supabase.rpc("create_qualifying_session_draft", {
+    const rpcName = input.days.every((day) => Array.isArray(day.rounds) && day.rounds.length > 0)
+      ? "create_qualifying_session_draft_flexible"
+      : "create_qualifying_session_draft";
+    const { data, error } = await supabase.rpc(rpcName, {
       input_name: input.name.trim(),
       input_roster_type: input.rosterType,
       input_scoring_mode: input.scoringMode,

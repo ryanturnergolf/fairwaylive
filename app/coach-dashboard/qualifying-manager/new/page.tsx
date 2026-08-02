@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import type {
   CreateQualifyingSessionInput,
   QualifyingGroup,
-  QualifyingHolesPerDay,
   QualifyingRosterPlayer,
   QualifyingRosterType,
   QualifyingScoringMode,
@@ -17,10 +16,10 @@ import {
   validateQualifyingCreation,
 } from "../../../lib/services/qualifyingCreationService";
 import { loadCurrentQualifyingRoster } from "../../../lib/services/rosterFoundationService";
-import { buildQualifyingRoundPlan } from "../../../lib/services/qualifyingScheduleService";
+import { buildQualifyingPresetRounds, buildQualifyingRoundPlan } from "../../../lib/services/qualifyingScheduleService";
 import { createQualifyingSessionDraft } from "../../../lib/services/qualifyingSessionService";
 
-type DayDraft = CreateQualifyingSessionInput["days"][number];
+type DayDraft = CreateQualifyingSessionInput["days"][number] & { rounds: NonNullable<CreateQualifyingSessionInput["days"][number]["rounds"]> };
 
 const steps = ["Basics", "Players", "Schedule", "Groups", "Scoring", "Review"];
 const inputClass = "mt-2 w-full rounded-lg border border-[#D9D0C0] bg-white px-3 py-2 text-[#0B3D2E]";
@@ -31,6 +30,7 @@ const emptyDay = (dayNumber: number): DayDraft => ({
   courseName: "",
   teeName: "",
   startingHole: 1,
+  rounds: buildQualifyingPresetRounds(18),
 });
 
 export default function CreateQualifyingPage() {
@@ -92,6 +92,18 @@ export default function CreateQualifyingPage() {
     setDays((current) => current.map((day, dayIndex) => dayIndex === index ? { ...day, ...patch } : day));
   };
 
+  const replaceDayRounds = (dayIndex: number, rounds: DayDraft["rounds"]) => {
+    const normalized = rounds.map((round, index) => ({ ...round, roundOrder: index + 1 }));
+    updateDay(dayIndex, {
+      rounds: normalized,
+      holesTotal: normalized.reduce((total, round) => total + round.holeCount, 0),
+      startingHole: normalized[0]?.startingHole ?? 1,
+    });
+  };
+
+  const applyPreset = (dayIndex: number, holes: 9 | 18 | 27 | 36) =>
+    replaceDayRounds(dayIndex, buildQualifyingPresetRounds(holes));
+
   const assignPlayer = (playerId: string, groupId: string) => {
     setGroups((current) =>
       current.map((group) => ({
@@ -108,7 +120,7 @@ export default function CreateQualifyingPage() {
     if (step === 1 && selectedPlayers.length < 1) return "Select at least one player.";
     if (
       step === 2 &&
-      days.some((day) => !day.playDate || !day.courseName.trim() || !day.teeName.trim() || day.startingHole < 1 || day.startingHole > 18)
+      days.some((day) => !day.playDate || !day.courseName.trim() || !day.teeName.trim() || day.rounds.length < 1 || day.rounds.some((round) => round.startingHole < 1 || round.startingHole > 18 || round.holeCount < 1 || round.holeCount > 18))
     ) return "Complete every day before continuing.";
     if (step === 3) {
       if (groups.length < 1 || groups.some((group) => group.playerIds.length < 1)) return "Empty groups are not allowed.";
@@ -225,10 +237,31 @@ export default function CreateQualifyingPage() {
                     <legend className="px-2 font-black">Day {day.dayNumber}</legend>
                     <div className="grid gap-4 md:grid-cols-3">
                       <label className="font-bold">Date<input aria-label={`Day ${day.dayNumber} date`} type="date" className={inputClass} value={day.playDate} onChange={(event) => updateDay(index, { playDate: event.target.value })} /></label>
-                      <label className="font-bold">Holes<select aria-label={`Day ${day.dayNumber} holes`} className={inputClass} value={day.holesTotal} onChange={(event) => updateDay(index, { holesTotal: Number(event.target.value) as QualifyingHolesPerDay })}>{[9, 18, 27, 36].map((holes) => <option key={holes}>{holes}</option>)}</select></label>
-                      <label className="font-bold">Starting hole<input aria-label={`Day ${day.dayNumber} starting hole`} type="number" min={1} max={18} className={inputClass} value={day.startingHole} onChange={(event) => updateDay(index, { startingHole: Number(event.target.value) })} /></label>
                       <label className="font-bold">Course<input aria-label={`Day ${day.dayNumber} course`} className={inputClass} value={day.courseName} onChange={(event) => updateDay(index, { courseName: event.target.value })} /></label>
                       <label className="font-bold">Tee<input aria-label={`Day ${day.dayNumber} tee`} className={inputClass} value={day.teeName} onChange={(event) => updateDay(index, { teeName: event.target.value })} /></label>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2" aria-label={`Day ${day.dayNumber} presets`}>
+                      {[9, 18, 27, 36].map((holes) => <button key={holes} type="button" className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-sm font-black" onClick={() => applyPreset(index, holes as 9 | 18 | 27 | 36)}>{holes}-hole preset</button>)}
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      {day.rounds.map((round, roundIndex) => {
+                        const endingHole = ((round.startingHole + round.holeCount - 2) % 18) + 1;
+                        const updateRound = (patch: Partial<typeof round>) => replaceDayRounds(index, day.rounds.map((item, itemIndex) => itemIndex === roundIndex ? { ...item, ...patch } : item));
+                        return <div key={`${day.dayNumber}-${roundIndex}`} className="rounded-lg bg-[#FCFAF5] p-4">
+                          <div className="flex items-center justify-between gap-3"><strong>Round {roundIndex + 1}</strong><div className="flex gap-3">
+                            <button type="button" disabled={roundIndex === 0} aria-label={`Move Day ${day.dayNumber} Round ${roundIndex + 1} up`} onClick={() => { const next = [...day.rounds]; [next[roundIndex - 1], next[roundIndex]] = [next[roundIndex], next[roundIndex - 1]]; replaceDayRounds(index, next); }}>Up</button>
+                            <button type="button" disabled={roundIndex === day.rounds.length - 1} aria-label={`Move Day ${day.dayNumber} Round ${roundIndex + 1} down`} onClick={() => { const next = [...day.rounds]; [next[roundIndex], next[roundIndex + 1]] = [next[roundIndex + 1], next[roundIndex]]; replaceDayRounds(index, next); }}>Down</button>
+                            <button type="button" disabled={day.rounds.length === 1} className="text-[#8A2E2E]" onClick={() => replaceDayRounds(index, day.rounds.filter((_, itemIndex) => itemIndex !== roundIndex))}>Remove</button>
+                          </div></div>
+                          <div className="mt-3 grid gap-3 md:grid-cols-3">
+                            <label className="font-bold">Round name<input aria-label={`Day ${day.dayNumber} Round ${roundIndex + 1} name`} className={inputClass} value={round.displayName} onChange={(event) => updateRound({ displayName: event.target.value })} /></label>
+                            <label className="font-bold">Start hole<input aria-label={`Day ${day.dayNumber} Round ${roundIndex + 1} start hole`} type="number" min={1} max={18} className={inputClass} value={round.startingHole} onChange={(event) => updateRound({ startingHole: Number(event.target.value) })} /></label>
+                            <label className="font-bold">Hole count<input aria-label={`Day ${day.dayNumber} Round ${roundIndex + 1} hole count`} type="number" min={1} max={18} className={inputClass} value={round.holeCount} onChange={(event) => updateRound({ holeCount: Number(event.target.value) })} /></label>
+                          </div>
+                          <p className="mt-2 text-sm text-[#51635C]">Ends on hole {endingHole} · {round.holeCount} scoring positions</p>
+                        </div>;
+                      })}
+                      <button type="button" className="justify-self-start rounded-lg bg-[#0B3D2E] px-4 py-2 font-black text-white" onClick={() => replaceDayRounds(index, [...day.rounds, { roundOrder: day.rounds.length + 1, startingHole: 1, holeCount: 9, displayName: "" }])}>Add Round</button>
                     </div>
                   </fieldset>
                 ))}
@@ -280,8 +313,8 @@ export default function CreateQualifyingPage() {
               </dl>
               <h3 className="mt-6 font-black">Days and hole mapping</h3>
               <div className="mt-2 grid gap-2">
-                {days.map((day) => <p key={day.dayNumber} className="rounded-lg bg-[#FCFAF5] p-3">Day {day.dayNumber}: {day.playDate} · {day.holesTotal} holes · {day.courseName} · {day.teeName} · Start {day.startingHole}</p>)}
-                {buildQualifyingRoundPlan(days).map((round) => <p key={round.roundNumber} className="text-sm text-[#51635C]">Round {round.roundNumber}: Day {round.qualifyingDay}, Segment {round.qualifyingSegment}, {round.holeCount} holes</p>)}
+                {days.map((day) => <p key={day.dayNumber} className="rounded-lg bg-[#FCFAF5] p-3">Day {day.dayNumber}: {day.playDate} · {day.holesTotal} holes across {day.rounds.length} round{day.rounds.length === 1 ? "" : "s"} · {day.courseName} · {day.teeName}</p>)}
+                {buildQualifyingRoundPlan(days).map((round) => <p key={round.roundNumber} className="text-sm text-[#51635C]">Round {round.roundNumber}: Day {round.qualifyingDay}, {round.name}, holes {round.holeSequence?.join(", ")}</p>)}
               </div>
               <h3 className="mt-6 font-black">Groups</h3>
               <div className="mt-2 grid gap-2">

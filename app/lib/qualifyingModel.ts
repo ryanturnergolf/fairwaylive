@@ -1,6 +1,6 @@
-export const qualifyingHoleOptions = [9, 18, 27, 36] as const;
+export const qualifyingHolePresets = [9, 18, 27, 36] as const;
 
-export type QualifyingHolesPerDay = (typeof qualifyingHoleOptions)[number];
+export type QualifyingHolesPerDay = number;
 export type QualifyingRosterType = "men" | "women";
 export type QualifyingScoringMode = "reciprocal" | "designated_scorer";
 export type QualifyingSessionStatus =
@@ -82,8 +82,16 @@ export type QualifyingDay = {
   courseName: string;
   teeName: string;
   startingHole: number;
+  rounds?: QualifyingRoundDefinition[];
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type QualifyingRoundDefinition = {
+  roundOrder: number;
+  startingHole: number;
+  holeCount: number;
+  displayName: string;
 };
 
 export type QualifyingRoundMapping = {
@@ -91,7 +99,10 @@ export type QualifyingRoundMapping = {
   tournamentId: string;
   roundNumber: number;
   name: string;
-  holeCount: 9 | 18;
+  holeCount: number;
+  startingHole?: number;
+  endingHole?: number;
+  holeSequence?: number[];
   qualifyingSessionId: string;
   qualifyingDay: number;
   qualifyingSegment: number;
@@ -129,6 +140,7 @@ export type CreateQualifyingSessionInput = {
     courseName: string;
     teeName: string;
     startingHole: number;
+    rounds?: QualifyingRoundDefinition[];
   }>;
 };
 

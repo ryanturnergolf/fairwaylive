@@ -47,6 +47,9 @@ type TournamentRoundRow = {
   qualifying_session_id: string;
   qualifying_day: number;
   qualifying_segment: number;
+  starting_hole?: number | null;
+  ending_hole?: number | null;
+  hole_sequence?: number[] | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -131,6 +134,9 @@ const mapRound = (row: TournamentRoundRow): QualifyingRoundMapping => ({
   roundNumber: row.round_number,
   name: row.name,
   holeCount: row.hole_count,
+  startingHole: row.starting_hole ?? 1,
+  endingHole: row.ending_hole ?? (((row.starting_hole ?? 1) + row.hole_count - 2) % 18) + 1,
+  holeSequence: row.hole_sequence ?? Array.from({ length: row.hole_count }, (_, index) => (((row.starting_hole ?? 1) - 1 + index) % 18) + 1),
   qualifyingSessionId: row.qualifying_session_id,
   qualifyingDay: row.qualifying_day,
   qualifyingSegment: row.qualifying_segment,
@@ -279,7 +285,7 @@ export const listQualifyingRoundMappings = async (
 ): Promise<QualifyingRoundMapping[]> => {
   const { data, error } = await getClient()
     .from("tournament_rounds")
-    .select("id,tournament_id,round_number,name,hole_count,qualifying_session_id,qualifying_day,qualifying_segment,created_at,updated_at")
+    .select("id,tournament_id,round_number,name,hole_count,qualifying_session_id,qualifying_day,qualifying_segment,starting_hole,ending_hole,hole_sequence,created_at,updated_at")
     .eq("qualifying_session_id", sessionId)
     .order("qualifying_day")
     .order("qualifying_segment");

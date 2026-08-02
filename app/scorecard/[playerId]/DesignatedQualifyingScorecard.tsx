@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Model = {
-  qualifyingName: string; finalized: boolean; roundNumber: number; roundName: string; holeCount: number;
+  qualifyingName: string; finalized: boolean; roundNumber: number; roundName: string; holeCount: number; startingHole?: number; holeSequence?: number[];
   playerId: string; playerName: string; scorerPlayerId: string; accessRole: "scorer" | "verifier";
   groupPlayers: Array<{ player_id: string; player_name: string }>;
   holes: Array<{ player_id: string; entered_by_player_id: string; hole_number: number; strokes: number;
@@ -119,7 +119,7 @@ export default function DesignatedQualifyingScorecard({
         <p className="font-bold">{model.playerName} · {model.roundName}</p>
         {model.finalized ? <p className="mt-3 rounded-lg bg-amber-100 p-3 font-black">Read-only · Finalized</p> : null}
         <section className="mt-5 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
-          <h2 className="text-xl font-black">Hole {hole}</h2>
+          <h2 className="text-xl font-black">Hole {model.holeSequence?.[hole - 1] ?? hole}</h2>
           {model.accessRole === "scorer" ? (
             <div className="mt-4 space-y-3">
               {model.groupPlayers.map((player) => (
@@ -160,7 +160,7 @@ export default function DesignatedQualifyingScorecard({
             <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
               {proposedScores.map((score, index) => (
                 <label key={index} className="text-center text-xs font-bold">
-                  H{index + 1}
+                  H{model.holeSequence?.[index] ?? index + 1}
                   <input aria-label={`Proposed score hole ${index + 1}`} value={score}
                     onChange={(event) => setProposedScores((current) =>
                       current.map((value, scoreIndex) => scoreIndex === index ? event.target.value.replace(/\D/g, "") : value))}

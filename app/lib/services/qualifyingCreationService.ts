@@ -48,12 +48,19 @@ export const validateQualifyingCreation = (
       (day, index) =>
         day.dayNumber !== index + 1 ||
         !day.playDate ||
-        ![9, 18, 27, 36].includes(day.holesTotal) ||
+        !Number.isInteger(day.holesTotal) || day.holesTotal < 1 ||
         !day.courseName.trim() ||
         !day.teeName.trim() ||
         !Number.isInteger(day.startingHole) ||
         day.startingHole < 1 ||
-        day.startingHole > 18
+        day.startingHole > 18 ||
+        (day.rounds !== undefined && day.rounds.length < 1) ||
+        (day.rounds ?? []).some((round, roundIndex) =>
+          round.roundOrder !== roundIndex + 1 ||
+          !Number.isInteger(round.holeCount) || round.holeCount < 1 || round.holeCount > 18 ||
+          !Number.isInteger(round.startingHole) || round.startingHole < 1 || round.startingHole > 18
+        ) ||
+        (day.rounds !== undefined && day.holesTotal !== day.rounds.reduce((total, round) => total + round.holeCount, 0))
     )
   ) {
     errors.push("Every qualifying day requires a date, holes, course, tee, and valid starting hole.");

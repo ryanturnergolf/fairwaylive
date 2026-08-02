@@ -54,15 +54,18 @@ export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
 export type TournamentRoundReadRow = {
   tournament_id: string;
   round_number: number;
-  hole_count: 9 | 18;
+  hole_count: number;
   qualifying_session_id: string | null;
+  starting_hole?: number | null;
+  ending_hole?: number | null;
+  hole_sequence?: number[] | null;
 };
 
 export type TournamentScorecardReadRow = {
   tournament_id: string;
   round_number: number;
   player_id: string;
-  hole_count: 9 | 18;
+  hole_count: number;
   status: string;
 };
 
@@ -431,7 +434,7 @@ export const getTournamentRound = async (
 ): Promise<TournamentRoundReadRow | null> => {
   const supabase = await getReadClient(options);
   const { data, error } = await supabase.from("tournament_rounds")
-    .select("tournament_id,round_number,hole_count,qualifying_session_id")
+    .select("tournament_id,round_number,hole_count,qualifying_session_id,starting_hole,ending_hole,hole_sequence")
     .eq("tournament_id", tournamentId)
     .eq("round_number", roundNumber)
     .maybeSingle();
@@ -445,7 +448,7 @@ export const getTournamentRounds = async (
 ): Promise<TournamentRoundReadRow[]> => {
   const supabase = await getReadClient(options);
   const { data, error } = await supabase.from("tournament_rounds")
-    .select("tournament_id,round_number,hole_count,qualifying_session_id")
+    .select("tournament_id,round_number,hole_count,qualifying_session_id,starting_hole,ending_hole,hole_sequence")
     .eq("tournament_id", tournamentId)
     .order("round_number");
   if (error) throw error;

@@ -59,6 +59,8 @@ export async function GET(request: Request) {
       roundNumber,
       roundName: context.round?.name ?? `Round ${roundNumber}`,
       holeCount: context.round?.hole_count ?? 18,
+      startingHole: context.player?.starting_hole ?? 1,
+      holeSequence: Array.from({ length: context.round?.hole_count ?? 18 }, (_, index) => ((Number(context.player?.starting_hole ?? 1) - 1 + index) % 18) + 1),
       playerId,
       playerName: context.player.player_name,
       scorerPlayerId: context.assignment.scorer_player_id,

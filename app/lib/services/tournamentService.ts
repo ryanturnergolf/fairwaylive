@@ -429,6 +429,7 @@ export const reconcileSnapshotWithDurableTournamentState = ({
     ...getRoundSetup(envelope, roundNumber),
     roundNumber: String(roundNumber),
     numberOfHoles: String(holeCount),
+    startingHole: String(durableRound?.starting_hole ?? roundPlayerRows[0]?.starting_hole ?? 1),
   };
   const nextPairings = [
     ...envelope.tournament.pairings.filter((pairing) => pairing.roundId !== getRoundId(roundNumber)),
