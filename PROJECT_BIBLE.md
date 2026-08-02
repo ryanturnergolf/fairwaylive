@@ -102,6 +102,8 @@ The foundation does not itself retain logs, deliver alerts, measure handled API 
 
 Production environment validation distinguishes actual production from preview, CI, development, test, and the managed Playwright server. Actual production requires public HTTPS application and hosted Supabase origins, rejects loopback/reserved/credential-bearing URLs, requires aligned monitoring flags and release identity when monitoring is active, and emits operator-safe errors containing variable names and rules but never configured values. `/api/health` reflects this same readiness contract without claiming Supabase connectivity.
 
+Developer/QA seed tooling is not a standard coach capability. Complete Tournament, incomplete/resume Tournament, and registry-based Qualifying seed entry points are hidden and denied in deployed environments by default. Local development and the managed Playwright server retain access. A deployed operator requires explicit `QA_SEED_TOOLS_ENABLED=true` configuration plus an authenticated coach UUID in the server-only `QA_SEED_OPERATOR_IDS` allowlist. The dashboard queries a private no-store authorization endpoint and every seed handler/service boundary rechecks authorization before creating data. This adds no role table, service-role credential, schema, migration, or change to ordinary Tournament or Qualifying creation.
+
 ## Controlled Beta Continuous Integration
 
 Status: **IMPLEMENTED; HOSTED SECRET CONFIGURATION REQUIRED**
@@ -112,7 +114,7 @@ The browser bundle requires the client-safe `NEXT_PUBLIC_SUPABASE_URL` and `NEXT
 
 CI keeps two URL roles separate: Playwright uses `http://127.0.0.1:3100` to reach its managed production server, while `NEXT_PUBLIC_APP_URL` uses a reserved `.example` origin to verify externally shareable QR links. Production supplies its real public deployment origin; application code never hardcodes that domain.
 
-The authoritative hosted suite contains 240 committed tests. Four additional local tests live in an untracked Qualifying foundation spec and are not part of CI. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot. The 18-hole rapid-save persistence regression waits for each hole's controls to become editable and uses a test-scoped execution budget because it intentionally verifies serialized atomic writes under injected latency; global timeouts and application behavior remain unchanged.
+The Phase 7 candidate hosted suite contains 255 tests. Four additional local tests live in an untracked Qualifying foundation spec and are not part of CI. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot. The 18-hole rapid-save persistence regression waits for each hole's controls to become editable and uses a test-scoped execution budget because it intentionally verifies serialized atomic writes under injected latency; global timeouts and application behavior remain unchanged.
 
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 

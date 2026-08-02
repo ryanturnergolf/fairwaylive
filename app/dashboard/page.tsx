@@ -33,6 +33,7 @@ import {
   runQaSeedTemplate,
   type QaSeedTemplateResult,
 } from "../lib/services/qaSeedTemplateService";
+import { loadQaSeedAccess, requireQaSeedAccess } from "../lib/services/qaSeedAccessService";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -259,6 +260,7 @@ export default function DashboardPage() {
   const [activeQaSeedTemplateId, setActiveQaSeedTemplateId] = useState("");
   const [qaSeedResult, setQaSeedResult] = useState<QaSeedTemplateResult | null>(null);
   const [seedError, setSeedError] = useState("");
+  const [qaSeedToolsAvailable, setQaSeedToolsAvailable] = useState(false);
   const seedInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -273,6 +275,20 @@ export default function DashboardPage() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isCoachAuthenticated) {
+      setQaSeedToolsAvailable(false);
+      return;
+    }
+    void loadQaSeedAccess().then((available) => {
+      if (!cancelled) setQaSeedToolsAvailable(available);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCoachAuthenticated]);
 
   const handleCoachSignOut = async () => {
     if (isSigningOut) return;
@@ -480,6 +496,7 @@ export default function DashboardPage() {
     const creationScope = "complete-seed";
     const idempotencyKey = acquireTournamentCreationKey(creationScope);
     try {
+      await requireQaSeedAccess();
       const supabase = getSupabaseBrowserClient();
       const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
       if (!data.session || data.session.user.is_anonymous) {
@@ -566,6 +583,7 @@ export default function DashboardPage() {
     const creationScope = "incomplete-seed";
     const idempotencyKey = acquireTournamentCreationKey(creationScope);
     try {
+      await requireQaSeedAccess();
       const supabase = getSupabaseBrowserClient();
       const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
       if (!data.session || data.session.user.is_anonymous) {
@@ -621,6 +639,7 @@ export default function DashboardPage() {
     setQaSeedResult(null);
     setSeedError("");
     try {
+      await requireQaSeedAccess();
       const result = await runQaSeedTemplate(templateId);
       setQaSeedResult(result);
       router.push(`/tournament/${result.tournamentId}`);
@@ -986,7 +1005,7 @@ export default function DashboardPage() {
             >
               Create Tournament
             </button>
-            {isClientMounted ? (
+            {isClientMounted && qaSeedToolsAvailable ? (
               <button
                 type="button"
                 onClick={() => void handleSeedTestTournament()}
@@ -996,7 +1015,7 @@ export default function DashboardPage() {
                 {isSeedingTournament ? "Seeding Tournament..." : "Seed Test Tournament"}
               </button>
             ) : null}
-            {isClientMounted ? (
+            {isClientMounted && qaSeedToolsAvailable ? (
               <button
                 type="button"
                 onClick={() => void handleSeedIncompleteTournament()}
@@ -1022,13 +1041,13 @@ export default function DashboardPage() {
               Import Teams
             </a>
           </div>
-          {seedError ? (
+          {qaSeedToolsAvailable && seedError ? (
             <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
               {seedError}
             </p>
           ) : null}
 
-          <section className="mt-10 rounded-[32px] border border-dashed border-[#B8892D] bg-[#FFF9E8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
+          {qaSeedToolsAvailable ? <section className="mt-10 rounded-[32px] border border-dashed border-[#B8892D] bg-[#FFF9E8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">
               Developer / QA
             </p>
@@ -1061,7 +1080,7 @@ export default function DashboardPage() {
                 Test qualifier ready in {(qaSeedResult.durationMs / 1000).toFixed(1)} seconds.
               </p>
             ) : null}
-          </section>
+          </section> : null}
 
           <section id="director" className="mt-10 rounded-[32px] border border-[#D6E0D8] bg-[#F8FBF8] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.05)] lg:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

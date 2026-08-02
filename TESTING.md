@@ -41,7 +41,7 @@ The suite primarily uses deterministic fixtures, route interception, and static 
 
 GitHub does not expose repository secrets to pull requests from forks. Those runs will fail at the explicit configuration step rather than silently skipping Supabase-dependent coverage.
 
-The committed hosted baseline is 240 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. Local workspace totals may therefore report 244 without changing the authoritative hosted baseline.
+The Phase 7 candidate hosted baseline is 255 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. An unfiltered local workspace run may therefore report 259 without changing the intended hosted baseline.
 
 Mobile Review helpers race the two valid web-first completion states: an automatically rendered `Verify Score` view or an enabled `Review & Submit Round` action. They follow the state that actually completes instead of inferring readiness from instantaneous button snapshots. The helper adds no sleeps and does not weaken Review assertions; its focused bound covers the existing sequential score and statistics hydration contract.
 
@@ -60,6 +60,10 @@ Never place a service-role key, scoring code, share/access token, auth token, or
 The managed test server sets `PLAYWRIGHT_MANAGED_SERVER=1` so production-mode Next.js execution retains test-origin support without weakening actual production validation. Hosted CI separately retains its `CI=true` context and reserved public QR origin. Neither marker should be set on an actual production deployment.
 
 Production environment coverage verifies valid/missing configuration, malformed and credential-bearing URLs, HTTP/loopback/reserved production rejection, hosted Supabase enforcement, monitoring flag alignment, release identity, safe error text, and public health output.
+
+### Developer/QA seed access
+
+The managed test server's `PLAYWRIGHT_MANAGED_SERVER=1` marker enables the three existing seed workflows for Playwright without enabling them in an actual deployment. `tests/e2e/qa-seed-access.spec.ts` verifies production-default denial, action-boundary enforcement, local/Playwright access, explicit operator allowlisting, hidden dashboard controls, and unchanged normal Tournament creation. Production must leave `QA_SEED_TOOLS_ENABLED=false` unless a named operator needs temporary access; any enabled deployment must list only approved authenticated coach UUIDs in the server-only `QA_SEED_OPERATOR_IDS` value.
 
 ## Current Tests
 

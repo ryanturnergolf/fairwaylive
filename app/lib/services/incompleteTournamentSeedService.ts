@@ -8,6 +8,7 @@ import {
   type StoredTournament,
 } from "../tournamentStorage";
 import type { TournamentStorageEnvelope } from "../tournamentModel";
+import { requireQaSeedAccess } from "./qaSeedAccessService";
 import { syncTournamentPlayers, syncTournamentStateSnapshot } from "./tournamentService";
 
 export const INCOMPLETE_TEST_TOURNAMENT_NAME = "Incomplete Test Tournament";
@@ -197,6 +198,7 @@ export const buildIncompleteTournamentSeed = ({
 };
 
 export const persistIncompleteTournamentSeed = async (seed: IncompleteTournamentSeed) => {
+  await requireQaSeedAccess();
   await syncTournamentPlayers(seed.envelope, 1);
   const snapshotSaved = await syncTournamentStateSnapshot({
     tournamentId: seed.tournament.id,

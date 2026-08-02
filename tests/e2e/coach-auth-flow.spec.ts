@@ -168,8 +168,16 @@ test("auth persists across homepage navigation and one seed creates and redirect
   const tournamentId = "77777777-7777-4777-8777-777777777777";
   let createCount = 0;
   let snapshotCount = 0;
+  let createdTournamentRow: Record<string, unknown> | null = null;
   await routeAuthenticatedAuth(page);
   await routeDashboardReads(page);
+  await page.route("**/rest/v1/tournaments?**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createdTournamentRow ? [createdTournamentRow] : []),
+    })
+  );
   await page.route("**/api/tournament-mutations", async (route) => {
     const request = route.request().postDataJSON() as {
       action: string;
@@ -178,23 +186,24 @@ test("auth persists across homepage navigation and one seed creates and redirect
     if (request.action === "createTournament") {
       createCount += 1;
       await new Promise((resolve) => setTimeout(resolve, 100));
+      createdTournamentRow = {
+        id: tournamentId,
+        created_by: userId,
+        owner_id: userId,
+        name: request.input?.name,
+        course: request.input?.course,
+        tournament_date: request.input?.tournamentDate,
+        number_of_rounds: request.input?.numberOfRounds,
+        status: request.input?.status,
+        finalized_at: null,
+        aggregate_version: 0,
+        created_at: "2026-07-17T12:00:00.000Z",
+        updated_at: "2026-07-17T12:00:00.000Z",
+      };
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          id: tournamentId,
-          created_by: userId,
-          owner_id: userId,
-          name: request.input?.name,
-          course: request.input?.course,
-          tournament_date: request.input?.tournamentDate,
-          number_of_rounds: request.input?.numberOfRounds,
-          status: request.input?.status,
-          finalized_at: null,
-          aggregate_version: 0,
-          created_at: "2026-07-17T12:00:00.000Z",
-          updated_at: "2026-07-17T12:00:00.000Z",
-        }),
+        body: JSON.stringify(createdTournamentRow),
       });
       return;
     }

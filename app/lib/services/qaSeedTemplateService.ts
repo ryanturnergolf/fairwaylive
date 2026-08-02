@@ -17,6 +17,7 @@ import {
   getQualifyingRoster,
 } from "./qualifyingCreationService";
 import { provisionQualifyingSession } from "./qualifyingProvisioningService";
+import { requireQaSeedAccess } from "./qaSeedAccessService";
 import { createQualifyingSessionDraft } from "./qualifyingSessionService";
 import { getTournamentAggregate } from "./tournamentService";
 
@@ -44,6 +45,7 @@ export type QaSeedTemplateResult = {
 };
 
 export type QaSeedDependencies = {
+  authorize: () => Promise<void>;
   createDraft: typeof createQualifyingSessionDraft;
   provision: typeof provisionQualifyingSession;
   activate: typeof activateQualifyingSession;
@@ -182,6 +184,7 @@ export const buildTestQualifierScoringSeed = ({
 };
 
 const defaultDependencies: QaSeedDependencies = {
+  authorize: requireQaSeedAccess,
   createDraft: createQualifyingSessionDraft,
   provision: provisionQualifyingSession,
   activate: activateQualifyingSession,
@@ -199,6 +202,7 @@ const defaultDependencies: QaSeedDependencies = {
 const seedTestQualifier = async (
   dependencies: QaSeedDependencies
 ): Promise<QaSeedTemplateResult> => {
+  await dependencies.authorize();
   const startedAt = dependencies.now();
   const draft = await dependencies.createDraft(buildTestQualifierDraft());
   const provisioned = await dependencies.provision(draft.id);

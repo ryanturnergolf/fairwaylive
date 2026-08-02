@@ -213,6 +213,10 @@ Coach sign-in accepts only paths beginning with a single `/`; protocol-relative 
 
 Seed Test Tournament is a guarded one-click operation. It requires a verified coach session, creates the owned tournament through the authenticated mutation endpoint and RLS, persists the seeded Tournament Aggregate snapshot, exposes pending and failure states, and redirects only after the shared data is saved.
 
+### Developer and QA seed tools are deployment-gated operator capabilities
+
+Seed tooling is enabled automatically only in local development and on the explicitly marked managed Playwright server. Deployed environments hide and deny the tools unless `QA_SEED_TOOLS_ENABLED=true` and the authenticated coach UUID appears in the server-only `QA_SEED_OPERATOR_IDS` allowlist. UI visibility is advisory; every seed handler and reusable seed orchestration boundary rechecks the private no-store authorization endpoint before creating data. Ordinary Tournament and Qualifying creation retain their existing coach authorization and behavior, and no generalized role or service-role credential is introduced.
+
 ### Certified scoring mutations preserve authoritative identity and ordering
 
 Each Save Hole transaction captures one immutable target hole and completes pending score persistence before navigation. Review submission uses the same marked-player self and marker comparison rendered by the Review Hub. Shared leaderboard hydration maps local scorecard rows to authoritative tournament player identities while retaining marker-entered scores as the competition source.

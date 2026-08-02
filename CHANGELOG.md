@@ -15,6 +15,13 @@
 - Added production monitoring flag alignment and release-identity requirements while preserving preview, CI, development, test, and managed Playwright behavior.
 - Kept operator errors and `/api/health` value-free: they expose readiness and rule names without logging URLs, keys, tokens, or other configured values.
 
+### Controlled Beta Phase 7 — Developer/QA Seed Tool Gating
+
+- Audited the complete Tournament, incomplete/resume Tournament, and registry-based Qualifying seed workflows and their dashboard, service, and mutation boundaries.
+- Hid Developer/QA controls in deployed environments by default and added a private no-store authorization endpoint plus action-level rechecks before seed orchestration.
+- Preserved automatic access in local development and managed Playwright while requiring explicit enablement and an authenticated coach UUID allowlist for deployed operators.
+- Added no schema, migration, service-role credential, cleanup automation, or change to normal Tournament and Qualifying creation.
+
 ### Controlled Beta Phase 4B — Hosted CI Supabase Configuration
 
 - Added GitHub Actions secret injection for the client-safe Supabase URL and anonymous key required by the production build and intercepted Playwright requests.

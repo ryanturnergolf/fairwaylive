@@ -155,6 +155,9 @@ test("QA orchestration delegates to certified qualifying lifecycle and persisten
     updatedAt: null,
   };
   const dependencies = {
+    authorize: async () => {
+      calls.push("authorize");
+    },
     createDraft: async () => {
       calls.push("create");
       return session;
@@ -214,7 +217,7 @@ test("QA orchestration delegates to certified qualifying lifecycle and persisten
 
   const result = await runQaSeedTemplate(QA_SEED_TEST_QUALIFIER_ID, dependencies);
 
-  expect(calls.slice(0, 4)).toEqual(["create", "provision", "activate", "load-players"]);
+  expect(calls.slice(0, 5)).toEqual(["authorize", "create", "provision", "activate", "load-players"]);
   expect(calls.filter((call) => call === "save-score")).toHaveLength(12);
   expect(calls.at(-2)).toBe("save-statistics");
   expect(calls.at(-1)).toBe("ensure-access");
