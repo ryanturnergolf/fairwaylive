@@ -1,6 +1,6 @@
 # Clubhouse HQ Project Bible
 
-Last updated: 2026-07-31
+Last updated: 2026-08-02
 
 ## Product Vision
 
@@ -125,6 +125,14 @@ The Coach Dashboard provides a concise, non-blocking first-event guide for new o
 ## Controlled Beta Support And Limitations
 
 `BETA_SUPPORT.md` defines controlled-beta support ownership, urgency, response targets, tournament-day escalation, issue details, communication, and incident handoff while deferring incident authority to `MONITORING_INCIDENT_RESPONSE.md`. `CONTROLLED_BETA_LIMITATIONS.md` is the authoritative beta limitations list, and `BETA_ISSUE_TEMPLATE.md` is the privacy-safe intake format. The Coach Help & Support page provides concise workflow and troubleshooting links without mutations. `NEXT_PUBLIC_BETA_SUPPORT_CONTACT` may expose a monitored email or HTTPS intake URL; when absent or invalid, coaches are directed to their designated beta support owner.
+
+## Controlled Beta Temporary Production Deployment
+
+Status: **DEPLOYED; OPERATIONAL DRILLS REMAIN**
+
+The existing Vercel project `ez-golf-scoring/fairwaylive` hosts the temporary controlled-beta production URL `https://fairwaylive-gold.vercel.app`. Release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` was rebuilt from its Git-backed production deployment with the real public application origin, the existing hosted Supabase client configuration, aligned disabled monitoring flags, explicit release identity, and production QA seed tools disabled. No service-role credential was configured.
+
+Public HTTPS, Coach Sign In, authenticated dashboard loading, existing Tournament inventory, a ready live-scoring workspace, public-origin QR generation, signed-out scorecard loading, finalized read-only presentation, `/api/health`, and production QA-tool denial were verified. The Supabase Site URL is `https://fairwaylive-gold.vercel.app`, the redirect allowlist includes `https://fairwaylive-gold.vercel.app/**`, and both settings were read back from project `gfpkhptrnddvwzorhgkm`; production sign-out, fresh password sign-in, and dashboard loading then passed. No disposable Tournament was created because production does not yet provide a reviewed cleanup path. Monitoring remains intentionally disabled until a collector and alert routing are configured and drilled.
 
 ## Durable Roster Foundation
 

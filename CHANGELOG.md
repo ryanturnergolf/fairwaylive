@@ -1,5 +1,14 @@
 # Clubhouse HQ Changelog
 
+## 2026-08-02
+
+### Controlled Beta Temporary Production Deployment
+
+- Linked the repository to the existing `ez-golf-scoring/fairwaylive` Vercel project without creating another project and deployed release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` at `https://fairwaylive-gold.vercel.app`.
+- Configured the real public application origin, existing client-safe Supabase settings, aligned disabled monitoring flags, explicit release identity, and production-disabled QA seed tooling without a service-role credential.
+- Verified HTTPS, health/release readiness, Coach Sign In, authenticated dashboard and Tournament reads, live scoring, public-origin QR/share generation, signed-out scorecard access, finalized read-only presentation, and QA-tool denial.
+- Kept monitoring disabled pending collector/alert configuration. Supabase Site URL and redirect allowlist were configured and read back for the Vercel origin, and production sign-out, fresh Coach Sign In, and authenticated dashboard loading passed; no schema, migration, RLS, scoring, Review, analytics, persistence, or application behavior changed.
+
 ## 2026-08-01
 
 ### Controlled Beta Phase 9 — Beta Support And Known Limitations

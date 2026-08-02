@@ -41,7 +41,9 @@ The suite primarily uses deterministic fixtures, route interception, and static 
 
 GitHub does not expose repository secrets to pull requests from forks. Those runs will fail at the explicit configuration step rather than silently skipping Supabase-dependent coverage.
 
-The Phase 9 candidate hosted baseline is 265 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. An unfiltered local workspace run may therefore report 269 without changing the intended hosted baseline.
+The current committed hosted baseline is 268 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. An unfiltered local workspace run therefore reports 272 without changing the hosted baseline.
+
+The temporary production smoke target is `https://fairwaylive-gold.vercel.app`. Release smoke verification must use an approved authenticated coach and pre-designated canary event, must not print scoring/share tokens, and must not create disposable production events without a supported cleanup path. The 2026-08-02 deployment verified public HTTPS, health/release identity, sign-in, authenticated dashboard and Tournament reads, live scoring, QR public-origin generation, signed-out scorecard access, finalized read-only presentation, and QA seed denial. Supabase Site URL and redirect allowlist readback plus production sign-out, fresh sign-in, and dashboard verification passed. A true create/delete canary remains a separate operator gate.
 
 Focused coach onboarding coverage verifies first-time visibility, durable dismiss/resume behavior, experienced-coach defaults, direct projection of certified readiness, and preservation of existing coach routes. Tests mock the authenticated Supabase account boundary and owner-scoped reads; they do not replace readiness calculations.
 

@@ -1,10 +1,12 @@
 # Clubhouse HQ Production Monitoring And Incident Response Runbook
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ## Purpose And Current Boundary
 
 This runbook defines the monitoring, alerting, incident response, tournament-day triage, communication, and rehearsal required before Clubhouse HQ opens a controlled beta. The application now provides a vendor-neutral error-reporting boundary and production health endpoint. A production log collector, alert routing, synthetic checks, paging, retention policy, and incident drill still require operator configuration.
+
+The temporary production deployment is `https://fairwaylive-gold.vercel.app`, release `9cfa8fd19fb68b1dcd6082210ab139a603a61125`. `/api/health` reports `ok` and the expected release. Both monitoring flags remain intentionally `false`; Vercel build/runtime logs are not yet a configured centralized monitoring system, and no alert-delivery or incident drill is complete.
 
 Next.js server and API exceptions pass through native instrumentation into structured, redacted server output. Opt-in browser instrumentation reports unhandled client errors through a narrow same-origin endpoint into the same output. The hosting provider must retain and centralize that output, associate it with a deployed release, and route alerts to assigned responders before beta. No third-party monitoring SDK or service is assumed.
 

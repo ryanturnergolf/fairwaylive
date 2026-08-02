@@ -6,7 +6,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 - Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
 
-Last updated: 2026-07-31
+Last updated: 2026-08-02
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -44,8 +44,9 @@ Status: **IN PROGRESS**
 - Controlled Beta Phase 7 — Developer/QA Seed Tool Gating: **IMPLEMENTED; PRODUCTION DISABLED BY DEFAULT**.
 - Controlled Beta Phase 8 — Coach Onboarding & First-Tournament Guidance: **IMPLEMENTED; BETA COACH FEEDBACK PENDING**.
 - Controlled Beta Phase 9 — Beta Support & Known Limitations: **IMPLEMENTED; NAMED SUPPORT OWNERS AND CONTACT CONFIGURATION PENDING**.
+- Controlled Beta temporary Vercel production deployment: **DEPLOYED; SUPABASE AUTH URLS VERIFIED; MONITORING AND OPERATIONAL DRILLS PENDING**.
 - Opening beta remains gated on confirming the connected Supabase backup/PITR capabilities, assigning named recovery owners, and passing the documented isolated recovery drill.
-- Release readiness additionally requires a confirmed production host/rollback mechanism, named release owners, approved canary data, and a successful release/rollback drill.
+- The production host and stable temporary URL are confirmed as `ez-golf-scoring/fairwaylive` at `https://fairwaylive-gold.vercel.app`; release readiness still requires named release owners, approved canary data, and a successful release/rollback drill.
 - Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.
 - Phase 5 adds native Next.js client/server exception capture, redacted structured output, release identity, production configuration validation, and `/api/health` without changing scoring or persistence. The selected production host/log collector must still retain the stream and deliver tested alerts.
 - Phase 6 validates production URL safety, hosted Supabase origin, monitoring alignment, and release identity while explicitly preserving preview, CI, development, test, and Playwright contexts. Production values remain an operator-owned release prerequisite and are never emitted.
@@ -53,7 +54,7 @@ Status: **IN PROGRESS**
 - Phase 8 adds durable dismiss/resume coach guidance and a first-tournament checklist that consumes the existing readiness service. It remains non-blocking and does not change Tournament or Qualifying behavior.
 - Phase 9 adds the authoritative beta support guide, limitations register, issue-intake template, and a read-only Coach Help entry point. Production must assign primary/backup support owners and optionally configure the public support contact before invitations.
 - CI readiness requires configuring `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in GitHub Actions, preferably from a current-schema test/staging project, followed by one successful hosted run. CI remains separate from production Supabase deployment and smoke verification.
-- Current verification baseline: production build passed; Playwright passed 244/244; production migrations are current; application UX baseline commit is `e3953c3180f5061a7557e1bc1542edcbecf2a341`.
+- Current deployment baseline: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125`; production build passed; committed hosted Playwright passed 268/268; unfiltered local Playwright passed 272/272 including four intentionally untracked Qualifying foundation tests; production migrations remain current.
 - The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.
 - Next planned milestone: configure and verify the Phase 1–3 operational capabilities, execute the recovery, release/rollback, and incident drills, then reassess controlled-beta readiness.
 - Keep pilot-found stabilization fixes separate from new feature development.

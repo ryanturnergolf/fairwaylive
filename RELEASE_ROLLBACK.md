@@ -1,12 +1,21 @@
 # Clubhouse HQ Production Release And Rollback Runbook
 
-Last updated: 2026-07-31
+Last updated: 2026-08-02
 
 ## Purpose And Scope
 
 This runbook defines the production release, smoke-test, rollback, communication, and rehearsal process required before Clubhouse HQ opens a controlled beta. It uses the repository's existing Git, Next.js, Playwright, and linked Supabase workflows. It does not assume a specific application hosting provider, CI/CD system, traffic-control feature, preview environment, or database rollback capability.
 
 Application releases and database migrations are separate operational actions. The release record must identify both the application commit and remote migration ledger so operators can prove they are compatible.
+
+## Current Temporary Production Target
+
+- Hosting provider/project: Vercel `ez-golf-scoring/fairwaylive`
+- Stable production URL: `https://fairwaylive-gold.vercel.app`
+- First controlled-beta deployment record: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125`, deployed 2026-08-02
+- Rollback mechanism: redeploy the exact previous Ready Vercel deployment; database migrations remain forward-fix/recovery only
+
+The temporary host and application rollback mechanism are confirmed. The Supabase Site URL and redirect allowlist were configured for the Vercel origin, read back, and followed by successful production sign-out, fresh Coach Sign In, and dashboard smoke tests. Production acceptance remains conditional on named release roles, a pre-release recovery point, approved canary data, the release/rollback drill, and the observation period. Do not treat the existence of a Ready Vercel deployment as completion of those gates.
 
 ## Release Roles
 
