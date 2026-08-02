@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { routeValidCoachSession } from "./authSessionTestHelper";
 
 const ownerId = "88888888-8888-4888-8888-888888888888";
 const encode = (value: Record<string, unknown>) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -60,6 +61,7 @@ const installAnalytics = async (page: Page, requests: URL[]) => {
 };
 
 test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
   await installSession(page);
   await page.route("**/rest/v1/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
 });

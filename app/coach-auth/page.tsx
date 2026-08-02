@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
-import { getSupabaseBrowserClient } from "../lib/supabaseClient";
+import { coachSessionExpiredMessage, getSupabaseBrowserClient } from "../lib/supabaseClient";
 
 function CoachAuthForm() {
   const router = useRouter();
@@ -11,7 +11,9 @@ function CoachAuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() =>
+    searchParams.get("reason") === "session-expired" ? coachSessionExpiredMessage : ""
+  );
   const [pending, setPending] = useState(false);
   const [sessionCheckComplete, setSessionCheckComplete] = useState(false);
   const nextPath = (() => {

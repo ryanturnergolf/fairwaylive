@@ -138,6 +138,51 @@ test("successful login reaches a persistent dashboard and logout restores the fo
   await expect(page.getByRole("heading", { name: "Coach Sign In" })).toBeVisible();
 });
 
+test("a revoked stored coach session is cleared and redirected through one friendly recovery flow", async ({ page }) => {
+  await routeDashboardReads(page);
+  let userValidationCount = 0;
+  await page.route("**/auth/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/user")) {
+      userValidationCount += 1;
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: 403,
+          msg: "Session from session_id claim in JWT does not exist",
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/logout")) {
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.addInitScript(({ accessToken, user }) => {
+    if (window.sessionStorage.getItem("revoked-session-seeded")) return;
+    window.sessionStorage.setItem("revoked-session-seeded", "true");
+    window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
+      access_token: accessToken,
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: 4102444800,
+      refresh_token: "revoked-session-refresh-token",
+      user,
+    }));
+  }, { accessToken, user });
+
+  await gotoApp(page, "/dashboard");
+
+  await expect(page).toHaveURL(/\/coach-auth\?(?=.*next=%2Fdashboard)(?=.*reason=session-expired)/);
+  await expect(page.getByRole("status")).toHaveText("Your session expired. Please sign in again.");
+  await expect(page.getByText("Your session expired. Please sign in again.")).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("clubhouse-hq-coach-auth"))).toBeNull();
+  expect(userValidationCount).toBe(1);
+});
+
 const routeAuthenticatedAuth = async (page: Page) => {
   await page.route("**/auth/v1/**", async (route) => {
     const url = new URL(route.request().url());

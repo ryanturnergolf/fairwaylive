@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { routeValidCoachSession } from "./authSessionTestHelper";
 
 const playerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const seasonId = "11111111-1111-4111-8111-111111111111";
@@ -189,6 +190,7 @@ const installAnalyticsReads = async (page: Page, requests: URL[]) => {
 };
 
 test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
   await installCoachSession(page);
   await installRosterReads(page);
 });

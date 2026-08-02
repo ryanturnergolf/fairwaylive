@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { planTournamentRounds } from "../../app/lib/services/tournamentRoundProvisioningService";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 test("round provisioning maps 9, 18, 27, and 36 holes through the shared planner", () => {
   expect(planTournamentRounds([

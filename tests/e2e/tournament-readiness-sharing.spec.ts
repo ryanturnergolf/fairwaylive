@@ -1,4 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
 

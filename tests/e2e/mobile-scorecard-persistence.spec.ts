@@ -8,6 +8,7 @@ import {
   INCOMPLETE_TEST_PLAYER_IDS,
 } from "../../app/lib/services/incompleteTournamentSeedService";
 import { resolveReciprocalScoringAssignments } from "../../app/lib/services/reciprocalScoringAssignmentService";
+import { routeValidCoachSession } from "./authSessionTestHelper";
 
 const e2eCoachAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.e2e";
 
@@ -799,6 +800,10 @@ test.use({
       },
     ],
   },
+});
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
 });
 
 test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {

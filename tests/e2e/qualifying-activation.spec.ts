@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { validateTournamentPairingArtifacts } from "../../app/lib/services/tournamentPairingService";
 import { validateTournamentScorecardArtifacts } from "../../app/lib/services/tournamentScorecardGenerationService";
 import { validateTournamentActivationReadiness } from "../../app/lib/services/tournamentReadinessService";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const migration = () =>
   readFileSync(

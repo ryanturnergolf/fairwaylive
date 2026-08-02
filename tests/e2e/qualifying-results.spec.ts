@@ -11,6 +11,11 @@ import {
   type QualifyingEnginePlayer,
   type QualifyingEngineScorecard,
 } from "../../app/lib/services/qualifyingResultsService";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const session: QualifyingSession = {
   id: "session",

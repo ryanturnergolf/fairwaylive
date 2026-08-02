@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { createTournamentSaveCoordinator } from "../../app/lib/services/tournamentSaveCoordinator";
 import { parseTournamentStorageEnvelope } from "../../app/lib/tournamentStorage";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const tournamentId = "save-ordering-tournament";
 const storageKey = `clubhouse-hq-tournament-${tournamentId}`;

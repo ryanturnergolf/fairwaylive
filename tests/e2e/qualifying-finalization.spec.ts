@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { QualifyingResultsReadModel } from "../../app/lib/qualifyingModel";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const migration = () => readFileSync(
   join(process.cwd(), "supabase/migrations/20260731000000_add_qualifying_finalization.sql"),

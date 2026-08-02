@@ -2,6 +2,61 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let browserClient: SupabaseClient | null = null;
 export const coachAuthStorageKey = "clubhouse-hq-coach-auth";
+export const coachSessionExpiredMessage = "Your session expired. Please sign in again.";
+
+let coachSessionRecoveryPromise: Promise<void> | null = null;
+let coachSessionValidationToken = "";
+let coachSessionValidationPromise: ReturnType<SupabaseClient["auth"]["getUser"]> | null = null;
+
+const isExpiredOrRevokedCoachSessionError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; code?: unknown; message?: unknown };
+  const normalizedError = [candidate.name, candidate.code, candidate.message]
+    .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+    .join(" ")
+    .toLowerCase();
+
+  return [
+    "authsessionmissingerror",
+    "session_id claim",
+    "session from session_id",
+    "session does not exist",
+    "session not found",
+    "session revoked",
+    "invalid refresh token",
+    "refresh token not found",
+    "user from sub claim",
+    "invalid jwt",
+    "jwt expired",
+  ].some((indicator) => normalizedError.includes(indicator));
+};
+
+const recoverExpiredCoachSession = async (supabase: SupabaseClient): Promise<never> => {
+  if (!coachSessionRecoveryPromise) {
+    coachSessionRecoveryPromise = (async () => {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      coachSessionValidationToken = "";
+      coachSessionValidationPromise = null;
+
+      if (typeof window === "undefined") return;
+
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const existingNext = window.location.pathname === "/coach-auth"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+      const parameters = new URLSearchParams({
+        next: existingNext?.startsWith("/") && !existingNext.startsWith("//")
+          ? existingNext
+          : currentPath,
+        reason: "session-expired",
+      });
+      window.location.assign(`/coach-auth?${parameters.toString()}`);
+    })();
+  }
+
+  await coachSessionRecoveryPromise;
+  throw new Error(coachSessionExpiredMessage);
+};
 
 export type SupabaseClientOptions = {
   shareTokenHash?: string;
@@ -100,14 +155,43 @@ export const getSupabaseAuthAccessToken = async () => {
 
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
+    if (isExpiredOrRevokedCoachSessionError(sessionError)) {
+      return recoverExpiredCoachSession(supabase);
+    }
     throw sessionError;
   }
 
-  if (sessionData.session?.access_token) {
-    return sessionData.session.access_token;
+  const accessToken = sessionData.session?.access_token ?? "";
+  if (!accessToken) {
+    return "";
   }
 
-  return "";
+  if (!coachSessionValidationPromise || coachSessionValidationToken !== accessToken) {
+    coachSessionValidationToken = accessToken;
+    coachSessionValidationPromise = supabase.auth.getUser(accessToken);
+  }
+  const activeValidation = coachSessionValidationPromise;
+  let userData;
+  let userError;
+  try {
+    ({ data: userData, error: userError } = await activeValidation);
+  } finally {
+    if (coachSessionValidationPromise === activeValidation) {
+      coachSessionValidationToken = "";
+      coachSessionValidationPromise = null;
+    }
+  }
+  if (!userError && userData.user && !userData.user.is_anonymous) {
+    return accessToken;
+  }
+
+  const revokedOrMissingSession = (!userError && !userData.user) || isExpiredOrRevokedCoachSessionError(userError);
+
+  if (!revokedOrMissingSession) {
+    throw userError ?? new Error("Unable to validate the coach session.");
+  }
+
+  return recoverExpiredCoachSession(supabase);
 };
 
 export const canUseDevelopmentBrowserSupabaseWriteFallback = () => {

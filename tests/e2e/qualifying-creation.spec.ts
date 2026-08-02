@@ -7,6 +7,11 @@ import {
   getQualifyingRoster,
   validateQualifyingCreation,
 } from "../../app/lib/services/qualifyingCreationService";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const coachId = "88888888-8888-4888-8888-888888888888";
 const encodeJwtPart = (value: Record<string, unknown>) =>

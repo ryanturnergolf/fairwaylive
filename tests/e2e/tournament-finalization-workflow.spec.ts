@@ -4,6 +4,11 @@ import {
   reopenFinalizedTournament,
   shouldRefreshTournamentFinalizationStatus,
 } from "../../app/lib/services/tournamentFinalizationService";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+test.beforeEach(async ({ page }) => {
+  await routeValidCoachSession(page);
+});
 
 const tournamentId = "finalization-workflow-tournament";
 const sharedTournamentId = "55555555-5555-4555-8555-555555555555";
