@@ -8,6 +8,51 @@ test("homepage loads", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Clubhouse HQ", level: 1 })).toBeVisible();
 });
 
+test("homepage leaderboard omits shot-location labels and retains hole progress", async ({ page }) => {
+  await gotoApp(page, "/");
+
+  for (const label of ["On the green", "Approach", "Tee box", "Fairway", "Bunker"]) {
+    await expect(page.getByText(label, { exact: true })).toHaveCount(0);
+  }
+  await expect(page.getByText("Hole 14/18", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hole 11/18", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("-8", { exact: true })).toBeVisible();
+});
+
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`homepage demo-program trust treatment is readable without overlap on ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await gotoApp(page, "/");
+
+    const section = page.getByTestId("homepage-demo-programs");
+    await expect(section).toBeVisible();
+    await expect(section).toContainText("Illustrative demo programs — not customer endorsements.");
+    await expect(page.getByText("Trusted by college golf coaches across America", { exact: true })).toHaveCount(0);
+
+    const cards = page.getByTestId("demo-program-card");
+    await expect(cards).toHaveCount(5);
+    const boxes = await cards.evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      })
+    );
+    for (let leftIndex = 0; leftIndex < boxes.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < boxes.length; rightIndex += 1) {
+        const left = boxes[leftIndex];
+        const right = boxes[rightIndex];
+        const overlaps = left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top;
+        expect(overlaps).toBe(false);
+      }
+    }
+    const hasPageOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(hasPageOverflow).toBe(false);
+  });
+}
+
 test("remote shared tournament appears on dashboard without localStorage", async ({ page }) => {
   await page.route("**/rest/v1/**", async (route) => {
     const url = new URL(route.request().url());

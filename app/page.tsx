@@ -12,9 +12,7 @@ const teams = [
     name: "Bluffton University",
     short: "BU",
     toPar: "-8",
-    thru: "14-17",
     today: "-8",
-    status: "On the green",
     update: "2m ago",
     players: "14 players",
     hole: "14/18",
@@ -24,9 +22,7 @@ const teams = [
     name: "Ohio Northern University",
     short: "ONU",
     toPar: "-5",
-    thru: "13-17",
     today: "-5",
-    status: "Approach",
     update: "4m ago",
     players: "13 players",
     hole: "13/18",
@@ -36,9 +32,7 @@ const teams = [
     name: "Heidelberg University",
     short: "HU",
     toPar: "-2",
-    thru: "12-16",
     today: "-2",
-    status: "Fairway",
     update: "6m ago",
     players: "12 players",
     hole: "12/18",
@@ -48,9 +42,7 @@ const teams = [
     name: "Defiance College",
     short: "DC",
     toPar: "+1",
-    thru: "11-15",
     today: "+1",
-    status: "Bunker",
     update: "8m ago",
     players: "11 players",
     hole: "11/18",
@@ -60,9 +52,7 @@ const teams = [
     name: "Luther College",
     short: "LC",
     toPar: "+3",
-    thru: "11-17",
     today: "+3",
-    status: "Tee box",
     update: "10m ago",
     players: "11 players",
     hole: "11/18",
@@ -70,7 +60,7 @@ const teams = [
 ];
 
 const programBadges = ["NCAA DI", "NCAA DII", "NCAA DIII", "NAIA", "NJCAA"];
-const trustSchools = ["Duke", "UNC", "Auburn", "USC", "GT"];
+const demoPrograms = ["Demo North", "Demo South", "Demo East", "Demo West", "Demo Central"];
 
 const stats = [
   ["18", "Live Tournaments"],
@@ -214,14 +204,24 @@ export default function Home() {
                   ))}
                 </div>
 
-                <div className="mt-6 flex flex-wrap items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-3 text-sm text-[#F6F1E6]/80 backdrop-blur">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#F0C96A]">
-                    Trusted by college golf coaches across America
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {trustSchools.map((school) => (
-                      <div key={school} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-[#F6F1E6] text-[10px] font-black uppercase tracking-[0.2em] text-[#0B3D2E]">
-                        {school}
+                <div
+                  data-testid="homepage-demo-programs"
+                  className="mt-6 rounded-[24px] border border-white/15 bg-white/10 px-4 py-4 text-[#F6F1E6]/80 backdrop-blur"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#F0C96A]">
+                    Built for college golf programs
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[#F6F1E6]/70">
+                    Illustrative demo programs — not customer endorsements.
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                    {demoPrograms.map((program) => (
+                      <div
+                        data-testid="demo-program-card"
+                        key={program}
+                        className="flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-[#F6F1E6] px-2 py-2 text-center text-[10px] font-black uppercase leading-4 tracking-[0.12em] text-[#0B3D2E]"
+                      >
+                        {program}
                       </div>
                     ))}
                   </div>
@@ -278,7 +278,7 @@ export default function Home() {
                             <div>
                               <p className="text-sm font-black">{team.name}</p>
                               <p className={`text-[10px] uppercase tracking-[0.25em] ${index === 0 ? "text-[#F0C96A]" : "text-[#6F7C74]"}`}>
-                                {team.status} • {team.update}
+                                Updated {team.update}
                               </p>
                             </div>
                           </div>
@@ -287,7 +287,7 @@ export default function Home() {
                               {team.toPar}
                             </p>
                             <p className={`text-[10px] uppercase tracking-[0.25em] ${index === 0 ? "text-[#F0C96A]/80" : "text-[#6F7C74]"}`}>
-                              {team.thru}
+                              Hole {team.hole}
                             </p>
                           </div>
                         </div>
