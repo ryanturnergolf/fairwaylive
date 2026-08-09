@@ -52,7 +52,7 @@ export const loadPlayerPerformanceSummary = async (
   filters: PlayerPerformanceFilters
 ) => {
   const common = commonParams(filters);
-  const [scores, putts, statistics] = await Promise.all([
+  const [scores, putts, shots100AndIn, statistics] = await Promise.all([
     analyticsQuery("player", {
       ...common,
       statisticKey: "strokes",
@@ -66,11 +66,16 @@ export const loadPlayerPerformanceSummary = async (
     }),
     analyticsQuery("player", {
       ...common,
+      statisticKey: "shots_100_and_in",
+      datasets: "aggregate",
+    }),
+    analyticsQuery("player", {
+      ...common,
       datasets: "raw,comparison",
       compareBy: "statistic",
     }),
   ]);
-  return { scores, putts, statistics };
+  return { scores, putts, shots100AndIn, statistics };
 };
 
 export const loadPlayerStatisticDetail = async (

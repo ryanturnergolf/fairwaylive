@@ -85,10 +85,12 @@ test("pinned package summaries include every selected definition in package orde
     item({ key: "green_in_regulation", name: "Green in Regulation", inputType: "yes_no", displayOrder: 1 }),
     item({ key: "putts", name: "Putts", inputType: "bounded_number", displayOrder: 2 }),
     item({ key: "shots_100_and_in", name: "Shots from 100 Yards and In", inputType: "option_list", displayOrder: 3 }),
+    item({ key: "up_and_down_opportunity", name: "Up-and-Down Opportunity", inputType: "yes_no", displayOrder: 4 }),
+    item({ key: "up_and_down_success", name: "Up-and-Down Success", inputType: "yes_no", applicability: { requiresDefinitionKey: "up_and_down_opportunity", requiresValue: true }, displayOrder: 5 }),
   ];
   const summaries = buildMobileStatisticSummaries(items, [{ par: 4 }, { par: 3 }], [
-    { fairway_hit: true, green_in_regulation: true, putts: 2, shots_100_and_in: "3" },
-    { green_in_regulation: false, putts: 1, shots_100_and_in: "2" },
+    { fairway_hit: true, green_in_regulation: true, putts: 2, shots_100_and_in: "3", up_and_down_opportunity: true, up_and_down_success: true },
+    { green_in_regulation: false, putts: 1, shots_100_and_in: "2", up_and_down_opportunity: false },
   ]);
 
   expect(summaries.map((summary) => summary.name)).toEqual([
@@ -96,11 +98,40 @@ test("pinned package summaries include every selected definition in package orde
     "Green in Regulation",
     "Putts",
     "Shots from 100 Yards and In",
+    "Up-and-Down Success",
   ]);
-  expect(summaries.map((summary) => summary.displayValue)).toEqual(["1/1 Yes", "1/2 Yes", "3 total", "3: 1 · 2: 1"]);
+  expect(summaries.map((summary) => summary.displayValue)).toEqual(["1/1 Yes", "1/2 Yes", "3 total", "5 total", "1/1 Yes"]);
+  expect(summaries.find((summary) => summary.key === "shots_100_and_in")).toMatchObject({ recordedCount: 2, applicableCount: 2 });
+  expect(summaries.some((summary) => summary.key === "up_and_down_opportunity")).toBe(false);
   expect(buildMobileStatisticSummaries(items.slice(0, 3), [{ par: 4 }], [{}]).some((summary) => summary.key === "shots_100_and_in")).toBe(false);
   expect(buildMobileStatisticSummaries([], [{ par: 4 }], [{}])).toEqual([]);
   expect(areRequiredMobileStatisticsComplete([], [{ par: 4 }], [{}])).toBe(true);
+});
+
+test("player summary totals nine-hole 100 Yards and In values and hides only opportunity", () => {
+  const items = [
+    item({ key: "shots_100_and_in", name: "Shots from 100 Yards and In", inputType: "option_list", displayOrder: 0 }),
+    item({ key: "up_and_down_opportunity", name: "Up-and-Down Opportunity", inputType: "yes_no", displayOrder: 1 }),
+    item({ key: "up_and_down_success", name: "Up-and-Down Success", inputType: "yes_no", applicability: { requiresDefinitionKey: "up_and_down_opportunity", requiresValue: true }, displayOrder: 2 }),
+  ];
+  const shotValues = ["2", "3", "2", "4", "3", "2", "3", "2", "4"];
+  const summaries = buildMobileStatisticSummaries(
+    items,
+    Array.from({ length: 9 }, () => ({ par: 4 })),
+    shotValues.map((value) => ({
+      shots_100_and_in: value,
+      up_and_down_opportunity: true,
+      up_and_down_success: true,
+    }))
+  );
+
+  expect(summaries.find((summary) => summary.key === "shots_100_and_in")).toMatchObject({
+    displayValue: "25 total",
+    recordedCount: 9,
+    applicableCount: 9,
+  });
+  expect(summaries.some((summary) => summary.key === "up_and_down_opportunity")).toBe(false);
+  expect(summaries.find((summary) => summary.key === "up_and_down_success")?.displayValue).toBe("9/9 Yes");
 });
 
 test("mobile access migration is token-scoped, append-only, and does not broaden RLS", () => {

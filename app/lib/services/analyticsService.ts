@@ -95,17 +95,58 @@ const selectAuthoritativeLegacyRows = (rows: ScoreHoleEntryRow[]) => {
     .filter((row): row is ScoreHoleEntryRow => Boolean(row));
 };
 
+const holeNormalizedCountStatisticKeys = new Set(["shots_100_and_in"]);
+
 const valueToNumber = (value: StatisticValue) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "boolean") return value ? 1 : 0;
   return null;
 };
 
-export const calculateAnalyticsAggregate = (
+export const analyticsObservationNumericValue = (observation: AnalyticsObservation) => {
+  const numericValue = valueToNumber(observation.value);
+  if (numericValue !== null) return numericValue;
+  if (
+    holeNormalizedCountStatisticKeys.has(observation.statisticKey) &&
+    typeof observation.value === "string" &&
+    /^(?:[1-9]|10)$/.test(observation.value)
+  ) {
+    return Number(observation.value);
+  }
+  return null;
+};
+
+export const calculateHoleNormalizedAggregate = (
   observations: AnalyticsObservation[]
+) => {
+  const statisticKeys = new Set(observations.map((observation) => observation.statisticKey));
+  if (
+    statisticKeys.size !== 1 ||
+    !holeNormalizedCountStatisticKeys.has(observations[0]?.statisticKey ?? "")
+  ) {
+    return null;
+  }
+  const values = observations
+    .map(analyticsObservationNumericValue)
+    .filter((value): value is number => value !== null);
+  if (values.length === 0) return null;
+  const totalRecorded = values.reduce((total, value) => total + value, 0);
+  const averagePerRecordedHole = totalRecorded / values.length;
+  return {
+    totalRecorded: roundNumber(totalRecorded),
+    holesRecorded: values.length,
+    averagePerRecordedHole: roundNumber(averagePerRecordedHole),
+    nineHoleAverage: roundNumber(averagePerRecordedHole * 9),
+    eighteenHoleAverage: roundNumber(averagePerRecordedHole * 18),
+  };
+};
+
+export const calculateAnalyticsAggregate = (
+  observations: AnalyticsObservation[],
+  options: { includeHoleNormalization?: boolean } = {}
 ): AnalyticsAggregate => {
   const numeric = observations
-    .map((observation) => valueToNumber(observation.value))
+    .map(analyticsObservationNumericValue)
     .filter((value): value is number => value !== null);
   const sorted = [...numeric].sort((left, right) => left - right);
   const sum = numeric.reduce((total, value) => total + value, 0);
@@ -126,6 +167,10 @@ export const calculateAnalyticsAggregate = (
   const booleanValues = observations.filter(
     (observation) => typeof observation.value === "boolean"
   );
+  const holeNormalized =
+    options.includeHoleNormalization === false
+      ? null
+      : calculateHoleNormalizedAggregate(observations);
 
   return {
     count: observations.length,
@@ -144,6 +189,7 @@ export const calculateAnalyticsAggregate = (
     median: median === null ? null : roundNumber(median),
     standardDeviation:
       standardDeviation === null ? null : roundNumber(standardDeviation),
+    ...(holeNormalized ? { holeNormalized } : {}),
   };
 };
 

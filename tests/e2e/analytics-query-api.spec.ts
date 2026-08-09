@@ -9,7 +9,7 @@ import path from "node:path";
 
 const observation = (
   id: string,
-  value: number | boolean,
+  value: number | boolean | string,
   overrides: Partial<AnalyticsObservation> = {}
 ): AnalyticsObservation => ({
   id,
@@ -36,6 +36,49 @@ const observation = (
   entryKind: "self",
   recordedAt: "2026-01-01T00:00:00.000Z",
   ...overrides,
+});
+
+test("count statistics expose hole-normalized 9-hole and 18-hole analytics", () => {
+  const holeCounts = [5, 7, 9, 18];
+  const shots = holeCounts.flatMap((holeCount, roundIndex) =>
+    Array.from({ length: holeCount }, (_, holeIndex) => observation(
+      `shots-${roundIndex}-${holeIndex}`,
+      String((holeIndex % 4) + 1),
+      {
+        eventId: roundIndex < 2 ? "event-1" : "event-2",
+        tournamentId: roundIndex < 2 ? "event-1" : "event-2",
+        eventDate: roundIndex < 2 ? "2026-01-01" : "2026-01-02",
+        roundNumber: roundIndex + 1,
+        holeNumber: (holeIndex % 9) + 1,
+        statisticDefinitionVersionId: roundIndex % 2 ? "shots-v2" : "shots-v1",
+        statisticDefinitionId: "shots-definition",
+        statisticKey: "shots_100_and_in",
+        statisticName: "Shots from 100 Yards and In",
+        statisticInputType: "option_list",
+        statisticPackageVersionId: roundIndex % 2 ? "package-v2" : "package-v1",
+      }
+    ))
+  );
+  shots.push(observation("missing-invalid", "", {
+    statisticKey: "shots_100_and_in",
+    statisticName: "Shots from 100 Yards and In",
+    statisticInputType: "option_list",
+  }));
+  const result = executeAnalyticsQuery(shots, parseAnalyticsQuery("career", new URLSearchParams({
+    statisticKey: "shots_100_and_in",
+    datasets: "aggregate",
+  })));
+  const expectedTotal = shots.slice(0, -1).reduce((total, item) => total + Number(item.value), 0);
+  const expectedHoles = 39;
+  expect(result.aggregate?.holeNormalized).toEqual({
+    totalRecorded: expectedTotal,
+    holesRecorded: expectedHoles,
+    averagePerRecordedHole: Math.round((expectedTotal / expectedHoles) * 10000) / 10000,
+    nineHoleAverage: Math.round((expectedTotal / expectedHoles) * 9 * 10000) / 10000,
+    eighteenHoleAverage: Math.round((expectedTotal / expectedHoles) * 18 * 10000) / 10000,
+  });
+  expect(result.aggregate?.count).toBe(40);
+  expect(result.roundAggregate?.holeNormalized).toBeUndefined();
 });
 
 const observations = [

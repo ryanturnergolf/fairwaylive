@@ -124,16 +124,24 @@ export const buildMobileStatisticSummaries = (
   holes: Array<{ par: number }>,
   valuesByHole: Array<Record<string, StatisticValue | null>>
 ): MobileStatisticSummary[] => [...items]
+  .filter((item) => item.key !== "up_and_down_opportunity")
   .sort((left, right) => left.displayOrder - right.displayOrder || left.name.localeCompare(right.name))
   .map((item) => {
     const applicableValues = holes.flatMap((hole, index) => {
       const holeValues = valuesByHole[index] ?? {};
       return statisticAppliesToHole(item, hole.par, holeValues) ? [holeValues[item.key] ?? null] : [];
     });
-    const recordedValues = applicableValues.filter((value): value is StatisticValue => value !== null);
+    let recordedValues = applicableValues.filter((value): value is StatisticValue => value !== null);
     let displayValue = "No values recorded";
 
-    if (item.inputType === "yes_no" || item.inputType === "checkbox") {
+    if (item.key === "shots_100_and_in") {
+      const numericValues = recordedValues
+        .filter((value): value is string => typeof value === "string" && /^(?:[1-9]|10)$/.test(value))
+        .map(Number);
+      recordedValues = numericValues;
+      const total = numericValues.reduce((sum, value) => sum + value, 0);
+      displayValue = numericValues.length > 0 ? `${total} total` : displayValue;
+    } else if (item.inputType === "yes_no" || item.inputType === "checkbox") {
       const yesCount = recordedValues.filter((value) => value === true).length;
       displayValue = `${yesCount}/${applicableValues.length} Yes`;
     } else if (item.inputType === "bounded_number") {

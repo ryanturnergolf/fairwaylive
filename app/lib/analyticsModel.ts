@@ -72,6 +72,15 @@ export type AnalyticsAggregate = {
   max: number | null;
   median: number | null;
   standardDeviation: number | null;
+  holeNormalized?: AnalyticsHoleNormalizedAggregate;
+};
+
+export type AnalyticsHoleNormalizedAggregate = {
+  totalRecorded: number;
+  holesRecorded: number;
+  averagePerRecordedHole: number;
+  nineHoleAverage: number;
+  eighteenHoleAverage: number;
 };
 
 export type AnalyticsRoundKey = {

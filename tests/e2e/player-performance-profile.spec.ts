@@ -129,6 +129,7 @@ const installAnalyticsReads = async (page: Page, requests: URL[]) => {
     requests.push(url);
     const statisticKey = url.searchParams.get("statisticKey");
     const isPutts = statisticKey === "putts";
+    const isShots100AndIn = statisticKey === "shots_100_and_in";
     const isStatisticCatalog = !statisticKey;
     const comparisons = isStatisticCatalog
       ? [
@@ -172,7 +173,11 @@ const installAnalyticsReads = async (page: Page, requests: URL[]) => {
       body: JSON.stringify({
         scope: url.pathname.split("/").at(-1),
         filters: {},
-        aggregate: isPutts ? { ...aggregate, sum: 61, average: 1.69 } : aggregate,
+        aggregate: isPutts
+          ? { ...aggregate, sum: 61, average: 1.69 }
+          : isShots100AndIn
+            ? { ...aggregate, holeNormalized: { totalRecorded: 50, holesRecorded: 20, averagePerRecordedHole: 2.5, nineHoleAverage: 22.5, eighteenHoleAverage: 45 } }
+            : aggregate,
         roundAggregate: isPutts
           ? { ...roundAggregate, sum: 61, average: 30.5 }
           : roundAggregate,
@@ -222,6 +227,9 @@ test("player profile renders identity, API summaries, custom statistics, and tab
   await expect(page.getByText("Best Round").locator("..")).toContainText("70");
   await expect(page.getByText("Rounds Played").locator("..")).toContainText("2");
   await expect(page.getByText("Putts/Round").locator("..")).toContainText("30.5");
+  await expect(page.getByText("100 Yards & In (9H)").locator("..")).toContainText("22.5");
+  await expect(page.getByText("100 Yards & In (18H)").locator("..")).toContainText("45");
+  await expect(page.getByText("100 Yards & In Recorded").locator("..")).toContainText("50 total · 20 holes");
   await expect(
     page.getByLabel("Performance summary").getByText("Committed Shot", { exact: true }).locator("..")
   ).toContainText("80%");

@@ -184,10 +184,13 @@ export default function PlayerPerformanceProfile({ playerId }: { playerId: strin
   const scrambling = findStatistic(comparisons, ["scrambl", "up-and-down success"]);
   const sandSave = findStatistic(comparisons, ["sand save"]);
   const upAndDown = findStatistic(comparisons, ["up-and-down success"]);
+  const shots100AndIn = profile?.shots100AndIn.aggregate?.holeNormalized;
   const builtInNames = new Set([
     fairway?.label, gir?.label, penalties?.label, scrambling?.label, sandSave?.label, upAndDown?.label, "Putts", "Score",
   ].filter(Boolean));
-  const customStatistics = comparisons.filter((item) => !builtInNames.has(item.label));
+  const customStatistics = comparisons.filter(
+    (item) => !builtInNames.has(item.label) && item.label !== "Shots from 100 Yards and In"
+  );
 
   if (!isLoading && !player) {
     return <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]"><CoachHeader /><div className="mx-auto max-w-7xl px-5 py-8"><CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Players", href: "/coach-dashboard/players" }, { label: "Profile" }]} /><CoachState title="Player not found" description="This permanent roster identity is unavailable or you do not have access to it." tone="error" /></div></main>;
@@ -239,12 +242,21 @@ export default function PlayerPerformanceProfile({ playerId }: { playerId: strin
             ["Scrambling %", statisticDisplay(scrambling)],
             ["Sand Save %", statisticDisplay(sandSave)],
             ["Up-and-Down %", statisticDisplay(upAndDown)],
+            ["100 Yards & In (9H)", formatNumber(shots100AndIn?.nineHoleAverage)],
+            ["100 Yards & In (18H)", formatNumber(shots100AndIn?.eighteenHoleAverage)],
           ].map(([label, value]) => (
             <article key={label} className="rounded-lg border border-[#E8DCC8] bg-white p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]">{label}</p>
               <p className="mt-2 text-3xl font-black">{value}</p>
             </article>
           ))}
+          {shots100AndIn ? (
+            <article className="rounded-lg border border-[#7DA7BE] bg-[#F7FCFE] p-4 sm:col-span-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#255D78]">100 Yards &amp; In Recorded</p>
+              <p className="mt-2 text-xl font-black">{formatNumber(shots100AndIn.totalRecorded)} total · {shots100AndIn.holesRecorded} holes</p>
+              <p className="mt-2 text-xs font-bold text-[#255D78]">{formatNumber(shots100AndIn.averagePerRecordedHole)} per recorded hole</p>
+            </article>
+          ) : null}
           {customStatistics.map((statistic) => (
             <article key={statistic.key} className="rounded-lg border border-[#7DA7BE] bg-[#F7FCFE] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#255D78]">{statistic.label}</p>

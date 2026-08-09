@@ -257,7 +257,7 @@ const buildRoundAggregate = (
       value: round.aggregate.sum as number,
     }));
   return {
-    ...calculateAnalyticsAggregate(roundTotalObservations),
+    ...calculateAnalyticsAggregate(roundTotalObservations, { includeHoleNormalization: false }),
     roundsPlayed: rounds.length,
     eventsPlayed: new Set(
       rounds.map((round) => `${round.eventType}:${round.eventId}`)
