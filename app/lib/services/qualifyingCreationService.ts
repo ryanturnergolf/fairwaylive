@@ -27,6 +27,26 @@ export const autoBalanceQualifyingGroups = (
   return groups;
 };
 
+export const orderQualifyingPlayersByGroup = (
+  players: QualifyingRosterPlayer[],
+  groups: QualifyingGroup[]
+) => {
+  const groupOrderByPlayerId = new Map(
+    groups.flatMap((group, groupIndex) =>
+      group.playerIds.map((playerId) => [playerId, groupIndex] as const)
+    )
+  );
+  const originalOrderByPlayerId = new Map(players.map((player, index) => [player.id, index]));
+
+  return [...players].sort((left, right) => {
+    const leftGroup = groupOrderByPlayerId.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightGroup = groupOrderByPlayerId.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftGroup - rightGroup ||
+      (originalOrderByPlayerId.get(left.id) ?? 0) - (originalOrderByPlayerId.get(right.id) ?? 0) ||
+      left.id.localeCompare(right.id);
+  });
+};
+
 export const validateQualifyingCreation = (
   input: CreateQualifyingSessionInput
 ): QualifyingCreationValidation => {

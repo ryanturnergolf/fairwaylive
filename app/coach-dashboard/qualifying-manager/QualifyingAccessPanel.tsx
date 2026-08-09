@@ -55,7 +55,7 @@ export default function QualifyingAccessPanel({ sessionId }: { sessionId: string
             className="rounded-lg border px-3 py-2 text-xs font-black">{active ? "Disable" : "Enable"}</button>
         </div>
       </div>
-      <p className="mt-3 text-sm text-[#51635C]">Go to /qualifying-login, enter this code, then select your name.</p>
+      <p className="mt-3 text-sm text-[#51635C]">Go to the Clubhouse HQ homepage, choose the player scoring-code entry, enter this code, then select your name.</p>
       {error ? <p role="alert" className="mt-2 text-sm font-bold text-red-700">{error}</p> : null}
     </div>
   );

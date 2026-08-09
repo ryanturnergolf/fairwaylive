@@ -9,6 +9,7 @@ import {
   type MobileDynamicStatistics,
   type MobileStatisticItem,
 } from "../../lib/services/mobileDynamicStatisticsService";
+import { createOperationId } from "../../lib/services/operationIdService";
 
 type Model = {
   tournamentId: string;
@@ -121,7 +122,7 @@ export default function DesignatedQualifyingScorecard({
               definitionVersionId: item.definitionVersionId,
               holeNumber: hole,
               value,
-              operationKey: crypto.randomUUID(),
+              operationKey: createOperationId(),
             }];
           }),
         });

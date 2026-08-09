@@ -246,7 +246,7 @@ export default function RosterManager({ rosterType }: { rosterType: RosterType }
       <CoachHeader />
       <header className="hidden">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-5 lg:px-8">
-          <Link href="/coach-dashboard" className="font-black">Clubhouse HQ</Link>
+          <Link href="/" className="font-black">Clubhouse HQ</Link>
           <nav className="flex items-center gap-4 text-sm font-bold">
             <Link href="/coach-dashboard/roster/men" aria-current={rosterType === "men" ? "page" : undefined}>Men</Link>
             <Link href="/coach-dashboard/roster/women" aria-current={rosterType === "women" ? "page" : undefined}>Women</Link>

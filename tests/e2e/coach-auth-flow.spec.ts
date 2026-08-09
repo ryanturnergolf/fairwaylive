@@ -298,6 +298,7 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
   let createCount = 0;
   const creationKeys: string[] = [];
   let createdTournamentRow: Record<string, unknown> | null = null;
+  let reconciledPlayerRows: Array<Record<string, unknown>> = [];
   let playerReconcileCount = 0;
   let snapshotCount = 0;
 
@@ -312,6 +313,9 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
       body: JSON.stringify(isExactCreatedTournamentRead && createdTournamentRow ? [createdTournamentRow] : []),
     });
   });
+  await page.route("**/rest/v1/tournament_players?**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reconciledPlayerRows) })
+  );
   await page.route("**/api/tournament-mutations", async (route) => {
     const request = route.request().postDataJSON() as {
       action: string;
@@ -350,6 +354,7 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
         "incomplete-player-a",
         "incomplete-player-b",
       ]);
+      reconciledPlayerRows = request.rows ?? [];
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
       return;
     }

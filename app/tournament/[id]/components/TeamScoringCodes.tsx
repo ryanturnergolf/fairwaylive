@@ -119,7 +119,7 @@ export default function TeamScoringCodes({
         <h1 className="text-3xl font-black">Clubhouse HQ</h1>
         <h2 className="mt-2 text-2xl font-bold">{tournamentName}</h2>
         <p className="mt-2 text-sm">Printed {new Date().toLocaleString()}</p>
-        <p className="mt-4">Go to Clubhouse HQ, choose Player Tournament Login, enter your team code, then select your name.</p>
+        <p className="mt-4">Go to the Clubhouse HQ homepage, choose the player scoring-code entry, enter your team code, then select your name.</p>
       </div>
 
       {isLoading ? <p role="status" className="mt-6 text-sm font-bold text-[#51635C]">Loading team scoring codes...</p> : null}
@@ -132,7 +132,7 @@ export default function TeamScoringCodes({
           return <article key={team.id} className="rounded-2xl border border-[#E8DCC8] bg-white p-5 shadow-sm print:mb-6 print:break-inside-avoid print:border-black print:shadow-none">
             <p className="font-black text-[#0B3D2E] print:text-black">{team.name}</p>
             <p aria-label={`${team.name} team scoring code`} className="mt-3 select-all break-all font-mono text-2xl font-black tracking-[0.18em] text-[#0B3D2E] sm:text-3xl sm:tracking-[0.22em] print:text-5xl print:text-black">{assignment?.code || "Not generated"}</p>
-            <p className="mt-3 hidden text-sm print:block">Go to Clubhouse HQ, choose Player Tournament Login, enter your team code, then select your name.</p>
+            <p className="mt-3 hidden text-sm print:block">Go to the Clubhouse HQ homepage, choose the player scoring-code entry, enter your team code, then select your name.</p>
             <div className="mt-4 flex flex-wrap gap-2 print:hidden">
               {assignment ? <>
                 <button type="button" onClick={() => void handleCopy(assignment)} className="rounded-full border border-[#B8892D] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-[#0B3D2E]">Copy Code</button>

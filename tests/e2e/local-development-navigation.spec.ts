@@ -17,11 +17,11 @@ test("local development enables Windows system CA trust only for the dev command
   expect(runner).toContain("NODE_OPTIONS: nodeOptions.join");
 });
 
-test("shared portal logos use their designated landing pages", () => {
-  expect(read("app/coach-dashboard/components/CoachChrome.tsx")).toContain('<Link href="/coach-dashboard"');
-  expect(read("app/coach-dashboard/page.tsx")).toContain('<Link href="/coach-dashboard" className="flex items-center gap-3">');
-  expect(read("app/dashboard/page.tsx")).toContain('<Link href="/dashboard" className="flex items-center gap-3">');
-  expect(read("app/tournament/[id]/page.tsx")).toContain('<Link href="/dashboard"');
+test("clickable Clubhouse HQ logos consistently return to the public homepage", () => {
+  expect(read("app/coach-dashboard/components/CoachChrome.tsx")).toContain('<Link href="/"');
+  expect(read("app/coach-dashboard/page.tsx")).toContain('<Link href="/" className="flex items-center gap-3">');
+  expect(read("app/dashboard/page.tsx")).toContain('<Link href="/" className="flex items-center gap-3">');
+  expect(read("app/tournament/[id]/page.tsx")).toContain('<Link href="/"');
 });
 
 test("public and mobile scoring logos return to the public homepage", () => {

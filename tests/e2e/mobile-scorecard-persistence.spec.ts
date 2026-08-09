@@ -3058,6 +3058,12 @@ test("shared QR phone without local tournament still saves stable IDs to Supabas
 });
 
 test("assigned dynamic statistic package renders, validates, persists, and reloads on the certified scorecard", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis.crypto, "randomUUID", {
+      configurable: true,
+      value: undefined,
+    });
+  });
   await routeSharedTournamentRoster(page);
   await routeSharedScoreEntriesStore(page);
   await routeScoreHoleEntriesStore(page);
@@ -3150,12 +3156,16 @@ test("assigned dynamic statistic package renders, validates, persists, and reloa
       }),
     });
   });
+  const savedScoreIdentities: Array<{ playerId?: unknown; enteredByPlayerId?: unknown }> = [];
   await page.route("**/api/score-mutations", async (route) => {
     const body = route.request().postDataJSON() as {
       action: string;
       input?: Record<string, unknown>;
       rows?: Array<Record<string, unknown>>;
     };
+    if (body.action === "saveScoreEntry") {
+      savedScoreIdentities.push(body.input ?? {});
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -3187,6 +3197,10 @@ test("assigned dynamic statistic package renders, validates, persists, and reloa
   await page.getByRole("button", { name: "Save Hole" }).click();
   await expect(page.getByText("Hole 2", { exact: true })).toBeVisible();
   expect(savedDynamicValues.map((value) => value.value)).toEqual([true, 2, "Fade"]);
+  expect(savedScoreIdentities).toEqual(expect.arrayContaining([
+    expect.objectContaining({ playerId: "player-1", enteredByPlayerId: "player-1" }),
+    expect.objectContaining({ playerId: "player-2", enteredByPlayerId: "player-1" }),
+  ]));
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByText("Hole 1", { exact: true })).toBeVisible();

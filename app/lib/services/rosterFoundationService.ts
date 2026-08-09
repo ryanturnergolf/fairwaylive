@@ -29,6 +29,10 @@ const qualifyingRosterStatuses = new Set<RosterPlayerStatus>([
   "redshirt",
 ]);
 
+export const getRosterPlayerDisplayName = (
+  player: Pick<RosterPlayer, "firstName" | "lastName" | "preferredName">
+) => `${player.preferredName?.trim() || player.firstName.trim()} ${player.lastName.trim()}`.trim();
+
 export const selectCurrentActiveRosterSeason = (
   seasons: Season[],
   today = new Date()
@@ -64,7 +68,7 @@ export const buildQualifyingRosterPlayers = (input: {
     .map((player) => ({
       id: player.id,
       rosterPlayerId: player.id,
-      name: player.preferredName?.trim() || `${player.firstName} ${player.lastName}`.trim(),
+      name: getRosterPlayerDisplayName(player),
       rosterType: player.rosterType,
       classYear: membershipByPlayerId.get(player.id)?.classYear ?? "",
     }))

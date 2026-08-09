@@ -13,6 +13,7 @@ import type {
 } from "../../../lib/qualifyingModel";
 import {
   autoBalanceQualifyingGroups,
+  orderQualifyingPlayersByGroup,
   validateQualifyingCreation,
 } from "../../../lib/services/qualifyingCreationService";
 import { loadCurrentQualifyingRoster } from "../../../lib/services/rosterFoundationService";
@@ -61,6 +62,7 @@ export default function CreateQualifyingPage() {
 
   const roster = rosters[rosterType];
   const selectedPlayers = roster.filter((player) => selectedPlayerIds.includes(player.id));
+  const groupedSelectedPlayers = orderQualifyingPlayersByGroup(selectedPlayers, groups);
   const statisticDefinitionVersionIds = statistics
     .filter((statistic) => selectedStatisticKeys.has(statistic.key))
     .map((statistic) => statistic.definitionVersionId);
@@ -141,6 +143,9 @@ export default function CreateQualifyingPage() {
           : group.playerIds.filter((id) => id !== playerId),
       }))
     );
+    window.requestAnimationFrame(() => {
+      document.getElementById(`qualifying-group-${playerId}`)?.focus();
+    });
   };
 
   const validateStep = () => {
@@ -156,6 +161,9 @@ export default function CreateQualifyingPage() {
       if (assigned.length !== selectedPlayers.length || new Set(assigned).size !== selectedPlayers.length) {
         return "Assign every selected player to exactly one group.";
       }
+    }
+    if (step === 4 && scoringMode === "reciprocal" && groups.some((group) => group.playerIds.length < 2)) {
+      return "Reciprocal scoring requires at least two players in every group.";
     }
     if (step === 5 && isStatisticsLoading) return "Wait for statistics to finish loading.";
     if (step === 5 && statisticsError) return statisticsError;
@@ -307,15 +315,22 @@ export default function CreateQualifyingPage() {
                 <button type="button" className="rounded-lg bg-[#0B3D2E] px-4 py-2 font-black text-white" onClick={() => setGroups(autoBalanceQualifyingGroups(selectedPlayers, groupCount))}>Auto-balance</button>
               </div>
               {groups.length === 0 ? <p className="mt-5 rounded-lg bg-[#FCFAF5] p-4 text-sm text-[#51635C]">Choose a group count and auto-balance, then adjust assignments manually.</p> : (
-                <div className="mt-5 grid gap-3">
-                  {selectedPlayers.map((player) => (
-                    <label key={player.id} className="grid items-center gap-2 rounded-lg border border-[#D9D0C0] p-3 sm:grid-cols-2">
-                      <span className="font-black">{player.name}</span>
-                      <select aria-label={`${player.name} group`} className="rounded-lg border border-[#D9D0C0] px-3 py-2" value={groups.find((group) => group.playerIds.includes(player.id))?.id ?? ""} onChange={(event) => assignPlayer(player.id, event.target.value)}>
-                        <option value="">Unassigned</option>
-                        {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                      </select>
-                    </label>
+                <div className="mt-5 grid gap-4">
+                  {groups.map((group) => (
+                    <section key={group.id} aria-labelledby={`${group.id}-heading`} className="rounded-lg border border-[#D9D0C0] bg-[#FCFAF5] p-3">
+                      <h3 id={`${group.id}-heading`} className="px-1 text-sm font-black uppercase tracking-wide text-[#B8892D]">{group.name}</h3>
+                      <div className="mt-2 grid gap-3">
+                        {groupedSelectedPlayers.filter((player) => group.playerIds.includes(player.id)).map((player) => (
+                          <label key={player.id} className="grid items-center gap-2 rounded-lg border border-[#D9D0C0] bg-white p-3 sm:grid-cols-2">
+                            <span className="font-black">{player.name}</span>
+                            <select id={`qualifying-group-${player.id}`} aria-label={`${player.name} group`} className="rounded-lg border border-[#D9D0C0] px-3 py-2" value={group.id} onChange={(event) => assignPlayer(player.id, event.target.value)}>
+                              <option value="">Unassigned</option>
+                              {groups.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               )}

@@ -14,7 +14,7 @@ export default function QualifyingHistoryPage() {
       <CoachHeader />
       <header className="hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Link href="/coach-dashboard" className="font-black">Clubhouse HQ</Link>
+          <Link href="/" className="font-black">Clubhouse HQ</Link>
           <Link
             href="/coach-dashboard/qualifying-manager"
             className="text-sm font-bold text-[#51635C]"

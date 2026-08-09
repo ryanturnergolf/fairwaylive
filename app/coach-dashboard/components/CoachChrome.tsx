@@ -42,7 +42,7 @@ export function CoachHeader() {
   return (
     <header className="relative z-40 border-b border-[#E8DCC8] bg-[#FCFAF5]/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 lg:px-8">
-        <Link href="/coach-dashboard" className="flex min-h-11 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8892D]">
+        <Link href="/" className="flex min-h-11 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8892D]">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0B3D2E] text-xs font-black tracking-[0.18em] text-white">HQ</span>
           <span><span className="block font-black">Clubhouse HQ</span><span className="block text-[10px] font-bold uppercase tracking-[0.24em] text-[#B8892D]">Coach Portal</span></span>
         </Link>

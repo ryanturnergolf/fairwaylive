@@ -34,6 +34,7 @@ import {
   type QaSeedTemplateResult,
 } from "../lib/services/qaSeedTemplateService";
 import { loadQaSeedAccess, requireQaSeedAccess } from "../lib/services/qaSeedAccessService";
+import { createOperationId } from "../lib/services/operationIdService";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -70,9 +71,7 @@ const acquireTournamentCreationKey = (scope: string) => {
   const storageKey = `${creationKeyStoragePrefix}${scope}`;
   const existing = window.sessionStorage.getItem(storageKey);
   if (existing) return existing;
-  const key = typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join("-")}`;
+  const key = createOperationId();
   window.sessionStorage.setItem(storageKey, key);
   return key;
 };
@@ -911,7 +910,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <Link href="/dashboard" className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
           </div>

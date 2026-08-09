@@ -40,6 +40,7 @@ import {
   type MobileDynamicStatistics,
   type MobileStatisticItem,
 } from "../../lib/services/mobileDynamicStatisticsService";
+import { createOperationId } from "../../lib/services/operationIdService";
 
 type Hole = {
   holeNumber: number;
@@ -1413,7 +1414,7 @@ function ReciprocalPlayerScorecardPage() {
       }
       dynamicOperationKeysRef.current.set(
         `${currentHoleIndex + 1}:${item.definitionVersionId}`,
-        crypto.randomUUID()
+        createOperationId()
       );
       return next;
     });
@@ -1726,7 +1727,7 @@ function ReciprocalPlayerScorecardPage() {
             if (persistedDynamicValuesRef.current.get(operationKeyRef) === JSON.stringify(value)) return [];
             let operationKey = dynamicOperationKeysRef.current.get(operationKeyRef);
             if (!operationKey) {
-              operationKey = crypto.randomUUID();
+              operationKey = createOperationId();
               dynamicOperationKeysRef.current.set(operationKeyRef, operationKey);
             }
             return [{

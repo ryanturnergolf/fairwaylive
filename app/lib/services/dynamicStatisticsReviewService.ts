@@ -17,6 +17,7 @@ import {
 import { listQualifyingSessionRows } from "../repositories/qualifyingRepository";
 import { statisticAppliesToHole } from "./mobileDynamicStatisticsService";
 import { validateStatisticValue } from "./dynamicStatisticsService";
+import { createOperationId } from "./operationIdService";
 
 export type DynamicStatisticReviewStatus =
   | "match"
@@ -258,6 +259,6 @@ export const resolveOfficialDynamicStatistic = async (input: {
       input.item.holeNumber,
       input.item.definitionVersionId,
       input.decision,
-      crypto.randomUUID(),
+      createOperationId(),
     ].join(":"),
   });

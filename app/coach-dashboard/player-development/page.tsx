@@ -184,7 +184,7 @@ export default async function PlayerDevelopmentPage() {
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       <header className="border-b border-[#E8DCC8] bg-[#FCFAF5]/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8">
-          <Link href="/coach-dashboard" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.2em] text-[#F6F1E6]">
               HQ
             </div>

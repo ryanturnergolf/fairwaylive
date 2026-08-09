@@ -91,6 +91,7 @@ import TournamentPrintExport, {
   type ScoreboardImportState,
 } from "./components/TournamentPrintExport";
 import TournamentStatisticsDashboard from "./components/TournamentStatisticsDashboard";
+import DynamicStatisticsReviewPanel from "./components/DynamicStatisticsReviewPanel";
 import OfficialResultsDashboard from "./components/OfficialResultsDashboard";
 import QualifyingAccessContext from "./components/QualifyingAccessContext";
 
@@ -1298,7 +1299,7 @@ export default function TournamentPage() {
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
       <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <Link href="/dashboard" onClick={(event) => void handleTournamentNavigation(event, "/dashboard")} className="flex items-center gap-3">
+        <Link href="/" onClick={(event) => void handleTournamentNavigation(event, "/")} className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
           </div>
@@ -1607,14 +1608,26 @@ export default function TournamentPage() {
                 isReadOnly={isTournamentFinalized}
               />
             ) : activeTab === "Statistics" ? (
-              <TournamentStatisticsDashboard
-                tournamentId={sharedTournamentId || tournamentId}
-                roundNumber={normalizedRoundSetup.roundNumber}
-                roundOptions={roundManager.roundOptions.map((round) => ({
-                  roundNumber: round.roundNumber,
-                  name: round.name,
-                }))}
-              />
+              <>
+                <TournamentStatisticsDashboard
+                  tournamentId={sharedTournamentId || tournamentId}
+                  roundNumber={normalizedRoundSetup.roundNumber}
+                  roundOptions={roundManager.roundOptions.map((round) => ({
+                    roundNumber: round.roundNumber,
+                    name: round.name,
+                  }))}
+                />
+                <DynamicStatisticsReviewPanel
+                  items={dynamicStatisticReviewItems}
+                  message={dynamicReviewMessage}
+                  overrideValues={dynamicReviewOverrideValues}
+                  isReadOnly={isTournamentFinalized}
+                  onOverrideValueChange={(itemId, value) =>
+                    setDynamicReviewOverrideValues((current) => ({ ...current, [itemId]: value }))
+                  }
+                  onResolve={handleResolveDynamicReviewItem}
+                />
+              </>
             ) : activeTab === officialResultsTab && isTournamentFinalized ? (
               <OfficialResultsDashboard tournamentId={sharedTournamentId || tournamentId} />
             ) : activeTab === "Live Scoring" || activeTab === "Clippd Export" ? (
@@ -1664,16 +1677,6 @@ export default function TournamentPage() {
                          setReviewOverrideReasons((current) => ({ ...current, [itemId]: value }))
                        }
                         onResolveReviewItem={handleResolveReviewItem}
-                        dynamicStatisticReviewItems={dynamicStatisticReviewItems}
-                        dynamicStatisticReviewMessage={dynamicReviewMessage}
-                        dynamicStatisticOverrideValues={dynamicReviewOverrideValues}
-                        onDynamicStatisticOverrideValueChange={(itemId, value) =>
-                          setDynamicReviewOverrideValues((current) => ({
-                            ...current,
-                            [itemId]: value,
-                          }))
-                        }
-                        onResolveDynamicStatistic={handleResolveDynamicReviewItem}
                       />
                   ) : null
                 }
