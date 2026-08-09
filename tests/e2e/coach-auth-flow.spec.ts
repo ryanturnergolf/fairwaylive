@@ -299,7 +299,7 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
   const creationKeys: string[] = [];
   let createdTournamentRow: Record<string, unknown> | null = null;
   let reconciledPlayerRows: Array<Record<string, unknown>> = [];
-  let playerReconcileCount = 0;
+  const playerReconcileCalls: Array<{ pageUrl: string; rows: Array<Record<string, unknown>> }> = [];
   let snapshotCount = 0;
 
   await routeAuthenticatedAuth(page);
@@ -348,13 +348,13 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
       return;
     }
     if (request.action === "reconcileTournamentPlayers") {
-      playerReconcileCount += 1;
       expect(request.rows).toHaveLength(2);
       expect(request.rows?.map((row) => row.marker_player_id).sort()).toEqual([
         "incomplete-player-a",
         "incomplete-player-b",
       ]);
       reconciledPlayerRows = request.rows ?? [];
+      playerReconcileCalls.push({ pageUrl: page.url(), rows: reconciledPlayerRows });
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
       return;
     }
@@ -400,7 +400,9 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
 
   expect(creationKeys).toEqual([creationKeys[0]]);
   expect(createCount).toBe(1);
-  expect(playerReconcileCount).toBe(1);
+  expect(playerReconcileCalls.filter((call) => new URL(call.pageUrl).pathname === "/dashboard")).toHaveLength(1);
+  expect(playerReconcileCalls).toHaveLength(1);
+  expect(playerReconcileCalls[0].rows.map((row) => row.team_id)).toEqual(["incomplete-team-a", "incomplete-team-b"]);
   expect(snapshotCount).toBe(1);
   expect(scoreEntries).toHaveLength(4);
   expect(new Set(scoreEntries.map((entry) => `${entry.playerId}:${entry.enteredByPlayerId}`)).size).toBe(4);

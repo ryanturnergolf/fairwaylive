@@ -33,6 +33,9 @@ import DesignatedQualifyingScorecard from "./DesignatedQualifyingScorecard";
 import { canUseDevelopmentBrowserSupabaseWriteFallback } from "../../lib/supabaseClient";
 import type { StatisticValue } from "../../lib/dynamicStatisticsModel";
 import {
+  areRequiredMobileStatisticsComplete,
+  buildMobileStatisticSummaries,
+  getMobileStatisticTapOptions,
   loadMobileDynamicStatistics,
   missingRequiredMobileStatistics,
   saveMobileDynamicStatistics,
@@ -1270,7 +1273,13 @@ function ReciprocalPlayerScorecardPage() {
     reviewMarkerScores.length === scorecard.holes.length &&
     reviewMarkerScores.every((score) => score > 0);
   const hasCompleteComparison = hasCompleteMarkedPlayerSelfScores && hasCompleteMarkerScores;
-  const statisticsComplete = Boolean(reviewComparison?.statisticsComplete);
+  const hasAssignedStatisticPackage = Boolean(dynamicStatistics?.assignment);
+  const dynamicStatisticSummaries = hasAssignedStatisticPackage
+    ? buildMobileStatisticSummaries(dynamicStatistics?.items ?? [], scorecard.holes, dynamicHoleValues)
+    : [];
+  const statisticsComplete = hasAssignedStatisticPackage
+    ? areRequiredMobileStatisticsComplete(dynamicStatistics?.items ?? [], scorecard.holes, dynamicHoleValues)
+    : Boolean(reviewComparison?.statisticsComplete);
   const statisticsRequirementSatisfied = statisticsComplete || submitWithoutStatistics;
   const canSubmitVerification =
     hasCompleteComparison &&
@@ -2023,7 +2032,7 @@ function ReciprocalPlayerScorecardPage() {
       .slice(9)
       .reduce((sum, statistic) => sum + (statistic.putts ?? 0), 0);
     const totalPutts = frontNinePutts + backNinePutts;
-    const statisticsIncomplete = scorecard.holes.some((hole, index) => {
+    const legacyStatisticsIncomplete = scorecard.holes.some((hole, index) => {
       const statistic = submittedStats[index];
       return (
         (hole.par !== 3 && statistic.fairwayHit === null) ||
@@ -2031,6 +2040,7 @@ function ReciprocalPlayerScorecardPage() {
         statistic.putts === null
       );
     });
+    const statisticsIncomplete = hasAssignedStatisticPackage ? !statisticsComplete : legacyStatisticsIncomplete;
     const percentage = (value: number, available: number) =>
       available > 0 ? `${Math.round((value / available) * 100)}%` : "—";
     const formatBooleanStatistic = (value: boolean | null) =>
@@ -2057,7 +2067,7 @@ function ReciprocalPlayerScorecardPage() {
         <table className="w-full table-fixed text-[10px]">
           <thead>
             <tr className="border-y border-[#E8DCC8] bg-[#FCFAF5] text-[#51635C]">
-              {["Hole", "Par", "Score", "Fairway", "GIR", "Putts"].map((heading) => (
+              {(hasAssignedStatisticPackage ? ["Hole", "Par", "Score"] : ["Hole", "Par", "Score", "Fairway", "GIR", "Putts"]).map((heading) => (
                 <th key={heading} className="px-0.5 py-2 text-center font-black uppercase tracking-[0.08em]">
                   {heading}
                 </th>
@@ -2073,6 +2083,8 @@ function ReciprocalPlayerScorecardPage() {
                   <td className="px-0.5 py-2 text-center font-black">{hole.holeNumber}</td>
                   <td className="px-0.5 py-2 text-center text-[#51635C]">{hole.par}</td>
                   <td className="px-0.5 py-2 text-center font-black">{scores[index] || "—"}</td>
+                  {!hasAssignedStatisticPackage ? (
+                    <>
                   <td className="px-0.5 py-2 text-center text-[#51635C]">
                     {hole.par === 3 ? "N/A" : formatBooleanStatistic(statistic.fairwayHit)}
                   </td>
@@ -2080,6 +2092,8 @@ function ReciprocalPlayerScorecardPage() {
                     {formatBooleanStatistic(statistic.greenInRegulation)}
                   </td>
                   <td className="px-0.5 py-2 text-center text-[#51635C]">{statistic.putts ?? "—"}</td>
+                    </>
+                  ) : null}
                 </tr>
               );
             })}
@@ -2185,6 +2199,22 @@ function ReciprocalPlayerScorecardPage() {
                 </p>
               </section>
 
+              {hasAssignedStatisticPackage ? (
+                dynamicStatisticSummaries.length > 0 ? (
+                  <section className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-4">
+                    <h3 className="text-lg font-black">Statistics Summary</h3>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {dynamicStatisticSummaries.map((summary) => (
+                        <div key={summary.definitionVersionId} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#51635C]">{summary.name}</p>
+                          <p className="mt-1 text-lg font-black">{summary.displayValue}</p>
+                          <p className="mt-1 text-[10px] font-semibold text-[#51635C]">{summary.recordedCount}/{summary.applicableCount} holes recorded</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null
+              ) : (
               <section className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-4">
                 <h3 className="text-lg font-black">Statistics Summary</h3>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -2203,6 +2233,7 @@ function ReciprocalPlayerScorecardPage() {
                   ))}
                 </div>
               </section>
+              )}
 
               <div className="flex flex-col gap-3 pb-4">
                 <button
@@ -2357,6 +2388,36 @@ function ReciprocalPlayerScorecardPage() {
             </div>
           </div>
 
+          {hasAssignedStatisticPackage ? (
+            dynamicStatisticSummaries.length > 0 ? (
+              <div className="mt-4 rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">My Round Statistics</p>
+                    <h3 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#0B3D2E]">Assigned Statistics</h3>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] ${statisticsComplete ? "border border-[#77B98E] bg-[#ECF8EF] text-[#146233]" : "border border-amber-400 bg-amber-50 text-amber-800"}`}>
+                    {statisticsComplete ? "Complete" : "Incomplete"}
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {dynamicStatisticSummaries.map((summary) => (
+                    <div key={summary.definitionVersionId} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#51635C]">{summary.name}</p>
+                      <p className="mt-1 text-lg font-black text-[#0B3D2E]">{summary.displayValue}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-[#51635C]">{summary.recordedCount}/{summary.applicableCount} holes recorded</p>
+                    </div>
+                  ))}
+                </div>
+                {!statisticsComplete ? (
+                  <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold leading-5 text-[#0B3D2E]">
+                    <input type="checkbox" checked={submitWithoutStatistics} onChange={(event) => setSubmitWithoutStatistics(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0B3D2E]" />
+                    <span>Continue and finalize round without recording statistics</span>
+                  </label>
+                ) : null}
+              </div>
+            ) : null
+          ) : (
           <div className="mt-4 rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -2470,6 +2531,7 @@ function ReciprocalPlayerScorecardPage() {
               </p>
             )}
           </div>
+          )}
 
           {!showConfirm ? (
             <div className="mt-4 flex flex-col gap-3">
@@ -2707,7 +2769,31 @@ function ReciprocalPlayerScorecardPage() {
                       </fieldset>
                     );
                   }
-                  if (item.inputType === "option_list") {
+                   const tapOptions = getMobileStatisticTapOptions(item);
+                   if (tapOptions) {
+                     return (
+                       <fieldset key={item.definitionVersionId} className="mt-4" aria-label={item.name}>
+                         <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
+                           {label}
+                         </legend>
+                         <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-6">
+                           {tapOptions.map((option) => (
+                             <button
+                               key={String(option)}
+                               type="button"
+                               aria-pressed={value === option}
+                               onClick={() => updateDynamicStatistic(item, value === option ? null : option)}
+                               disabled={disabled}
+                               className={statButtonClass(value === option)}
+                             >
+                               {option}
+                             </button>
+                           ))}
+                         </div>
+                       </fieldset>
+                     );
+                   }
+                   if (item.inputType === "option_list") {
                     return (
                       <label
                         key={item.definitionVersionId}
@@ -2727,31 +2813,6 @@ function ReciprocalPlayerScorecardPage() {
                           ))}
                         </select>
                       </label>
-                    );
-                  }
-                  if (item.key === "putts") {
-                    const minimum = item.configuration.minimum ?? 0;
-                    const maximum = item.configuration.maximum ?? 10;
-                    return (
-                      <fieldset key={item.definitionVersionId} className="mt-4" aria-label={item.name}>
-                        <legend className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
-                          {label}
-                        </legend>
-                        <div className="mt-2 grid grid-cols-6 gap-2">
-                          {Array.from({ length: maximum - minimum + 1 }, (_, index) => minimum + index).map((option) => (
-                            <button
-                              key={option}
-                              type="button"
-                              aria-pressed={value === option}
-                              onClick={() => updateDynamicStatistic(item, value === option ? null : option)}
-                              disabled={disabled}
-                              className={statButtonClass(value === option)}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                      </fieldset>
                     );
                   }
                   return (

@@ -962,7 +962,28 @@ export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope,
   if (durableRound?.qualifying_session_id) {
     return;
   }
-  const rows = buildTournamentPlayerRows(envelope).filter((row) => row.round_number === roundNumber);
+  const durableRows = await getTournamentPlayers(envelope.tournament.id, roundNumber).catch(() => []);
+  const durableRowsByPlayerId = new Map(durableRows.map((row) => [row.player_id, row]));
+  const normalizeComparableTeamName = (value: string | null) => (value ?? "").trim().toLowerCase();
+  const rows = buildTournamentPlayerRows(envelope)
+    .filter((row) => row.round_number === roundNumber)
+    .map((row) => {
+      const durableRow = durableRowsByPlayerId.get(row.player_id);
+      return durableRow && normalizeComparableTeamName(durableRow.team_name) === normalizeComparableTeamName(row.team_name)
+        ? { ...row, team_id: durableRow.team_id }
+        : row;
+    });
+  const comparableFields: Array<keyof TournamentPlayerUpsertRow> = [
+    "tournament_id", "player_id", "player_name", "team_id", "team_name", "round_number",
+    "group_number", "tee_number", "starting_hole", "marker_player_id", "is_individual", "position", "status",
+  ];
+  const rowsMatch = rows.length === durableRows.length && rows.every((row) => {
+    const durableRow = durableRowsByPlayerId.get(row.player_id);
+    return Boolean(durableRow) && comparableFields.every((field) => durableRow?.[field] === row[field]);
+  });
+  if (rowsMatch) {
+    return;
+  }
   await reconcileTournamentPlayers(
     [{ tournamentId: envelope.tournament.id, roundNumber }],
     rows

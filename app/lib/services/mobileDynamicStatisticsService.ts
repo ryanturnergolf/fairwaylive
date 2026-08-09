@@ -36,6 +36,28 @@ export type MobileDynamicStatistics = {
   values: MobileStatisticValue[];
 };
 
+export type MobileStatisticSummary = {
+  definitionVersionId: string;
+  key: string;
+  name: string;
+  displayOrder: number;
+  recordedCount: number;
+  applicableCount: number;
+  displayValue: string;
+};
+
+export const getMobileStatisticTapOptions = (item: MobileStatisticItem): StatisticValue[] | null => {
+  if (item.key === "shots_100_and_in") {
+    return Array.from({ length: 10 }, (_, index) => String(index + 1));
+  }
+  if (item.key === "putts" && item.inputType === "bounded_number") {
+    const minimum = item.configuration.minimum ?? 0;
+    const maximum = item.configuration.maximum ?? 10;
+    return Array.from({ length: maximum - minimum + 1 }, (_, index) => minimum + index);
+  }
+  return null;
+};
+
 const request = async (body: Record<string, unknown>) => {
   const response = await fetch("/api/mobile-dynamic-statistics", {
     method: "POST",
@@ -90,3 +112,49 @@ export const missingRequiredMobileStatistics = (
       statisticAppliesToHole(item, par, values) &&
       values[item.key] == null
   );
+
+export const areRequiredMobileStatisticsComplete = (
+  items: MobileStatisticItem[],
+  holes: Array<{ par: number }>,
+  valuesByHole: Array<Record<string, StatisticValue | null>>
+) => holes.every((hole, index) => missingRequiredMobileStatistics(items, hole.par, valuesByHole[index] ?? {}).length === 0);
+
+export const buildMobileStatisticSummaries = (
+  items: MobileStatisticItem[],
+  holes: Array<{ par: number }>,
+  valuesByHole: Array<Record<string, StatisticValue | null>>
+): MobileStatisticSummary[] => [...items]
+  .sort((left, right) => left.displayOrder - right.displayOrder || left.name.localeCompare(right.name))
+  .map((item) => {
+    const applicableValues = holes.flatMap((hole, index) => {
+      const holeValues = valuesByHole[index] ?? {};
+      return statisticAppliesToHole(item, hole.par, holeValues) ? [holeValues[item.key] ?? null] : [];
+    });
+    const recordedValues = applicableValues.filter((value): value is StatisticValue => value !== null);
+    let displayValue = "No values recorded";
+
+    if (item.inputType === "yes_no" || item.inputType === "checkbox") {
+      const yesCount = recordedValues.filter((value) => value === true).length;
+      displayValue = `${yesCount}/${applicableValues.length} Yes`;
+    } else if (item.inputType === "bounded_number") {
+      const total = recordedValues.reduce<number>((sum, value) => sum + (typeof value === "number" ? value : 0), 0);
+      displayValue = recordedValues.length > 0 ? `${total} total` : displayValue;
+    } else if (item.inputType === "option_list" && recordedValues.length > 0) {
+      const counts = new Map<string, number>();
+      recordedValues.forEach((value) => {
+        const label = String(value);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+      });
+      displayValue = [...counts.entries()].map(([label, count]) => `${label}: ${count}`).join(" · ");
+    }
+
+    return {
+      definitionVersionId: item.definitionVersionId,
+      key: item.key,
+      name: item.name,
+      displayOrder: item.displayOrder,
+      recordedCount: recordedValues.length,
+      applicableCount: applicableValues.length,
+      displayValue,
+    };
+  });

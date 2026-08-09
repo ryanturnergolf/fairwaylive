@@ -3120,6 +3120,17 @@ test("assigned dynamic statistic package renders, validates, persists, and reloa
       displayOrder: 2,
       isRequired: true,
     },
+    {
+      definitionVersionId: "shots-100-version",
+      key: "shots_100_and_in",
+      name: "Shots from 100 Yards and In",
+      description: null,
+      inputType: "option_list",
+      configuration: { options: ["1", "2", "3", "4", "5", "6+"] },
+      applicability: {},
+      displayOrder: 3,
+      isRequired: false,
+    },
   ];
   await page.route("**/api/mobile-dynamic-statistics", async (route) => {
     const body = route.request().postDataJSON() as {
@@ -3183,6 +3194,9 @@ test("assigned dynamic statistic package renders, validates, persists, and reloa
   await expect(page.getByRole("group", { name: "Fairway Hit" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Putts" })).toBeVisible();
   await expect(page.getByLabel("Shot Shape")).toBeVisible();
+  const shotsFrom100 = page.getByRole("group", { name: "Shots from 100 Yards and In" });
+  await expect(shotsFrom100.getByRole("button")).toHaveCount(10);
+  await expect(shotsFrom100.locator("select")).toHaveCount(0);
   await expect(page.getByText("Fairway Hit *")).toBeVisible();
 
   await page.getByLabel("Ava Green's Score").fill("4");
@@ -3194,9 +3208,10 @@ test("assigned dynamic statistic package renders, validates, persists, and reloa
   await page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { name: "Yes" }).click();
   await page.getByRole("group", { name: "Putts" }).getByRole("button", { name: "2" }).click();
   await page.getByLabel("Shot Shape").selectOption("Fade");
+  await shotsFrom100.getByRole("button", { name: "7", exact: true }).click();
   await page.getByRole("button", { name: "Save Hole" }).click();
   await expect(page.getByText("Hole 2", { exact: true })).toBeVisible();
-  expect(savedDynamicValues.map((value) => value.value)).toEqual([true, 2, "Fade"]);
+  expect(savedDynamicValues.map((value) => value.value)).toEqual([true, 2, "Fade", "7"]);
   expect(savedScoreIdentities).toEqual(expect.arrayContaining([
     expect.objectContaining({ playerId: "player-1", enteredByPlayerId: "player-1" }),
     expect.objectContaining({ playerId: "player-2", enteredByPlayerId: "player-1" }),
@@ -3208,4 +3223,7 @@ test("assigned dynamic statistic package renders, validates, persists, and reloa
     page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { name: "Yes" })
   ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByLabel("Shot Shape")).toHaveValue("Fade");
+  await expect(
+    page.getByRole("group", { name: "Shots from 100 Yards and In" }).getByRole("button", { name: "7", exact: true })
+  ).toHaveAttribute("aria-pressed", "true");
 });

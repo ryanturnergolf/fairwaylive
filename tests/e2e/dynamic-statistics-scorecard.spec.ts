@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  areRequiredMobileStatisticsComplete,
+  buildMobileStatisticSummaries,
+  getMobileStatisticTapOptions,
   missingRequiredMobileStatistics,
   statisticAppliesToHole,
   type MobileStatisticItem,
@@ -63,6 +66,43 @@ test("hole applicability excludes par-specific and unmet dependent statistics", 
   expect(statisticAppliesToHole(upAndDown, 4, { up_and_down_opportunity: true })).toBe(true);
 });
 
+test("100 Yards and In uses 1 through 10 tap values while Putts keeps its bounded tap contract", () => {
+  const shots = item({
+    key: "shots_100_and_in",
+    name: "Shots from 100 Yards and In",
+    inputType: "option_list",
+    configuration: { options: ["1", "2", "3", "4", "5", "6+"] },
+  });
+  const putts = item({ key: "putts", name: "Putts", inputType: "bounded_number", configuration: { minimum: 0, maximum: 10 } });
+
+  expect(getMobileStatisticTapOptions(shots)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+  expect(getMobileStatisticTapOptions(putts)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+test("pinned package summaries include every selected definition in package order", () => {
+  const items = [
+    item({ key: "fairway_hit", name: "Fairway Hit", inputType: "yes_no", applicability: { pars: [4, 5] }, displayOrder: 0 }),
+    item({ key: "green_in_regulation", name: "Green in Regulation", inputType: "yes_no", displayOrder: 1 }),
+    item({ key: "putts", name: "Putts", inputType: "bounded_number", displayOrder: 2 }),
+    item({ key: "shots_100_and_in", name: "Shots from 100 Yards and In", inputType: "option_list", displayOrder: 3 }),
+  ];
+  const summaries = buildMobileStatisticSummaries(items, [{ par: 4 }, { par: 3 }], [
+    { fairway_hit: true, green_in_regulation: true, putts: 2, shots_100_and_in: "3" },
+    { green_in_regulation: false, putts: 1, shots_100_and_in: "2" },
+  ]);
+
+  expect(summaries.map((summary) => summary.name)).toEqual([
+    "Fairway Hit",
+    "Green in Regulation",
+    "Putts",
+    "Shots from 100 Yards and In",
+  ]);
+  expect(summaries.map((summary) => summary.displayValue)).toEqual(["1/1 Yes", "1/2 Yes", "3 total", "3: 1 · 2: 1"]);
+  expect(buildMobileStatisticSummaries(items.slice(0, 3), [{ par: 4 }], [{}]).some((summary) => summary.key === "shots_100_and_in")).toBe(false);
+  expect(buildMobileStatisticSummaries([], [{ par: 4 }], [{}])).toEqual([]);
+  expect(areRequiredMobileStatisticsComplete([], [{ par: 4 }], [{}])).toBe(true);
+});
+
 test("mobile access migration is token-scoped, append-only, and does not broaden RLS", () => {
   const migration = readFileSync(
     join(process.cwd(), "supabase/migrations/20260806000000_add_mobile_dynamic_statistics_access.sql"),
@@ -102,6 +142,11 @@ test("scorecard keeps the legacy fallback and saves assigned values before marke
   expect(source).toContain("Fairway Hit");
   expect(source).toContain("Green in Regulation");
   expect(source).toContain("Putts");
+  expect(source).toContain("getMobileStatisticTapOptions(item)");
+  expect(source.indexOf("if (tapOptions)")).toBeLessThan(source.indexOf('if (item.inputType === "option_list")'));
+  expect(source).toContain("hasAssignedStatisticPackage ?");
+  expect(source).toContain("dynamicStatisticSummaries.map");
+  expect(source).toContain('["Fairways", `${fairwaysHit}/${fairwaysAvailable}`]');
   expect(source.indexOf("await saveMobileDynamicStatistics")).toBeLessThan(
     source.indexOf("// Save marker score only if markerPlayerId is valid")
   );
