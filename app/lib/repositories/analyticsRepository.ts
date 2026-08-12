@@ -28,6 +28,7 @@ export const loadAnalyticsSourceDataWithClient = async (
     definitionVersions,
     seasons,
     memberships,
+    rosterPlayers,
   ] = await Promise.all([
     client.from("statistic_hole_values").select("*").order("created_at").order("id"),
     client
@@ -60,12 +61,18 @@ export const loadAnalyticsSourceDataWithClient = async (
       .select("id,definition_id")
       .order("definition_id")
       .order("version"),
-    client.from("seasons").select("id,starts_on,ends_on").order("starts_on").order("id"),
+    client.from("seasons").select("id,name,status,starts_on,ends_on").order("starts_on").order("id"),
     client
       .from("season_roster_memberships")
       .select("season_id,roster_player_id")
       .order("season_id")
       .order("roster_player_id"),
+    client
+      .from("roster_players")
+      .select("id,first_name,last_name,preferred_name,roster_type,archived_at")
+      .order("last_name")
+      .order("first_name")
+      .order("id"),
   ]);
 
   const tournamentRows = requireRows(tournaments.data as Row[] | null, tournaments.error);
@@ -166,6 +173,17 @@ export const loadAnalyticsSourceDataWithClient = async (
       .filter(
         (row): row is AnalyticsSourceData["seasonMemberships"][number] => row !== null
       ),
+    rosterPlayers: requireRows(rosterPlayers.data as Row[] | null, rosterPlayers.error).map((row) => ({
+      id: String(row.id),
+      name: `${String(row.preferred_name || row.first_name).trim()} ${String(row.last_name).trim()}`.trim(),
+      rosterType: row.roster_type as "men" | "women",
+      archivedAt: (row.archived_at as string | null) ?? null,
+    })),
+    seasons: seasonRows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      status: row.status as "planned" | "active" | "closed",
+    })),
   };
 };
 

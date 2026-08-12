@@ -180,4 +180,35 @@ export type AnalyticsSourceData = {
     startsOn: string;
     endsOn: string;
   }>;
+  rosterPlayers: Array<{
+    id: string;
+    name: string;
+    rosterType: "men" | "women";
+    archivedAt: string | null;
+  }>;
+  seasons: Array<{
+    id: string;
+    name: string;
+    status: "planned" | "active" | "closed";
+  }>;
+};
+
+export type TeamStatisticsMetric = {
+  key: string;
+  label: string;
+  format: "number" | "percentage";
+  better: "lower" | "higher";
+  defaultVisible: boolean;
+};
+
+export type TeamStatisticsRosterRow = {
+  rosterPlayerId: string;
+  playerName: string;
+  values: Record<string, number | null>;
+};
+
+export type TeamStatisticsRosterComparison = {
+  metrics: TeamStatisticsMetric[];
+  rows: TeamStatisticsRosterRow[];
+  seasons: Array<{ id: string; name: string; status: "planned" | "active" | "closed" }>;
 };

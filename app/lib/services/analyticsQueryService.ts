@@ -11,6 +11,9 @@ import {
   type AnalyticsRoundResult,
   type AnalyticsSeasonResult,
   type AnalyticsTrend,
+  type AnalyticsSourceData,
+  type TeamStatisticsMetric,
+  type TeamStatisticsRosterComparison,
 } from "../analyticsModel";
 import { statisticEventTypes } from "../dynamicStatisticsModel";
 import {
@@ -39,6 +42,7 @@ export const analyticsDatasetKinds = [
   "rolling",
   "comparison",
   "distribution",
+  "roster_comparison",
 ] as const;
 export type AnalyticsDatasetKind = (typeof analyticsDatasetKinds)[number];
 
@@ -78,6 +82,82 @@ export type AnalyticsQueryResult = {
   rolling?: AnalyticsRollingPoint[];
   comparisons?: AnalyticsComparisonResult[];
   distribution?: AnalyticsDistributionBucket[];
+  rosterComparison?: TeamStatisticsRosterComparison;
+};
+
+const fixedTeamStatisticsMetrics: TeamStatisticsMetric[] = [
+  { key: "scoring_average", label: "Scoring Avg", format: "number", better: "lower", defaultVisible: true },
+  { key: "fairway_hit", label: "Fairway %", format: "percentage", better: "higher", defaultVisible: true },
+  { key: "green_in_regulation", label: "GIR %", format: "percentage", better: "higher", defaultVisible: true },
+  { key: "putts", label: "Putts / Round", format: "number", better: "lower", defaultVisible: true },
+  { key: "up_and_down_success", label: "Up & Down %", format: "percentage", better: "higher", defaultVisible: true },
+  { key: "shots_100_and_in_9", label: "100 & In / 9", format: "number", better: "lower", defaultVisible: true },
+  { key: "shots_100_and_in_18", label: "100 & In / 18", format: "number", better: "lower", defaultVisible: true },
+];
+
+const metricValue = (key: string, observations: AnalyticsObservation[]) => {
+  if (key === "scoring_average") {
+    return buildRoundAggregate(observations.filter((item) => item.statisticKey === "strokes")).average;
+  }
+  if (key === "shots_100_and_in_9" || key === "shots_100_and_in_18") {
+    const normalized = calculateAnalyticsAggregate(
+      observations.filter((item) => item.statisticKey === "shots_100_and_in")
+    ).holeNormalized;
+    return key.endsWith("_9") ? normalized?.nineHoleAverage ?? null : normalized?.eighteenHoleAverage ?? null;
+  }
+  const values = observations.filter((item) => item.statisticKey === key);
+  const aggregate = key === "putts"
+    ? buildRoundAggregate(values)
+    : calculateAnalyticsAggregate(values);
+  return "percentage" in aggregate && aggregate.percentage !== null
+    ? aggregate.percentage
+    : aggregate.average;
+};
+
+const buildTeamRosterComparison = (
+  observations: AnalyticsObservation[],
+  query: AnalyticsQuery,
+  source: AnalyticsSourceData
+): TeamStatisticsRosterComparison => {
+  const rosterType = query.filters.teamName?.toLowerCase() === "women" ? "women" : "men";
+  const eligibleIds = query.filters.seasonId
+    ? new Set(source.seasonMemberships.filter((item) => item.seasonId === query.filters.seasonId).map((item) => item.rosterPlayerId))
+    : null;
+  const players = source.rosterPlayers.filter((player) =>
+    player.rosterType === rosterType && player.archivedAt === null && (!eligibleIds || eligibleIds.has(player.id))
+  );
+  const filtered = filterAnalyticsObservations(observations, { ...query.filters, teamName: undefined });
+  const observedDefinitions = new Map<string, AnalyticsObservation>();
+  for (const observation of filtered) {
+    if (!observedDefinitions.has(observation.statisticKey)) observedDefinitions.set(observation.statisticKey, observation);
+  }
+  const fixedKeys = new Set(["strokes", "fairway_hit", "green_in_regulation", "putts", "up_and_down_success", "shots_100_and_in"]);
+  const customMetrics: TeamStatisticsMetric[] = [...observedDefinitions.values()]
+    .filter((item) => !fixedKeys.has(item.statisticKey))
+    .map((item) => ({
+      key: item.statisticKey,
+      label: item.statisticName,
+      format: item.statisticInputType === "checkbox" || item.statisticInputType === "yes_no" ? "percentage" as const : "number" as const,
+      better: item.statisticInputType === "checkbox" || item.statisticInputType === "yes_no" ? "higher" as const : "lower" as const,
+      defaultVisible: false,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label) || left.key.localeCompare(right.key));
+  const metrics = [...fixedTeamStatisticsMetrics, ...customMetrics];
+  return {
+    metrics,
+    rows: players.map((player) => {
+      const playerObservations = applyLastNRounds(
+        filtered.filter((item) => item.rosterPlayerId === player.id),
+        query.lastNRounds
+      );
+      return {
+        rosterPlayerId: player.id,
+        playerName: player.name,
+        values: Object.fromEntries(metrics.map((metric) => [metric.key, metricValue(metric.key, playerObservations)])),
+      };
+    }),
+    seasons: [...source.seasons].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
+  };
 };
 
 const positiveInteger = (
@@ -360,7 +440,8 @@ const buildDistribution = (
 
 export const executeAnalyticsQuery = (
   observations: AnalyticsObservation[],
-  query: AnalyticsQuery
+  query: AnalyticsQuery,
+  source?: AnalyticsSourceData
 ): AnalyticsQueryResult => {
   const filtered = applyLastNRounds(
     filterAnalyticsObservations(observations, query.filters),
@@ -394,6 +475,10 @@ export const executeAnalyticsQuery = (
   }
   if (query.datasets.includes("distribution")) {
     result.distribution = buildDistribution(filtered, query.distributionBins);
+  }
+  if (query.datasets.includes("roster_comparison")) {
+    if (query.scope !== "team" || !source) throw new Error("Roster comparison requires team analytics source data.");
+    result.rosterComparison = buildTeamRosterComparison(observations, query, source);
   }
   return result;
 };

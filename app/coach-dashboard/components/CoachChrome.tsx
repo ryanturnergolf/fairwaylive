@@ -23,6 +23,7 @@ const groups = [
     links: [
       ["Player Profiles", "/coach-dashboard/players"],
       ["Team Performance", "/coach-dashboard/team-performance"],
+      ["Team Statistics", "/coach-dashboard/team-statistics"],
       ["Season Statistics", "/dashboard/season-statistics"],
     ],
   },
@@ -51,6 +52,7 @@ export function CoachHeader() {
             <Link href="/coach-dashboard/qualifying-manager" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Qualifying</Link>
             <Link href="/coach-dashboard/players" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Players</Link>
             <Link href="/coach-dashboard/team-performance" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Team Performance</Link>
+            <Link href="/coach-dashboard/team-statistics" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Team Statistics</Link>
             <Link href="/coach-dashboard/statistics" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Stat Configuration</Link>
           </nav>
           <Link href="/coach-dashboard" className="hidden min-h-11 items-center rounded-lg px-3 text-sm font-black text-[#0B3D2E] hover:bg-[#F6F1E6] sm:inline-flex">Dashboard</Link>

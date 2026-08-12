@@ -71,7 +71,7 @@ export async function GET(
     const supabase = await getAuthenticatedClient(request);
     const source = await loadAnalyticsSourceDataWithClient(supabase);
     return NextResponse.json(
-      executeAnalyticsQuery(buildAnalyticsObservations(source), query),
+      executeAnalyticsQuery(buildAnalyticsObservations(source), query, source),
       {
         headers: {
           "Cache-Control": "private, no-store",

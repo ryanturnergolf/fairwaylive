@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AnalyticsComparisonResult } from "../../lib/analyticsModel";
 import type { StatisticEventType } from "../../lib/dynamicStatisticsModel";
@@ -129,7 +130,7 @@ export default function TeamPerformanceDashboard() {
         <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Team Performance" }]} />
         <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Analytics</p>
         <h1 className="mt-2 text-4xl font-black tracking-tight">Team Performance Dashboard</h1>
-        <p className="mt-2 text-[#51635C]">Read-only team performance from the authenticated Analytics API.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3"><p className="mt-2 text-[#51635C]">Read-only team performance from the authenticated Analytics API.</p><Link href="/coach-dashboard/team-statistics" className="inline-flex min-h-11 items-center rounded-lg border border-[#0B3D2E] bg-white px-4 text-sm font-black">Open Team Statistics</Link></div>
 
         <section aria-label="Team performance filters" className="mt-6 grid gap-4 rounded-lg border border-[#E8DCC8] bg-white p-5 md:grid-cols-3 xl:grid-cols-7">
           <label className="text-sm font-bold">Team<select aria-label="Team" value={teamName} onChange={(event) => { setTeamName(event.target.value as TeamPerformanceFilters["teamName"]); setSeasonId(""); }} className="mt-2 w-full rounded-lg border border-[#D9D0C0] px-3 py-2"><option value="Men">Men</option><option value="Women">Women</option></select></label>
