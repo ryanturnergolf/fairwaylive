@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import CourseSetupEditor from "../components/CourseSetupEditor";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabaseClient";
@@ -35,6 +36,7 @@ import {
 } from "../lib/services/qaSeedTemplateService";
 import { loadQaSeedAccess, requireQaSeedAccess } from "../lib/services/qaSeedAccessService";
 import { createOperationId } from "../lib/services/operationIdService";
+import type { EventCourseSetupSelection } from "../lib/courseModel";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -153,6 +155,7 @@ type FormState = {
   hostSchool: string;
   date: string;
   course: string;
+  courseSetup: EventCourseSetupSelection | null;
   city: string;
   state: string;
   rounds: string;
@@ -221,6 +224,7 @@ const defaultFormState: FormState = {
   hostSchool: "",
   date: "",
   course: "",
+  courseSetup: null,
   city: "",
   state: "",
   rounds: "1",
@@ -773,6 +777,7 @@ export default function DashboardPage() {
       name: normalizedFormState.name.trim(),
       date: normalizedFormState.date,
       course: normalizedFormState.course.trim(),
+      courseSetup: normalizedFormState.courseSetup,
       city: normalizedFormState.city.trim(),
       state: normalizedFormState.state.trim(),
       rounds: normalizedFormState.rounds,
@@ -1553,17 +1558,19 @@ export default function DashboardPage() {
                     />
                     {errors.hostSchool ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{errors.hostSchool}</p> : null}
                   </label>
-                  <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                    <span>Golf Course</span>
-                    <input
-                      name="course"
-                      value={formState.course}
-                      onChange={handleInputChange}
-                      className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                      placeholder="Course name"
+                  <div className="md:col-span-2">
+                    <CourseSetupEditor
+                      labelPrefix="Tournament"
+                      value={formState.courseSetup}
+                      onChange={(courseSetup) => setFormState((current) => ({ ...current, courseSetup }))}
+                      onCourseNameChange={(course) => setFormState((current) => ({ ...current, course }))}
                     />
+                    <label className="mt-3 flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Legacy / unlisted course name</span>
+                      <input name="course" value={formState.course} onChange={handleInputChange} className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none" placeholder="Course name" />
+                    </label>
                     {errors.course ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{errors.course}</p> : null}
-                  </label>
+                  </div>
                   <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
                     <span>City</span>
                     <input

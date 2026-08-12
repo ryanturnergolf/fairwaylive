@@ -14,6 +14,7 @@ type MutationBody =
         tournamentDate: string;
         numberOfRounds: number;
         status: string;
+        courseSetup?: import("../../lib/courseModel").EventCourseSetupSelection | null;
       };
     }
   | {
@@ -73,7 +74,7 @@ type MutationBody =
     };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot";
 
 const getAuthenticatedClient = async (request: Request) => {
   const authorization = request.headers.get("authorization") ?? "";
@@ -164,6 +165,11 @@ export async function POST(request: Request) {
           status: body.input.status,
           owner_id: coachId,
           creation_key: idempotencyKey,
+          course_id: body.input.courseSetup?.courseId ?? null,
+          tee_set_id: body.input.courseSetup?.teeSetId ?? null,
+          saved_course_setup_id: body.input.courseSetup?.savedSetupId ?? null,
+          course_setup_name: body.input.courseSetup?.setupName ?? null,
+          course_hole_snapshot: body.input.courseSetup?.holes ?? [],
         });
       if (createError && createError.code !== "23505") throw createError;
 

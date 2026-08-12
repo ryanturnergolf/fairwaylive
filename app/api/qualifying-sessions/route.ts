@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       ? await Promise.all([
         supabase
           .from("qualifying_days")
-          .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,created_at,updated_at")
+          .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,created_at,updated_at")
           .in("qualifying_session_id", sessionIds)
           .order("day_number"),
         supabase
@@ -143,6 +143,14 @@ export async function GET(request: Request) {
             courseName: day.course_name,
             teeName: day.tee_name,
             startingHole: day.starting_hole,
+            courseSetup: day.course_id ? {
+              courseId: day.course_id,
+              courseName: day.course_name,
+              teeSetId: day.tee_set_id,
+              savedSetupId: day.saved_course_setup_id,
+              setupName: day.course_setup_name ?? day.tee_name,
+              holes: day.course_hole_snapshot ?? [],
+            } : null,
             rounds: (configuredRounds ?? []).filter((round) => round.qualifying_day_id === day.id).map((round) => ({
               roundOrder: round.round_order,
               startingHole: round.starting_hole,
@@ -191,6 +199,13 @@ export async function POST(request: Request) {
     }
     const { data, error } = await supabase.rpc(rpcName, rpcArguments);
     if (error) throw error;
+    if (input.days.some((day) => day.courseSetup)) {
+      const { error: snapshotError } = await supabase.rpc("apply_qualifying_course_snapshots", {
+        input_session_id: data,
+        input_days: input.days,
+      });
+      if (snapshotError) throw snapshotError;
+    }
     return NextResponse.json({ id: String(data) }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

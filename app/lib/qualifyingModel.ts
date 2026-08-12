@@ -83,6 +83,7 @@ export type QualifyingDay = {
   teeName: string;
   startingHole: number;
   rounds?: QualifyingRoundDefinition[];
+  courseSetup?: import("./courseModel").EventCourseSetupSelection | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -142,6 +143,7 @@ export type CreateQualifyingSessionInput = {
     teeName: string;
     startingHole: number;
     rounds?: QualifyingRoundDefinition[];
+    courseSetup?: import("./courseModel").EventCourseSetupSelection | null;
   }>;
 };
 

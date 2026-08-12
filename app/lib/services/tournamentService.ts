@@ -39,10 +39,12 @@ import type {
   TournamentStorageEnvelope,
 } from "../tournamentModel";
 import { legacyUiStateToTournamentModel } from "../tournamentModel";
+import type { EventCourseSetupSelection } from "../courseModel";
 
 export type CreateTournamentInput = Omit<StoredTournament, "id"> & {
   fallbackId: string;
   idempotencyKey?: string;
+  courseSetup?: EventCourseSetupSelection | null;
 };
 
 export type CreateTournamentResult = {
@@ -769,6 +771,7 @@ export type SharedTournamentScorecardState = {
   tournament: StoredTournament;
   isFinalized: boolean;
   updatedAt: string | null;
+  courseHoles: import("../courseModel").EventCourseHoleSnapshot[];
   pairings: Array<{
     groupNumber: number;
     teeTime: string;
@@ -805,6 +808,7 @@ const toTournamentRowInput = (input: CreateTournamentInput): CreateTournamentRow
   tournamentDate: input.date,
   numberOfRounds: toRoundCount(input.rounds),
   status: input.status.toLowerCase(),
+  courseSetup: input.courseSetup,
 });
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -824,7 +828,9 @@ const createTournamentOnce = async (
     rounds: input.rounds,
     scoringFormat: input.scoringFormat,
     status: input.status,
-    settings: input.settings,
+    settings: input.courseSetup
+      ? { ...(typeof input.settings === "object" && input.settings ? input.settings : {}), courseSetup: input.courseSetup }
+      : input.settings,
   };
 
   try {
@@ -1053,7 +1059,16 @@ const toStoredTournament = (row: TournamentRow): StoredTournament => ({
   rounds: String(row.number_of_rounds || 1),
   scoringFormat: "",
   status: row.status,
-  settings: {},
+  settings: row.course_id ? {
+    courseSetup: {
+      courseId: row.course_id,
+      courseName: row.course ?? "",
+      teeSetId: row.tee_set_id ?? null,
+      savedSetupId: row.saved_course_setup_id ?? null,
+      setupName: row.course_setup_name ?? "",
+      holes: row.course_hole_snapshot ?? [],
+    },
+  } : {},
 });
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -1699,6 +1714,7 @@ export const loadSharedTournamentScorecardState = async (
         (snapshotEnvelope.tournament.settings.finalization as { isFinalized?: unknown }).isFinalized
     ),
     updatedAt: snapshot?.updated_at ?? tournamentRow.updated_at,
+    courseHoles: tournamentRow.course_hole_snapshot ?? [],
     pairings,
     scorecardRows: sharedPlayerRows.map((row) => {
       const snapshotScorecard = findSnapshotScorecard(row);

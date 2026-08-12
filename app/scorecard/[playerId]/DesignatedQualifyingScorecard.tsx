@@ -19,6 +19,7 @@ type Model = {
   holes: Array<{ player_id: string; entered_by_player_id: string; hole_number: number; strokes: number;
     fairway_hit: boolean | null; green_in_regulation: boolean | null; putts: number | null }>;
   review: { self_review_complete: boolean } | null;
+  courseHoles?: Array<{ holeNumber: number; par: number; yardage: number }>;
 };
 
 export default function DesignatedQualifyingScorecard({
@@ -167,6 +168,10 @@ export default function DesignatedQualifyingScorecard({
         {model.finalized ? <p className="mt-3 rounded-lg bg-amber-100 p-3 font-black">Read-only · Finalized</p> : null}
         <section className="mt-5 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
           <h2 className="text-xl font-black">Hole {model.holeSequence?.[hole - 1] ?? hole}</h2>
+          {model.courseHoles?.find((courseHole) => courseHole.holeNumber === (model.holeSequence?.[hole - 1] ?? hole)) ? (() => {
+            const courseHole = model.courseHoles!.find((candidate) => candidate.holeNumber === (model.holeSequence?.[hole - 1] ?? hole))!;
+            return <p className="mt-1 text-sm font-bold text-[#51635C]">Par {courseHole.par} · {courseHole.yardage} yards</p>;
+          })() : null}
           {model.accessRole === "scorer" ? (
             <div className="mt-4 space-y-3">
               {model.groupPlayers.map((player) => (

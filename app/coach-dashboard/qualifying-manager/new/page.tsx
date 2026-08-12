@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import CourseSetupEditor from "../../../components/CourseSetupEditor";
 import { CoachBreadcrumbs, CoachHeader } from "../../components/CoachChrome";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -37,6 +38,7 @@ const emptyDay = (dayNumber: number): DayDraft => ({
   teeName: "",
   startingHole: 1,
   rounds: buildQualifyingPresetRounds(18),
+  courseSetup: null,
 });
 
 export default function CreateQualifyingPage() {
@@ -275,8 +277,9 @@ export default function CreateQualifyingPage() {
                     <legend className="px-2 font-black">Day {day.dayNumber}</legend>
                     <div className="grid gap-4 md:grid-cols-3">
                       <label className="font-bold">Date<input aria-label={`Day ${day.dayNumber} date`} type="date" className={inputClass} value={day.playDate} onChange={(event) => updateDay(index, { playDate: event.target.value })} /></label>
-                      <label className="font-bold">Course<input aria-label={`Day ${day.dayNumber} course`} className={inputClass} value={day.courseName} onChange={(event) => updateDay(index, { courseName: event.target.value })} /></label>
-                      <label className="font-bold">Tee<input aria-label={`Day ${day.dayNumber} tee`} className={inputClass} value={day.teeName} onChange={(event) => updateDay(index, { teeName: event.target.value })} /></label>
+                      <div className="md:col-span-2"><CourseSetupEditor labelPrefix={`Day ${day.dayNumber}`} value={day.courseSetup ?? null} onChange={(courseSetup) => updateDay(index, { courseSetup })} onCourseNameChange={(courseName) => updateDay(index, { courseName })} onSetupNameChange={(teeName) => updateDay(index, { teeName })} /></div>
+                      <label className="font-bold">Legacy / unlisted course<input aria-label={`Day ${day.dayNumber} course`} className={inputClass} value={day.courseName} onChange={(event) => updateDay(index, { courseName: event.target.value, courseSetup: null })} /></label>
+                      <label className="font-bold">Legacy / unlisted tee<input aria-label={`Day ${day.dayNumber} tee`} className={inputClass} value={day.teeName} onChange={(event) => updateDay(index, { teeName: event.target.value, courseSetup: null })} /></label>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2" aria-label={`Day ${day.dayNumber} presets`}>
                       {[9, 18, 27, 36].map((holes) => <button key={holes} type="button" className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-sm font-black" onClick={() => applyPreset(index, holes as 9 | 18 | 27 | 36)}>{holes}-hole preset</button>)}

@@ -176,10 +176,11 @@ const defaultHoles: Hole[] = [
   { holeNumber: 18, par: 4, yardage: 421 },
 ];
 
-const buildRoundHoles = (startingHole: number, holeCount: number) =>
+const buildRoundHoles = (startingHole: number, holeCount: number, configuredHoles: Hole[] = defaultHoles) =>
   Array.from({ length: holeCount }, (_, index) => {
     const courseHoleNumber = ((startingHole - 1 + index) % 18) + 1;
-    return { ...defaultHoles[courseHoleNumber - 1], holeNumber: index + 1, courseHoleNumber };
+    const configured = configuredHoles.find((hole) => hole.holeNumber === courseHoleNumber) ?? defaultHoles[courseHoleNumber - 1];
+    return { ...configured, holeNumber: index + 1, courseHoleNumber };
   });
 
 const getDisplayHoleNumber = (hole: Hole) => hole.courseHoleNumber ?? hole.holeNumber;
@@ -548,6 +549,10 @@ function ReciprocalPlayerScorecardPage() {
         }
 
         const holeCount = Math.max(1, Math.min(18, Number(tournamentState.scorecards?.roundSetup?.numberOfHoles) || 18));
+        const tournamentSettings = typeof tournament.settings === "object" && tournament.settings ? tournament.settings as Record<string, unknown> : {};
+        const localCourseSetup = typeof tournamentSettings.courseSetup === "object" && tournamentSettings.courseSetup
+          ? tournamentSettings.courseSetup as { holes?: Array<{ holeNumber: number; par: number; yardage: number }> }
+          : null;
         const selectedSnapshotScorecard = scorecardRows.find(
           (row) => row.playerName === selectedPlayer.playerName && row.team === selectedPlayer.teamName
         );
@@ -563,7 +568,8 @@ function ReciprocalPlayerScorecardPage() {
           round: tournamentState.scorecards?.roundSetup?.roundNumber || "1",
           holes: buildRoundHoles(
             Math.max(1, Math.min(18, Number(pairing.startingHole) || 1)),
-            holeCount
+            holeCount,
+            (sharedState?.courseHoles ?? localCourseSetup?.holes ?? []).map((hole) => ({ holeNumber: hole.holeNumber, par: hole.par, yardage: hole.yardage }))
           ),
           markerPlayerId,
           markerPlayerName: markerPlayer?.playerName,

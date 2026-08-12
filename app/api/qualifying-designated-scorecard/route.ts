@@ -11,6 +11,8 @@ const contextFor = async (shareToken: string, playerId: string, roundNumber: num
   if (!token || token.revoked_at || token.purpose !== "mobile_scoring" || new Date(token.expires_at).getTime() <= Date.now()) {
     throw new Error("Invalid scoring link.");
   }
+  const { data: tournament } = await client.from("tournaments")
+    .select("course_hole_snapshot").eq("id", token.tournament_id).maybeSingle();
   const { data: exchangeContext, error: contextError } = await client.rpc(
     "resolve_designated_qualifying_scorecard_context",
     { input_token_hash: tokenHash, input_player_id: playerId, input_round_number: roundNumber }
@@ -32,7 +34,7 @@ const contextFor = async (shareToken: string, playerId: string, roundNumber: num
   const { data: groupPlayers } = await client.from("tournament_players")
     .select("player_id,player_name").eq("tournament_id", token.tournament_id).eq("round_number", roundNumber)
     .eq("group_number", player.group_number).order("player_name");
-  return { client, token, session, player, round, assignment, groupPlayers: groupPlayers ?? [] };
+  return { client, token, session, player, round, assignment, groupPlayers: groupPlayers ?? [], courseHoles: tournament?.course_hole_snapshot ?? [] };
 };
 
 export async function GET(request: Request) {
@@ -61,6 +63,7 @@ export async function GET(request: Request) {
       holeCount: context.round?.hole_count ?? 18,
       startingHole: context.player?.starting_hole ?? 1,
       holeSequence: Array.from({ length: context.round?.hole_count ?? 18 }, (_, index) => ((Number(context.player?.starting_hole ?? 1) - 1 + index) % 18) + 1),
+      courseHoles: context.courseHoles,
       playerId,
       playerName: context.player.player_name,
       scorerPlayerId: context.assignment.scorer_player_id,

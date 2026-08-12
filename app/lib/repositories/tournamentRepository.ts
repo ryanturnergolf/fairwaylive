@@ -3,6 +3,7 @@ import {
   getSupabaseBrowserClient,
 } from "../supabaseClient";
 import { hashShareToken } from "../shareTokens";
+import type { EventCourseSetupSelection } from "../courseModel";
 
 export type TournamentRow = {
   id: string;
@@ -17,6 +18,11 @@ export type TournamentRow = {
   aggregate_version?: number;
   created_at: string | null;
   updated_at: string | null;
+  course_id?: string | null;
+  tee_set_id?: string | null;
+  saved_course_setup_id?: string | null;
+  course_setup_name?: string | null;
+  course_hole_snapshot?: import("../courseModel").EventCourseHoleSnapshot[];
 };
 
 export type CreateTournamentRowInput = {
@@ -26,6 +32,7 @@ export type CreateTournamentRowInput = {
   tournamentDate: string;
   numberOfRounds: number;
   status: string;
+  courseSetup?: EventCourseSetupSelection | null;
 };
 
 export type TournamentPlayerUpsertRow = {
@@ -120,7 +127,7 @@ export type ShareTokenReadOptions = {
 };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot";
 
 const tournamentPlayerColumns =
   "id,tournament_id,roster_player_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
@@ -213,6 +220,11 @@ export const createTournamentRow = async (
       number_of_rounds: input.numberOfRounds,
       status: input.status,
       creation_key: input.idempotencyKey,
+      course_id: input.courseSetup?.courseId ?? null,
+      tee_set_id: input.courseSetup?.teeSetId ?? null,
+      saved_course_setup_id: input.courseSetup?.savedSetupId ?? null,
+      course_setup_name: input.courseSetup?.setupName ?? null,
+      course_hole_snapshot: input.courseSetup?.holes ?? [],
     })
     .select(tournamentColumns)
     .single();
