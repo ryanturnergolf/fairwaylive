@@ -100,7 +100,9 @@ test("pinned package summaries include every selected definition in package orde
     "Shots from 100 Yards and In",
     "Up-and-Down Success",
   ]);
-  expect(summaries.map((summary) => summary.displayValue)).toEqual(["1/1 Yes", "1/2 Yes", "3 total", "5 total", "1/1 Yes"]);
+  expect(summaries.map((summary) => summary.displayValue)).toEqual(["1/1", "1/2", "3 total", "5 total", "1/1 Yes"]);
+  expect(summaries.find((summary) => summary.key === "fairway_hit")?.displayValue).not.toContain("Yes");
+  expect(summaries.find((summary) => summary.key === "green_in_regulation")?.displayValue).not.toContain("Yes");
   expect(summaries.find((summary) => summary.key === "shots_100_and_in")).toMatchObject({ recordedCount: 2, applicableCount: 2 });
   expect(summaries.some((summary) => summary.key === "up_and_down_opportunity")).toBe(false);
   expect(buildMobileStatisticSummaries(items.slice(0, 3), [{ par: 4 }], [{}]).some((summary) => summary.key === "shots_100_and_in")).toBe(false);
@@ -132,6 +134,12 @@ test("player summary totals nine-hole 100 Yards and In values and hides only opp
   });
   expect(summaries.some((summary) => summary.key === "up_and_down_opportunity")).toBe(false);
   expect(summaries.find((summary) => summary.key === "up_and_down_success")?.displayValue).toBe("9/9 Yes");
+});
+
+test("post-round statistic cards keep only meaningful summary results", () => {
+  const scorecardSource = readFileSync(join(process.cwd(), "app/scorecard/[playerId]/page.tsx"), "utf8");
+  expect(scorecardSource).not.toContain("holes recorded");
+  expect(scorecardSource).toContain('["Hole", "Distance", "Par", "Score"]');
 });
 
 test("mobile access migration is token-scoped, append-only, and does not broaden RLS", () => {

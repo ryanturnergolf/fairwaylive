@@ -59,6 +59,7 @@ type PlayerScorecard = {
   team: string;
   round: string;
   holes: Hole[];
+  hasCourseYardageSnapshot?: boolean;
   markerPlayerId?: string;
   markerPlayerName?: string;
   markerTeam?: string;
@@ -560,6 +561,7 @@ function ReciprocalPlayerScorecardPage() {
           (row) => row.playerName === markerPlayer.playerName && row.team === markerPlayer.teamName
         );
 
+        const courseHoleSnapshot = sharedState?.courseHoles ?? localCourseSetup?.holes ?? [];
         finishResolution({
           playerId: String(selectedPlayerId),
           tournamentName: tournament.name,
@@ -569,8 +571,9 @@ function ReciprocalPlayerScorecardPage() {
           holes: buildRoundHoles(
             Math.max(1, Math.min(18, Number(pairing.startingHole) || 1)),
             holeCount,
-            (sharedState?.courseHoles ?? localCourseSetup?.holes ?? []).map((hole) => ({ holeNumber: hole.holeNumber, par: hole.par, yardage: hole.yardage }))
+            courseHoleSnapshot.map((hole) => ({ holeNumber: hole.holeNumber, par: hole.par, yardage: hole.yardage }))
           ),
+          hasCourseYardageSnapshot: courseHoleSnapshot.length > 0,
           markerPlayerId,
           markerPlayerName: markerPlayer?.playerName,
           markerTeam: markerPlayer?.teamName,
@@ -2073,7 +2076,7 @@ function ReciprocalPlayerScorecardPage() {
         <table className="w-full table-fixed text-[10px]">
           <thead>
             <tr className="border-y border-[#E8DCC8] bg-[#FCFAF5] text-[#51635C]">
-              {(hasAssignedStatisticPackage ? ["Hole", "Par", "Score"] : ["Hole", "Par", "Score", "Fairway", "GIR", "Putts"]).map((heading) => (
+              {(hasAssignedStatisticPackage ? ["Hole", "Distance", "Par", "Score"] : ["Hole", "Distance", "Par", "Score", "Fairway", "GIR", "Putts"]).map((heading) => (
                 <th key={heading} className="px-0.5 py-2 text-center font-black uppercase tracking-[0.08em]">
                   {heading}
                 </th>
@@ -2086,8 +2089,9 @@ function ReciprocalPlayerScorecardPage() {
               const statistic = submittedStats[index];
               return (
                 <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
-                  <td className="px-0.5 py-2 text-center font-black">{hole.holeNumber}</td>
-                  <td className="px-0.5 py-2 text-center text-[#51635C]">{hole.par}</td>
+                   <td className="px-0.5 py-2 text-center font-black">{hole.holeNumber}</td>
+                   <td className="px-0.5 py-2 text-center text-[#51635C]">{scorecard.hasCourseYardageSnapshot ? hole.yardage : "—"}</td>
+                   <td className="px-0.5 py-2 text-center text-[#51635C]">{hole.par}</td>
                   <td className="px-0.5 py-2 text-center font-black">{scores[index] || "—"}</td>
                   {!hasAssignedStatisticPackage ? (
                     <>
@@ -2214,7 +2218,6 @@ function ReciprocalPlayerScorecardPage() {
                         <div key={summary.definitionVersionId} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3">
                           <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#51635C]">{summary.name}</p>
                           <p className="mt-1 text-lg font-black">{summary.displayValue}</p>
-                          <p className="mt-1 text-[10px] font-semibold text-[#51635C]">{summary.recordedCount}/{summary.applicableCount} holes recorded</p>
                         </div>
                       ))}
                     </div>
@@ -2411,7 +2414,6 @@ function ReciprocalPlayerScorecardPage() {
                     <div key={summary.definitionVersionId} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#51635C]">{summary.name}</p>
                       <p className="mt-1 text-lg font-black text-[#0B3D2E]">{summary.displayValue}</p>
-                      <p className="mt-1 text-[10px] font-semibold text-[#51635C]">{summary.recordedCount}/{summary.applicableCount} holes recorded</p>
                     </div>
                   ))}
                 </div>

@@ -143,7 +143,9 @@ export const buildMobileStatisticSummaries = (
       displayValue = numericValues.length > 0 ? `${total} total` : displayValue;
     } else if (item.inputType === "yes_no" || item.inputType === "checkbox") {
       const yesCount = recordedValues.filter((value) => value === true).length;
-      displayValue = `${yesCount}/${applicableValues.length} Yes`;
+      displayValue = item.key === "fairway_hit" || item.key === "green_in_regulation"
+        ? `${yesCount}/${applicableValues.length}`
+        : `${yesCount}/${applicableValues.length} Yes`;
     } else if (item.inputType === "bounded_number") {
       const total = recordedValues.reduce<number>((sum, value) => sum + (typeof value === "number" ? value : 0), 0);
       displayValue = recordedValues.length > 0 ? `${total} total` : displayValue;

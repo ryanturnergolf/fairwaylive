@@ -270,9 +270,10 @@ const buildCompleteReviewStatistics = (
 const routeSharedTournamentRoster = async (
   page: Page,
   options?: {
-    tournamentName: string;
-    course: string;
-    players: Array<Record<string, unknown>>;
+    tournamentName?: string;
+    course?: string;
+    players?: Array<Record<string, unknown>>;
+    courseHoles?: Array<{ holeNumber: number; par: number; yardage: number }>;
   }
 ) => {
   await page.route("**/rest/v1/tournaments?**", async (route) => {
@@ -289,6 +290,7 @@ const routeSharedTournamentRoster = async (
         status: "test",
         created_at: null,
         updated_at: null,
+        course_hole_snapshot: options?.courseHoles ?? [],
       }),
     });
   });
@@ -681,6 +683,7 @@ const openSharedSnapshotReview = async (
     stableMarkedSelfScores?: number[];
     statisticsReadDelayMs?: number;
     statisticEntries?: Array<ReturnType<typeof buildScoreHoleEntry>>;
+    courseHoles?: Array<{ holeNumber: number; par: number; yardage: number }>;
   }
 ) => {
   const snapshot = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
@@ -702,7 +705,7 @@ const openSharedSnapshotReview = async (
     );
   }
 
-  await routeSharedTournamentRoster(page);
+  await routeSharedTournamentRoster(page, options.courseHoles ? { courseHoles: options.courseHoles } : undefined);
   await routeTournamentStateSnapshotStore(page, 201, [{
     tournament_id: sharedTournamentId,
     local_tournament_id: tournamentId,
@@ -1169,6 +1172,7 @@ test("completed scorer and marker entries submit once and restore submitted stat
 });
 
 test("submitted post-round scorecard shows authoritative scores, statistics, navigation, and refresh state", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const completeStatistics = [
     ...buildCompleteReviewStatistics(sharedTournamentId, "player-1"),
     ...buildCompleteReviewStatistics(sharedTournamentId, "player-2"),
@@ -1178,6 +1182,11 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
     markerEnteredScores: Array.from({ length: 18 }, () => 4),
     stableMarkedSelfScores: Array.from({ length: 18 }, () => 4),
     statisticEntries: completeStatistics,
+    courseHoles: Array.from({ length: 18 }, (_, index) => ({
+      holeNumber: index + 1,
+      par: [4, 5, 3, 4, 4, 5, 3, 4, 4, 4, 5, 3, 4, 4, 4, 3, 5, 4][index],
+      yardage: index === 0 ? 275 : index === 1 ? 502 : index === 2 ? 335 : 350 + index,
+    })),
   });
 
   await page.getByRole("button", { name: "Submit Verification" }).click();
@@ -1201,9 +1210,14 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
   const backNine = page.getByRole("heading", { name: "Back 9" }).locator("xpath=ancestor::section[1]");
   await expect(frontNine.locator("tbody tr")).toHaveCount(9);
   await expect(backNine.locator("tbody tr")).toHaveCount(9);
-  await expect(frontNine.locator("tbody tr td:nth-child(3)")).toHaveText(Array.from({ length: 9 }, () => "4"));
-  await expect(backNine.locator("tbody tr td:nth-child(3)")).toHaveText(Array.from({ length: 9 }, () => "4"));
+  await expect(frontNine.getByRole("columnheader", { name: "Distance" })).toBeVisible();
+  await expect(frontNine.locator("tbody tr td:nth-child(2)").first()).toHaveText("275");
+  await expect(frontNine.locator("tbody tr td:nth-child(2)").nth(1)).toHaveText("502");
+  await expect(frontNine.locator("tbody tr td:nth-child(2)").nth(2)).toHaveText("335");
+  await expect(frontNine.locator("tbody tr td:nth-child(4)")).toHaveText(Array.from({ length: 9 }, () => "4"));
+  await expect(backNine.locator("tbody tr td:nth-child(4)")).toHaveText(Array.from({ length: 9 }, () => "4"));
   await expect(page.getByRole("cell", { name: "N/A" })).toHaveCount(4);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   const roundTotals = page.getByRole("heading", { name: "Round Totals" }).locator("xpath=ancestor::section[1]");
   await expect(roundTotals).toContainText("36 / 36");
@@ -1250,7 +1264,8 @@ test("statistics opt-out post-round card preserves missing values without synthe
   await page.getByRole("button", { name: "View My Scorecard and Stats" }).click();
 
   await expect(page.getByText("Statistics Incomplete", { exact: true })).toBeVisible();
-  await expect(page.getByText("—", { exact: true })).toHaveCount(47);
+  const legacyFrontNine = page.getByRole("heading", { name: "Front 9" }).locator("xpath=ancestor::section[1]");
+  await expect(legacyFrontNine.locator("tbody tr td:nth-child(2)")).toHaveText(Array.from({ length: 9 }, () => "—"));
   await expect(page.getByRole("cell", { name: "N/A" })).toHaveCount(4);
   expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(2);
   expect(sharedStore.savedHoleRows).toHaveLength(2);
