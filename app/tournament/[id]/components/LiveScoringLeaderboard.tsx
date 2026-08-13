@@ -14,6 +14,7 @@ import type { ScoreHoleEntryRow } from "../../../lib/repositories/statisticsRepo
 import type {
   DynamicStatisticReviewItem,
 } from "../../../lib/services/dynamicStatisticsReviewService";
+import { buildCourseHoleSequence } from "../../../lib/services/courseService";
 
 export type ScorecardRow = {
   id: number;
@@ -27,6 +28,7 @@ export type ReviewResolutionItem = {
   playerId: string;
   playerName: string;
   holeNumber: number;
+  displayHoleNumber: number;
   playerScore: number;
   markerScore: number;
   playerEntry: ScoreHoleEntryRow | null;
@@ -101,6 +103,10 @@ export default function LiveScoringLeaderboard({
   onResolveDynamicStatistic,
 }: LiveScoringLeaderboardProps) {
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
+  const displayHoleNumbers = useMemo(
+    () => buildCourseHoleSequence(normalizedRoundSetup.startingHole, displayHoleCount),
+    [displayHoleCount, normalizedRoundSetup.startingHole]
+  );
   const countingScores = normalizedRoundSetup.countingScores;
 
   const individualLeaderboard = useMemo(
@@ -160,7 +166,7 @@ export default function LiveScoringLeaderboard({
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
-                      Hole {item.holeNumber}
+                      Hole {item.displayHoleNumber}
                     </p>
                     <p className="mt-1 text-lg font-black text-[#0B3D2E]">{item.playerName}</p>
                     <p className="mt-1 text-sm font-semibold text-[#51635C]">
@@ -253,7 +259,7 @@ export default function LiveScoringLeaderboard({
                 <div className="grid gap-4 lg:grid-cols-[1.4fr_repeat(4,minmax(90px,0.7fr))] lg:items-center">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">
-                      {item.playerName} · Hole {item.holeNumber}
+                      {item.playerName} · Hole {item.displayHoleNumber ?? item.holeNumber}
                     </p>
                     <p className="mt-1 text-lg font-black text-[#0B3D2E]">
                       {item.name}
@@ -448,9 +454,9 @@ export default function LiveScoringLeaderboard({
                     <tr>
                       <th className="px-4 py-4">Player Name</th>
                       <th className="px-4 py-4">Team</th>
-                      {Array.from({ length: displayHoleCount }, (_, index) => (
-                        <th key={index + 1} className="px-2 py-4 text-center">
-                          {index + 1}
+                      {displayHoleNumbers.map((holeNumber) => (
+                        <th key={holeNumber} className="px-2 py-4 text-center">
+                          {holeNumber}
                         </th>
                       ))}
                       <th className="px-4 py-4 text-center">Total</th>

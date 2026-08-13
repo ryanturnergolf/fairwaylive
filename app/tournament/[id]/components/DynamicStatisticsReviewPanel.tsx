@@ -48,7 +48,7 @@ export default function DynamicStatisticsReviewPanel({
         {items.map((item) => (
           <div key={item.id} className="rounded-[20px] border border-[#C8DCE7] bg-white p-4">
             <div className="grid gap-4 lg:grid-cols-[1.4fr_repeat(4,minmax(90px,0.7fr))] lg:items-center">
-              <div><p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">{item.playerName} · Hole {item.holeNumber}</p><p className="mt-1 text-lg font-black text-[#0B3D2E]">{item.name}<span className="ml-2 text-xs text-[#B8892D]">{item.isRequired ? "Required" : "Optional"}</span></p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#51635C]">{item.playerName} · Hole {item.displayHoleNumber ?? item.holeNumber}</p><p className="mt-1 text-lg font-black text-[#0B3D2E]">{item.name}<span className="ml-2 text-xs text-[#B8892D]">{item.isRequired ? "Required" : "Optional"}</span></p></div>
               <div><p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Player Value</p><p className="mt-1 font-black text-[#0B3D2E]">{formatValue(item.playerValue)}</p></div>
               <div><p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Marker Value</p><p className="mt-1 font-black text-[#0B3D2E]">{formatValue(item.markerValue)}</p></div>
               <div><p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Official Value</p><p className="mt-1 font-black text-[#0B3D2E]">{formatValue(item.officialValue)}</p></div>

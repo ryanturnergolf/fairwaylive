@@ -179,7 +179,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validation.errors[0], errors: validation.errors }, { status: 400 });
     }
 
-    const hasFlexibleRounds = input.days.every((day) => Array.isArray(day.rounds) && day.rounds.length > 0);
+    const { data: coachIdentity, error: coachIdentityError } = await supabase
+      .from("coaches")
+      .select("program_name")
+      .maybeSingle();
+    if (coachIdentityError) throw coachIdentityError;
+    const programName = typeof coachIdentity?.program_name === "string" && coachIdentity.program_name.trim()
+      ? coachIdentity.program_name.trim()
+      : null;
+    const snapshotInput: CreateQualifyingSessionInput = {
+      ...input,
+      selectedPlayers: input.selectedPlayers.map((player) => ({ ...player, teamName: programName })),
+    };
+    const hasFlexibleRounds = snapshotInput.days.every((day) => Array.isArray(day.rounds) && day.rounds.length > 0);
     const hasStatisticSelection = Array.isArray(input.statisticDefinitionVersionIds);
     const rpcName = hasStatisticSelection
       ? "create_qualifying_session_draft_with_statistics"
@@ -190,15 +202,22 @@ export async function POST(request: Request) {
       input_name: input.name.trim(),
       input_roster_type: input.rosterType,
       input_scoring_mode: input.scoringMode,
-      input_selected_players: input.selectedPlayers,
-      input_groups: input.groups,
-      input_days: input.days,
+      input_selected_players: snapshotInput.selectedPlayers,
+      input_groups: snapshotInput.groups,
+      input_days: snapshotInput.days,
     };
     if (hasStatisticSelection) {
       rpcArguments.input_statistic_definition_version_ids = input.statisticDefinitionVersionIds;
     }
     const { data, error } = await supabase.rpc(rpcName, rpcArguments);
     if (error) throw error;
+    if (programName) {
+      const { error: participantTeamError } = await supabase
+        .from("qualifying_participants")
+        .update({ team_name: programName })
+        .eq("qualifying_session_id", data);
+      if (participantTeamError) throw participantTeamError;
+    }
     if (input.days.some((day) => day.courseSetup)) {
       const { error: snapshotError } = await supabase.rpc("apply_qualifying_course_snapshots", {
         input_session_id: data,

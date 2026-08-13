@@ -30,6 +30,7 @@ export type DynamicStatisticReviewItem = {
   playerId: string;
   playerName: string;
   holeNumber: number;
+  displayHoleNumber?: number;
   definitionVersionId: string;
   definitionKey: string;
   name: string;

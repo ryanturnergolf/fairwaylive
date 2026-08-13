@@ -33,6 +33,7 @@ export type Course = {
 
 export type SavedCourseSetupHole = CourseTeeHoleYardage & {
   sourceTeeSetId: string | null;
+  parOverride: number | null;
 };
 
 export type SavedCourseSetup = {
@@ -66,4 +67,21 @@ export type EventCourseSetupSelection = {
 export type CourseCatalog = {
   courses: Course[];
   savedSetups: SavedCourseSetup[];
+};
+
+export type CourseHoleProjection = EventCourseHoleSnapshot & {
+  position: number;
+};
+
+export type CourseTotals = {
+  yardage: number;
+  par: number;
+  holeCount: number;
+};
+
+export type CourseRoundProjection = {
+  holes: CourseHoleProjection[];
+  out: CourseTotals | null;
+  in: CourseTotals | null;
+  total: CourseTotals;
 };

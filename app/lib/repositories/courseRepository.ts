@@ -44,7 +44,7 @@ export const loadCourseCatalogWithClient = async (supabase: SupabaseClient): Pro
     savedSetups: setupRows.map((setup) => ({
       id: String(setup.id), ownerId: String(setup.owner_id), courseId: String(setup.course_id), name: String(setup.name),
       baseTeeSetId: setup.base_tee_set_id ? String(setup.base_tee_set_id) : null,
-      holes: setupHoleRows.filter((hole) => hole.setup_id === setup.id).map((hole) => ({ holeNumber: Number(hole.hole_number), yardage: Number(hole.yardage), sourceTeeSetId: hole.source_tee_set_id ? String(hole.source_tee_set_id) : null })),
+      holes: setupHoleRows.filter((hole) => hole.setup_id === setup.id).map((hole) => ({ holeNumber: Number(hole.hole_number), yardage: Number(hole.yardage), sourceTeeSetId: hole.source_tee_set_id ? String(hole.source_tee_set_id) : null, parOverride: hole.par_override == null ? null : Number(hole.par_override) })),
       createdAt: String(setup.created_at), updatedAt: String(setup.updated_at),
     })),
   };

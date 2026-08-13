@@ -7,7 +7,6 @@ import { createPortal } from "react-dom";
 import { buildAppUrl } from "../../../lib/appUrl";
 import {
   buildPrintablePairings,
-  formatTotalToPar,
   type NormalizedRoundSetup,
 } from "../../../lib/services/tournamentDerivedState";
 import {
@@ -26,6 +25,8 @@ import type {
 import { createShareToken } from "../../../lib/services/shareTokenService";
 import type { ScorecardRow } from "./LiveScoringLeaderboard";
 import TeamScoringCodes from "./TeamScoringCodes";
+import type { EventCourseHoleSnapshot } from "../../../lib/courseModel";
+import { buildCourseRoundProjection } from "../../../lib/services/courseService";
 
 export type ClippdExportState = {
   tournamentId: string;
@@ -88,6 +89,7 @@ type TournamentPrintExportProps = {
   isReadinessRefreshing: boolean;
   isCoachAuthenticated: boolean;
   teams: Array<{ id: string | number; name?: string; schoolName?: string; shortName?: string }>;
+  eventCourseHoles: EventCourseHoleSnapshot[];
   children: (controls: PrintExportControls) => ReactNode;
 };
 
@@ -121,6 +123,7 @@ export default function TournamentPrintExport({
   isReadinessRefreshing,
   isCoachAuthenticated,
   teams,
+  eventCourseHoles,
   children,
 }: TournamentPrintExportProps) {
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
@@ -177,6 +180,15 @@ export default function TournamentPrintExport({
     [normalizedRoundSetup, pairings, scorecardRows]
   );
   const safeScorecardRows = Array.isArray(scorecardRows) ? scorecardRows : [];
+  const roundProjection = useMemo(
+    () => buildCourseRoundProjection(eventCourseHoles, normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles),
+    [eventCourseHoles, normalizedRoundSetup.numberOfHoles, normalizedRoundSetup.startingHole]
+  );
+  const formatActualToPar = (score: number) => {
+    if (!score || !roundProjection.total.par) return "—";
+    const difference = score - roundProjection.total.par;
+    return difference === 0 ? "E" : difference > 0 ? `+${difference}` : String(difference);
+  };
   const displayedReadinessBlockers = readinessBlockingReasons.length > 0
     ? readinessBlockingReasons
     : tournamentReadiness?.reasons.filter((reason) => reason.severity !== "pass") ?? [];
@@ -513,7 +525,7 @@ export default function TournamentPrintExport({
                 <button
                   type="button"
                   onClick={closeScoreboardImportModal}
-                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                  className="min-h-12 shrink-0 rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Cancel
                 </button>
@@ -562,7 +574,7 @@ export default function TournamentPrintExport({
               </div>
             </div>
 
-            <div className="min-h-0 overflow-y-auto px-7 py-7">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-7">
               <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -628,7 +640,7 @@ export default function TournamentPrintExport({
                 <button
                   type="button"
                   onClick={closeReadinessBlockedModal}
-                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                  className="min-h-12 shrink-0 rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Close
                 </button>
@@ -739,36 +751,36 @@ export default function TournamentPrintExport({
                 Players simply scan this QR code to enter scores from any phone. No app required.
               </p>
 
-              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="sticky bottom-0 -mx-5 mt-8 flex shrink-0 flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-5 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-4 sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0">
                 <button
                   type="button"
                   onClick={closeQrModal}
-                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                  className="min-h-12 rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Close
                 </button>
                 <button
                   type="button"
-                  className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                  className="min-h-12 shrink-0 rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                 >
                   Download QR
                 </button>
                 {isQrMobileScorecardReady && resolvedMobileScorecardUrl ? (
                   <Link
                     href={resolvedMobileScorecardUrl}
-                    className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                    className="flex min-h-12 shrink-0 items-center justify-center rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
                   >
                     Open Mobile Scorecard
                   </Link>
                 ) : (
-                  <span className="cursor-not-allowed rounded-full border border-[#E8DCC8] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#51635C]/60">
+                  <span className="flex min-h-12 shrink-0 items-center justify-center rounded-full border border-[#E8DCC8] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.2em] text-[#51635C]/60">
                     Open Mobile Scorecard
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={handlePrintFromQrModal}
-                  className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
+                  className="min-h-12 shrink-0 rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
                 >
                   Print Scorecard
                 </button>
@@ -864,17 +876,14 @@ export default function TournamentPrintExport({
                       </tr>
                     </thead>
                     <tbody>
-                      {Array.from({ length: 18 }, (_, index) => {
-                        const holeNumber = index + 1;
-                        const score = activePrintPlayer.scores[holeNumber - 1] ?? 0;
+                      {roundProjection.holes.map((hole, index) => {
+                        const score = activePrintPlayer.scores[index] ?? 0;
                         const scoreDisplay = score > 0 ? score : "";
-                        const par = 4;
-                        const yardage = 350 + holeNumber * 6;
                         return (
-                          <tr key={holeNumber} className="border-t border-[#E8DCC8] bg-white/70">
-                            <td className="px-3 py-3 font-black text-[#0B3D2E]">{holeNumber}</td>
-                            <td className="px-3 py-3 text-[#51635C]">{par}</td>
-                            <td className="px-3 py-3 text-[#51635C]">{yardage}</td>
+                          <tr key={hole.holeNumber} className="border-t border-[#E8DCC8] bg-white/70">
+                            <td className="px-3 py-3 font-black text-[#0B3D2E]">{hole.holeNumber}</td>
+                            <td className="px-3 py-3 text-[#51635C]">{hole.par || "—"}</td>
+                            <td className="px-3 py-3 text-[#51635C]">{hole.yardage || "—"}</td>
                             <td className="px-3 py-3 font-black text-[#0B3D2E]">{scoreDisplay}</td>
                           </tr>
                         );
@@ -884,24 +893,18 @@ export default function TournamentPrintExport({
                 </div>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  {roundProjection.out ? <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">OUT</p><p className="mt-2 font-black text-[#0B3D2E]">{roundProjection.out.yardage} yards · Par {roundProjection.out.par} · Score {roundProjection.holes.reduce((sum, hole, index) => hole.holeNumber <= 9 ? sum + (activePrintPlayer.scores[index] || 0) : sum, 0)}</p></div> : null}
+                  {roundProjection.in ? <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">IN</p><p className="mt-2 font-black text-[#0B3D2E]">{roundProjection.in.yardage} yards · Par {roundProjection.in.par} · Score {roundProjection.holes.reduce((sum, hole, index) => hole.holeNumber >= 10 ? sum + (activePrintPlayer.scores[index] || 0) : sum, 0)}</p></div> : null}
                   <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Front 9 Total</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.scores.slice(0, 9).reduce((sum, score) => sum + score, 0)}</p>
-                  </div>
-                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Back 9 Total</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.scores.slice(9, 18).reduce((sum, score) => sum + score, 0)}</p>
-                  </div>
-                  <div className="rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Overall Total</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{activePrintPlayer.scores.reduce((sum, score) => sum + score, 0)}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">TOTAL</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{roundProjection.total.yardage} yards · Par {roundProjection.total.par} · Score {activePrintPlayer.scores.reduce((sum, score) => sum + score, 0)}</p>
                   </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[#E8DCC8] bg-[#FCFAF5] p-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">To Par</p>
-                    <p className="mt-2 font-black text-[#0B3D2E]">{formatTotalToPar(activePrintPlayer.scores.reduce((sum, score) => sum + score, 0))}</p>
+                    <p className="mt-2 font-black text-[#0B3D2E]">{formatActualToPar(activePrintPlayer.scores.reduce((sum, score) => sum + score, 0))}</p>
                   </div>
                   <div className="rounded-full border border-[#E8DCC8] bg-white px-4 py-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
                     Notes
@@ -949,7 +952,7 @@ export default function TournamentPrintExport({
 
           const rowsForGroup = pairingPlayers.map((player) => {
             const matchingScorecardRow = safeScorecardRows.find((row) => row.playerName === player.playerName);
-            const scores = Array.from({ length: 18 }, (_, index) => matchingScorecardRow?.scores[index] ?? 0);
+            const scores = roundProjection.holes.map((_, index) => matchingScorecardRow?.scores[index] ?? 0);
             const total = scores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
 
             return {
@@ -973,9 +976,9 @@ export default function TournamentPrintExport({
                 <thead>
                   <tr>
                     <th className="border border-black px-2 py-1 text-left">Player</th>
-                    {Array.from({ length: 18 }, (_, index) => (
-                      <th key={`print-hole-${pairing.groupNumber}-${index + 1}`} className="border border-black px-2 py-1 text-center">
-                        {index + 1}
+                    {roundProjection.holes.map((hole) => (
+                      <th key={`print-hole-${pairing.groupNumber}-${hole.holeNumber}`} className="border border-black px-2 py-1 text-center">
+                        {hole.holeNumber}
                       </th>
                     ))}
                     <th className="border border-black px-2 py-1 text-center">Total</th>
@@ -984,12 +987,12 @@ export default function TournamentPrintExport({
                 <tbody>
                   <tr>
                     <td className="border border-black px-2 py-1 font-semibold">Par</td>
-                    {Array.from({ length: 18 }, (_, index) => (
-                      <td key={`print-par-${pairing.groupNumber}-${index + 1}`} className="border border-black px-2 py-1 text-center">
-                        4
+                    {roundProjection.holes.map((hole) => (
+                      <td key={`print-par-${pairing.groupNumber}-${hole.holeNumber}`} className="border border-black px-2 py-1 text-center">
+                        {hole.par || "—"}
                       </td>
                     ))}
-                    <td className="border border-black px-2 py-1 text-center font-semibold">72</td>
+                    <td className="border border-black px-2 py-1 text-center font-semibold">{roundProjection.total.par || "—"}</td>
                   </tr>
 
                   {rowsForGroup.map((row) => (

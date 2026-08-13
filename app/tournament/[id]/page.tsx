@@ -94,6 +94,8 @@ import TournamentStatisticsDashboard from "./components/TournamentStatisticsDash
 import DynamicStatisticsReviewPanel from "./components/DynamicStatisticsReviewPanel";
 import OfficialResultsDashboard from "./components/OfficialResultsDashboard";
 import QualifyingAccessContext from "./components/QualifyingAccessContext";
+import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
+import { buildCourseHoleSequence } from "../../lib/services/courseService";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 const officialResultsTab = "Official Results";
@@ -264,6 +266,12 @@ export default function TournamentPage() {
     teeTimeInterval: "8 minutes",
   });
   const normalizedRoundSetup = normalizeTournamentRoundSetup(roundSetup, defaultRoundSetupState, scorecardRows);
+  const eventCourseHoles = useMemo(() => {
+    const settings = tournamentMeta.settings && typeof tournamentMeta.settings === "object"
+      ? tournamentMeta.settings as { courseSetup?: { holes?: EventCourseHoleSnapshot[] } }
+      : null;
+    return Array.isArray(settings?.courseSetup?.holes) ? settings.courseSetup.holes : [];
+  }, [tournamentMeta.settings]);
   useEffect(() => {
     if (
       !scorecardsGenerated ||
@@ -350,6 +358,7 @@ export default function TournamentPage() {
     [normalizedRoundSetup.numberOfHoles, playerIdsByName, scoreHoleEntries, scorecardRows]
   );
   const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
+    const displayHoleNumbers = buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles);
     const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
     const holeEntriesByKey = new Map<string, ScoreHoleEntryRow[]>();
 
@@ -390,6 +399,7 @@ export default function TournamentPage() {
           playerId,
           playerName: row.playerName,
           holeNumber,
+          displayHoleNumber: displayHoleNumbers[index] ?? holeNumber,
           playerScore,
           markerScore,
           playerEntry: holeEntries.find((entry) => String(entry.entered_by_player_id) === String(entry.player_id)) ?? null,
@@ -397,7 +407,7 @@ export default function TournamentPage() {
         };
       }).filter((item): item is ReviewResolutionItem => Boolean(item));
     });
-  }, [normalizedRoundSetup.numberOfHoles, officialHoleKeys, playerIdsByName, scoreHoleEntries, scorecardRows, sharedScoreEntries]);
+  }, [normalizedRoundSetup.numberOfHoles, normalizedRoundSetup.startingHole, officialHoleKeys, playerIdsByName, scoreHoleEntries, scorecardRows, sharedScoreEntries]);
   const dynamicStatisticReviewItems = useMemo(
     () =>
       dynamicReviewFoundation
@@ -409,12 +419,16 @@ export default function TournamentPage() {
             }),
             roundNumber: normalizedRoundSetup.roundNumber,
             holePars: certifiedMobileHolePars.slice(0, normalizedRoundSetup.numberOfHoles),
-          })
+          }).map((item) => ({
+            ...item,
+            displayHoleNumber: buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles)[item.holeNumber - 1] ?? item.holeNumber,
+          }))
         : [],
     [
       dynamicReviewFoundation,
       normalizedRoundSetup.numberOfHoles,
       normalizedRoundSetup.roundNumber,
+      normalizedRoundSetup.startingHole,
       playerIdsByName,
       scorecardRows,
     ]
@@ -1651,6 +1665,7 @@ export default function TournamentPage() {
                 isReadinessRefreshing={isReadinessRefreshing}
                 isCoachAuthenticated={isCoachAuthenticated}
                 teams={teams}
+                eventCourseHoles={eventCourseHoles}
               >
                 {({ onPrintTournamentScorecards, onOpenQrModal, onOpenPrintScorecardModal }) =>
                   activeTab === "Live Scoring" ? (

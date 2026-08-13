@@ -36,6 +36,7 @@ export type QualifyingRosterPlayer = {
   name: string;
   rosterType: QualifyingRosterType;
   classYear: string;
+  teamName?: string | null;
 };
 
 export type QualifyingGroup = {
@@ -51,6 +52,7 @@ export type QualifyingParticipant = {
   playerId: string;
   playerName: string;
   rosterType: QualifyingRosterType;
+  teamName?: string | null;
   displayOrder: number;
   createdAt: string | null;
   updatedAt: string | null;
