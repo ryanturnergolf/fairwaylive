@@ -151,10 +151,12 @@ export const buildIndividualLeaderboard = ({
   scorecardsGenerated,
   scorecardRows,
   displayHoleCount,
+  roundPars,
 }: {
   scorecardsGenerated: boolean;
   scorecardRows: LegacyScorecardRow[];
   displayHoleCount: number;
+  roundPars?: number[];
 }): IndividualLeaderboardRow[] => {
   if (!scorecardsGenerated || scorecardRows.length === 0) {
     return [];
@@ -164,7 +166,10 @@ export const buildIndividualLeaderboard = ({
     .map((row) => {
       const playedHoles = calculatePlayedHoles(row.scores);
       const totalScore = calculatePlayedTotal(row.scores);
-      const activePar = playedHoles * 4;
+      const activePar = row.scores.reduce(
+        (sum, score, index) => sum + (score > 0 ? roundPars?.[index] || 4 : 0),
+        0
+      );
       const toPar = playedHoles > 0 ? formatScoreToPar(totalScore - activePar) : "--";
       const through = playedHoles >= displayHoleCount ? "F" : `${playedHoles}/${displayHoleCount}`;
 
@@ -188,17 +193,20 @@ export const buildTeamLeaderboard = ({
   scorecardRows,
   displayHoleCount,
   countingScores,
+  roundPars,
 }: {
   scorecardsGenerated: boolean;
   scorecardRows: LegacyScorecardRow[];
   displayHoleCount: number;
   countingScores: number;
+  roundPars?: number[];
 }): TeamLeaderboardRow[] => {
   if (!scorecardsGenerated || scorecardRows.length === 0) {
     return [];
   }
 
-  const fullRoundPar = displayHoleCount * 4;
+  const fullRoundPar = Array.from({ length: displayHoleCount }, (_, index) => roundPars?.[index] || 4)
+    .reduce((sum, par) => sum + par, 0);
   const grouped = new Map<string, LegacyScorecardRow[]>();
 
   scorecardRows.forEach((row) => {

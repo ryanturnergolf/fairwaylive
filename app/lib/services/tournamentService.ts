@@ -793,6 +793,7 @@ export type SharedTournamentScorecardState = {
     roundNumber: string;
     numberOfHoles: string;
     countingScores: string;
+    startingHole: string;
   };
 };
 
@@ -1732,6 +1733,7 @@ export const loadSharedTournamentScorecardState = async (
       roundNumber: String(roundNumber),
       numberOfHoles: String(parsedHoleCount),
       countingScores: String(Number(exactRoundSetup?.countingScores) || 4),
+      startingHole: String(Number(exactRoundSetup?.startingHole ?? durableRound?.starting_hole ?? sharedPlayerRows[0]?.starting_hole) || 1),
     },
   };
 };

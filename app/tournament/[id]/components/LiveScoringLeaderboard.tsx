@@ -5,7 +5,7 @@ import {
   buildIndividualLeaderboard,
   buildTeamLeaderboard,
   calculateTotal,
-  formatTotalToPar,
+  formatScoreToPar,
   type NormalizedRoundSetup,
 } from "../../../lib/services/tournamentDerivedState";
 import PairingsScorecardGeneration from "./PairingsScorecardGeneration";
@@ -15,6 +15,7 @@ import type {
   DynamicStatisticReviewItem,
 } from "../../../lib/services/dynamicStatisticsReviewService";
 import { buildCourseHoleSequence } from "../../../lib/services/courseService";
+import type { EventCourseHoleSnapshot } from "../../../lib/courseModel";
 
 export type ScorecardRow = {
   id: number;
@@ -37,6 +38,7 @@ export type ReviewResolutionItem = {
 
 type LiveScoringLeaderboardProps = {
   normalizedRoundSetup: NormalizedRoundSetup;
+  eventCourseHoles?: EventCourseHoleSnapshot[];
   scorecardsGenerated: boolean;
   scorecardRows: ScorecardRow[];
   leaderboardScorecardRows?: ScorecardRow[];
@@ -79,6 +81,7 @@ const statisticStatusLabel: Record<DynamicStatisticReviewItem["status"], string>
 
 export default function LiveScoringLeaderboard({
   normalizedRoundSetup,
+  eventCourseHoles = [],
   scorecardsGenerated,
   scorecardRows,
   leaderboardScorecardRows = scorecardRows,
@@ -108,10 +111,14 @@ export default function LiveScoringLeaderboard({
     [displayHoleCount, normalizedRoundSetup.startingHole]
   );
   const countingScores = normalizedRoundSetup.countingScores;
+  const roundPars = useMemo(() => {
+    const parsByHole = new Map(eventCourseHoles.map((hole) => [hole.holeNumber, hole.par]));
+    return displayHoleNumbers.map((holeNumber) => parsByHole.get(holeNumber) || 4);
+  }, [displayHoleNumbers, eventCourseHoles]);
 
   const individualLeaderboard = useMemo(
-    () => buildIndividualLeaderboard({ scorecardsGenerated, scorecardRows: leaderboardScorecardRows, displayHoleCount }),
-    [displayHoleCount, leaderboardScorecardRows, scorecardsGenerated]
+    () => buildIndividualLeaderboard({ scorecardsGenerated, scorecardRows: leaderboardScorecardRows, displayHoleCount, roundPars }),
+    [displayHoleCount, leaderboardScorecardRows, roundPars, scorecardsGenerated]
   );
 
   const teamLeaderboard = useMemo(
@@ -120,8 +127,9 @@ export default function LiveScoringLeaderboard({
       scorecardRows: leaderboardScorecardRows,
       displayHoleCount,
       countingScores,
+      roundPars,
     }),
-    [countingScores, displayHoleCount, leaderboardScorecardRows, scorecardsGenerated]
+    [countingScores, displayHoleCount, leaderboardScorecardRows, roundPars, scorecardsGenerated]
   );
 
   return (
@@ -466,7 +474,12 @@ export default function LiveScoringLeaderboard({
                   <tbody>
                     {leaderboardScorecardRows.map((row) => {
                       const total = calculateTotal(row.scores);
-                      const toPar = formatTotalToPar(total);
+                      const playedHoles = row.scores.filter((score) => score > 0).length;
+                      const playedPar = row.scores.reduce(
+                        (sum, score, index) => sum + (score > 0 ? roundPars[index] || 4 : 0),
+                        0
+                      );
+                      const toPar = playedHoles > 0 ? formatScoreToPar(total - playedPar) : "--";
 
                       return (
                         <tr key={row.id} className="border-t border-[#E8DCC8] bg-white/70">

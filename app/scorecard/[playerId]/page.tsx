@@ -1310,7 +1310,10 @@ function ReciprocalPlayerScorecardPage() {
   const totals = useMemo(() => {
     const playedHoles = scores.filter((score) => score > 0).length;
     const total = scores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
-    const parPlayed = scorecard.holes.slice(0, playedHoles).reduce((sum, hole) => sum + hole.par, 0);
+    const parPlayed = scores.reduce(
+      (sum, score, index) => sum + (score > 0 ? scorecard.holes[index]?.par ?? 0 : 0),
+      0
+    );
 
     return {
       playedHoles,
@@ -1323,7 +1326,10 @@ function ReciprocalPlayerScorecardPage() {
   const reviewSelfTotals = useMemo(() => {
     const playedHoles = reviewSelfScores.filter((score) => score > 0).length;
     const total = reviewSelfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
-    const parPlayed = scorecard.holes.slice(0, playedHoles).reduce((sum, hole) => sum + hole.par, 0);
+    const parPlayed = reviewSelfScores.reduce(
+      (sum, score, index) => sum + (score > 0 ? scorecard.holes[index]?.par ?? 0 : 0),
+      0
+    );
 
     return {
       playedHoles,
@@ -1331,7 +1337,13 @@ function ReciprocalPlayerScorecardPage() {
       toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
     };
   }, [reviewSelfScores, scorecard.holes]);
-  const reviewMarkerTotal = reviewMarkerScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
+  const reviewMarkerTotals = useMemo(() => {
+    const isComplete = reviewMarkerScores.length === scorecard.holes.length && reviewMarkerScores.every((score) => score > 0);
+    if (!isComplete) return { total: "—", toPar: "" };
+    const total = reviewMarkerScores.reduce((sum, score) => sum + score, 0);
+    const par = scorecard.holes.reduce((sum, hole) => sum + hole.par, 0);
+    return { total: String(total), toPar: formatToPar(total - par) };
+  }, [reviewMarkerScores, scorecard.holes]);
 
   const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
@@ -2392,7 +2404,8 @@ function ReciprocalPlayerScorecardPage() {
               </div>
               <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Marker Total</p>
-                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{reviewMarkerTotal}</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{reviewMarkerTotals.total}</p>
+                {reviewMarkerTotals.toPar ? <p className="text-xs font-semibold text-[#51635C]">{reviewMarkerTotals.toPar}</p> : null}
               </div>
             </div>
           </div>

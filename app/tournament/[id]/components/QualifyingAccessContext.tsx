@@ -9,8 +9,10 @@ import {
 
 export default function QualifyingAccessContext({
   backingTournamentId,
+  onContextResolved,
 }: {
   backingTournamentId: string;
+  onContextResolved?: (context: QualifyingAccessContextModel | null) => void;
 }) {
   const [context, setContext] = useState<QualifyingAccessContextModel | null>(null);
   const [error, setError] = useState("");
@@ -22,7 +24,10 @@ export default function QualifyingAccessContext({
     if (!backingTournamentId) return () => { cancelled = true; };
     void loadQualifyingTournamentAccessContext(backingTournamentId)
       .then((result) => {
-        if (!cancelled) setContext(result);
+        if (!cancelled) {
+          setContext(result);
+          onContextResolved?.(result);
+        }
       })
       .catch((cause) => {
         if (!cancelled) {
@@ -30,7 +35,7 @@ export default function QualifyingAccessContext({
         }
       });
     return () => { cancelled = true; };
-  }, [backingTournamentId]);
+  }, [backingTournamentId, onContextResolved]);
 
   if (!context && !error) return null;
 
@@ -43,7 +48,7 @@ export default function QualifyingAccessContext({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#8B6818]">
-              Qualifying Context
+              Qualifying Access
             </p>
             <h3 id="qualifying-access-context-title" className="mt-2 text-xl font-black text-[#0B3D2E]">
               {context.sessionName}
@@ -54,6 +59,9 @@ export default function QualifyingAccessContext({
             </p>
             <p className="mt-2 text-xs font-semibold text-[#725D37]">
               This shared Qualifying code is separate from Tournament Team Scoring Codes.
+            </p>
+            <p className="mt-1 text-xs font-semibold text-[#725D37]">
+              Players enter this code through the Clubhouse HQ homepage.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

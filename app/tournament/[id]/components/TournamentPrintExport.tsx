@@ -90,6 +90,7 @@ type TournamentPrintExportProps = {
   isCoachAuthenticated: boolean;
   teams: Array<{ id: string | number; name?: string; schoolName?: string; shortName?: string }>;
   eventCourseHoles: EventCourseHoleSnapshot[];
+  isQualifyingTournament?: boolean;
   children: (controls: PrintExportControls) => ReactNode;
 };
 
@@ -124,6 +125,7 @@ export default function TournamentPrintExport({
   isCoachAuthenticated,
   teams,
   eventCourseHoles,
+  isQualifyingTournament = false,
   children,
 }: TournamentPrintExportProps) {
   const [isScoreboardImportModalOpen, setIsScoreboardImportModalOpen] = useState(false);
@@ -433,7 +435,7 @@ export default function TournamentPrintExport({
         </div>
       ) : (
         <>
-          {isCoachAuthenticated && sharedTournamentId ? (
+          {isCoachAuthenticated && sharedTournamentId && !isQualifyingTournament ? (
             <TeamScoringCodes tournamentId={sharedTournamentId} tournamentName={tournament.name} teams={teams} />
           ) : null}
           {children({
@@ -667,7 +669,7 @@ export default function TournamentPrintExport({
           onClick={closeQrModal}
         >
           <div
-            className="mx-auto my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-[24px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)] sm:max-h-[calc(100dvh-4rem)] sm:rounded-[32px]"
+            className="mx-auto my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border border-[#E8DCC8] bg-[#F6F1E6] shadow-[0_24px_80px_rgba(11,61,46,0.2)] sm:max-h-[calc(100dvh-4rem)] sm:rounded-[32px]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="bg-[#0B3D2E] px-7 py-6 text-[#F6F1E6]">
@@ -691,7 +693,7 @@ export default function TournamentPrintExport({
               </div>
             </div>
 
-            <div className="min-h-0 overflow-y-auto px-7 py-7">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-7 md:grid md:grid-cols-2 md:gap-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Player Name</p>
@@ -707,7 +709,7 @@ export default function TournamentPrintExport({
                 </div>
               </div>
 
-              <div className="mt-6 rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner">
+              <div className="mt-6 rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 text-center shadow-inner md:mt-0">
                 <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-[24px] border border-dashed border-[#B8892D] bg-white text-4xl font-black text-[#0B3D2E]">
                   {activeQrCodeDataUrl ? (
                     <Image
@@ -747,11 +749,11 @@ export default function TournamentPrintExport({
                 )}
               </div>
 
-              <p className="mt-6 text-center text-base leading-8 text-[#51635C]">
+              <p className="mt-6 text-center text-base leading-8 text-[#51635C] md:col-span-2">
                 Players simply scan this QR code to enter scores from any phone. No app required.
               </p>
 
-              <div className="sticky bottom-0 -mx-5 mt-8 flex shrink-0 flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-5 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-4 sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0">
+              <div className="sticky bottom-0 -mx-5 mt-8 flex shrink-0 flex-col-reverse gap-3 border-t border-[#E8DCC8] bg-[#F6F1E6] px-5 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-4 sm:static sm:mx-0 sm:flex-row sm:flex-wrap sm:justify-end sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 md:col-span-2">
                 <button
                   type="button"
                   onClick={closeQrModal}

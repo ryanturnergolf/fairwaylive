@@ -94,6 +94,7 @@ import TournamentStatisticsDashboard from "./components/TournamentStatisticsDash
 import DynamicStatisticsReviewPanel from "./components/DynamicStatisticsReviewPanel";
 import OfficialResultsDashboard from "./components/OfficialResultsDashboard";
 import QualifyingAccessContext from "./components/QualifyingAccessContext";
+import type { QualifyingTournamentAccessContext } from "../../lib/services/qualifyingAccessService";
 import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
 import { buildCourseHoleSequence } from "../../lib/services/courseService";
 
@@ -244,6 +245,7 @@ export default function TournamentPage() {
   const [isAutoRepairModalOpen, setIsAutoRepairModalOpen] = useState(false);
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
+  const [isQualifyingTournament, setIsQualifyingTournament] = useState(false);
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
   const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
@@ -272,6 +274,13 @@ export default function TournamentPage() {
       : null;
     return Array.isArray(settings?.courseSetup?.holes) ? settings.courseSetup.holes : [];
   }, [tournamentMeta.settings]);
+  const handleQualifyingContextResolved = useCallback((context: QualifyingTournamentAccessContext | null) => {
+    setIsQualifyingTournament(Boolean(
+      context &&
+      context.backingTournamentId === tournamentId &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tournamentId)
+    ));
+  }, [tournamentId]);
   useEffect(() => {
     if (
       !scorecardsGenerated ||
@@ -1553,7 +1562,10 @@ export default function TournamentPage() {
               </div>
             </section>
             {isCoachAuthenticated ? (
-              <QualifyingAccessContext backingTournamentId={sharedTournamentId || tournamentId} />
+              <QualifyingAccessContext
+                backingTournamentId={sharedTournamentId || tournamentId}
+                onContextResolved={handleQualifyingContextResolved}
+              />
             ) : null}
           </div>
 
@@ -1666,11 +1678,13 @@ export default function TournamentPage() {
                 isCoachAuthenticated={isCoachAuthenticated}
                 teams={teams}
                 eventCourseHoles={eventCourseHoles}
+                isQualifyingTournament={isQualifyingTournament}
               >
                 {({ onPrintTournamentScorecards, onOpenQrModal, onOpenPrintScorecardModal }) =>
                   activeTab === "Live Scoring" ? (
                     <LiveScoringLeaderboard
                        normalizedRoundSetup={normalizedRoundSetup}
+                       eventCourseHoles={eventCourseHoles}
                        scorecardsGenerated={scorecardsGenerated}
                        scorecardRows={scorecardRows}
                        leaderboardScorecardRows={leaderboardScorecardRows}

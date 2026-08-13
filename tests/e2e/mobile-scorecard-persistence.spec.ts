@@ -1819,7 +1819,7 @@ test("missing current-player marker comparison blocks Review submission", async 
   await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("0");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
 });
 
 test("mobile scorecard omits penalty strokes and saves the available optional stats", async ({ page }) => {

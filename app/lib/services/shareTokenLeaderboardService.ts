@@ -8,6 +8,7 @@ import {
 import { loadComparisonScores } from "./scoreService";
 import { loadSharedTournamentScorecardState } from "./tournamentService";
 import type { LegacyScorecardRow } from "../tournamentModel";
+import { buildCourseRoundProjection } from "./courseService";
 
 export type ShareTokenLeaderboardReadModel = {
   tournamentId: string;
@@ -63,6 +64,11 @@ export const loadShareTokenLeaderboard = async ({
     };
   });
   const displayHoleCount = Number(sharedState.roundSetup.numberOfHoles) || 18;
+  const roundPars = buildCourseRoundProjection(
+    sharedState.courseHoles,
+    Number(sharedState.roundSetup.startingHole) || 1,
+    displayHoleCount
+  ).holes.map((hole) => hole.par || 4);
   const countingScores = limitCountingScoresToAvailablePlayers(
     Number(sharedState.roundSetup.countingScores) || 4,
     scorecardRows
@@ -71,6 +77,7 @@ export const loadShareTokenLeaderboard = async ({
     scorecardsGenerated: true,
     scorecardRows,
     displayHoleCount,
+    roundPars,
   });
   const hasTeamScoring = scorecardRows.some((row) => row.team.trim().length > 0);
 
@@ -87,6 +94,7 @@ export const loadShareTokenLeaderboard = async ({
           scorecardRows,
           displayHoleCount,
           countingScores,
+          roundPars,
         })
       : [],
   };
