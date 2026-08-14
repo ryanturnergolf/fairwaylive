@@ -9,6 +9,7 @@ import { loadComparisonScores } from "./scoreService";
 import { loadSharedTournamentScorecardState } from "./tournamentService";
 import type { LegacyScorecardRow } from "../tournamentModel";
 import { buildCourseRoundProjection } from "./courseService";
+import { getQualifyingBackingTournamentStatus } from "../repositories/tournamentRepository";
 
 export type ShareTokenLeaderboardReadModel = {
   tournamentId: string;
@@ -16,6 +17,7 @@ export type ShareTokenLeaderboardReadModel = {
   roundNumber: number;
   lastUpdated: string | null;
   isFinalized: boolean;
+  isQualifying: boolean;
   individualLeaderboard: IndividualLeaderboardRow[];
   teamLeaderboard: TeamLeaderboardRow[];
 };
@@ -39,11 +41,10 @@ export const loadShareTokenLeaderboard = async ({
     return null;
   }
 
-  const scoreEntries = await loadComparisonScores({
-    tournamentId,
-    roundNumber,
-    shareToken,
-  }).catch(() => []);
+  const [scoreEntries, isQualifying] = await Promise.all([
+    loadComparisonScores({ tournamentId, roundNumber, shareToken }).catch(() => []),
+    getQualifyingBackingTournamentStatus(tournamentId, { shareToken }).catch(() => false),
+  ]);
   const entriesByPlayerId = new Map<string, typeof scoreEntries>();
   scoreEntries.forEach((entry) => {
     const playerId = String(entry.player_id);
@@ -87,6 +88,7 @@ export const loadShareTokenLeaderboard = async ({
     roundNumber,
     lastUpdated: sharedState.updatedAt,
     isFinalized: sharedState.isFinalized,
+    isQualifying,
     individualLeaderboard,
     teamLeaderboard: hasTeamScoring
       ? buildTeamLeaderboard({

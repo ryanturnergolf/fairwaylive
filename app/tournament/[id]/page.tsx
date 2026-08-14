@@ -1695,6 +1695,7 @@ export default function TournamentPage() {
                        onOpenQrModal={onOpenQrModal}
                        onOpenPrintScorecardModal={onOpenPrintScorecardModal}
                        isReadOnly={isTournamentFinalized}
+                       isQualifyingTournament={isQualifyingTournament}
                        reviewResolutionItems={reviewResolutionItems}
                        reviewResolutionMessage={reviewResolutionMessage}
                        reviewOverrideValues={reviewOverrideValues}

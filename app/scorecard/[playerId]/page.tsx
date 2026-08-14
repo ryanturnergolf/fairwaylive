@@ -33,7 +33,7 @@ import DesignatedQualifyingScorecard from "./DesignatedQualifyingScorecard";
 import { canUseDevelopmentBrowserSupabaseWriteFallback } from "../../lib/supabaseClient";
 import type { StatisticValue } from "../../lib/dynamicStatisticsModel";
 import {
-  areRequiredMobileStatisticsComplete,
+  buildMissingRequiredMobileStatistics,
   buildMobileStatisticSummaries,
   getMobileStatisticTapOptions,
   loadMobileDynamicStatistics,
@@ -657,7 +657,6 @@ function ReciprocalPlayerScorecardPage() {
   const [reviewSyncError, setReviewSyncError] = useState("");
   const [isReviewSynchronizing, setIsReviewSynchronizing] = useState(false);
   const [reviewComparison, setReviewComparison] = useState<ReviewComparisonModel | null>(null);
-  const [submitWithoutStatistics, setSubmitWithoutStatistics] = useState(false);
   const [scoreLoadError, setScoreLoadError] = useState("");
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [scoreControlsReady, setScoreControlsReady] = useState(false);
@@ -1286,10 +1285,13 @@ function ReciprocalPlayerScorecardPage() {
   const dynamicStatisticSummaries = hasAssignedStatisticPackage
     ? buildMobileStatisticSummaries(dynamicStatistics?.items ?? [], scorecard.holes, dynamicHoleValues)
     : [];
+  const missingRequiredStatistics = hasAssignedStatisticPackage
+    ? buildMissingRequiredMobileStatistics(dynamicStatistics?.items ?? [], scorecard.holes, dynamicHoleValues)
+    : [];
   const statisticsComplete = hasAssignedStatisticPackage
-    ? areRequiredMobileStatisticsComplete(dynamicStatistics?.items ?? [], scorecard.holes, dynamicHoleValues)
+    ? missingRequiredStatistics.length === 0
     : Boolean(reviewComparison?.statisticsComplete);
-  const statisticsRequirementSatisfied = statisticsComplete || submitWithoutStatistics;
+  const statisticsRequirementSatisfied = statisticsComplete;
   const canSubmitVerification =
     hasCompleteComparison &&
     !hasDiscrepancies &&
@@ -1338,12 +1340,12 @@ function ReciprocalPlayerScorecardPage() {
     };
   }, [reviewSelfScores, scorecard.holes]);
   const reviewMarkerTotals = useMemo(() => {
-    const isComplete = reviewMarkerScores.length === scorecard.holes.length && reviewMarkerScores.every((score) => score > 0);
+    const isComplete = markerScores.length === scorecard.holes.length && markerScores.every((score) => score > 0);
     if (!isComplete) return { total: "—", toPar: "" };
-    const total = reviewMarkerScores.reduce((sum, score) => sum + score, 0);
+    const total = markerScores.reduce((sum, score) => sum + score, 0);
     const par = scorecard.holes.reduce((sum, hole) => sum + hole.par, 0);
     return { total: String(total), toPar: formatToPar(total - par) };
-  }, [reviewMarkerScores, scorecard.holes]);
+  }, [markerScores, scorecard.holes]);
 
   const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
@@ -1870,7 +1872,6 @@ function ReciprocalPlayerScorecardPage() {
       });
 
       setReviewComparison(comparison);
-      setSubmitWithoutStatistics(false);
       setReviewSelfScores(comparison.selfScores);
       setReviewMarkerScores(comparison.markerScores);
       setView("review");
@@ -1943,8 +1944,8 @@ function ReciprocalPlayerScorecardPage() {
       setSaveError("Resolve every scorer and marker mismatch before submitting.");
       return;
     }
-    if (!reviewComparison?.statisticsComplete && !submitWithoutStatistics) {
-      setSaveError("Complete every required statistic or select the statistics opt-out before submitting.");
+    if (!statisticsRequirementSatisfied) {
+      setSaveError("Complete every required statistic before submitting.");
       return;
     }
     const reviewOwnership = buildReviewOwnership(scorecard.playerId, String(assignedMarkerPlayerId));
@@ -2287,15 +2288,23 @@ function ReciprocalPlayerScorecardPage() {
         greenInRegulation: null,
         putts: null,
       }));
-    const missingStatisticDetails = scorecard.holes.flatMap((hole, index) => {
+    const legacyMissingStatisticDetails = scorecard.holes.flatMap((hole, index) => {
       const statistic = reviewStatistics[index];
       const missing = [
         ...(hole.par !== 3 && statistic.fairwayHit === null ? ["Fairway Hit"] : []),
         ...(statistic.greenInRegulation === null ? ["Green in Regulation"] : []),
         ...(statistic.putts === null ? ["Putts"] : []),
       ];
-      return missing.length > 0 ? [{ holeNumber: hole.holeNumber, fields: missing }] : [];
+      return missing.length > 0 ? [{ holeNumber: getDisplayHoleNumber(hole), fields: missing }] : [];
     });
+    const missingStatisticDetails = hasAssignedStatisticPackage
+      ? missingRequiredStatistics.reduce<Array<{ holeNumber: number; fields: string[] }>>((groups, requirement) => {
+          const existing = groups.find((group) => group.holeNumber === requirement.courseHoleNumber);
+          if (existing) existing.fields.push(requirement.name);
+          else groups.push({ holeNumber: requirement.courseHoleNumber, fields: [requirement.name] });
+          return groups;
+        }, [])
+      : legacyMissingStatisticDetails;
     const formatBooleanStatistic = (value: boolean | null) =>
       value === null ? "—" : value ? "Yes" : "No";
     const renderHolesTable = (holes: Hole[], startIndex: number, sectionLabel: string) => {
@@ -2431,11 +2440,24 @@ function ReciprocalPlayerScorecardPage() {
                   ))}
                 </div>
                 {!statisticsComplete ? (
-                  <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold leading-5 text-[#0B3D2E]">
-                    <input type="checkbox" checked={submitWithoutStatistics} onChange={(event) => setSubmitWithoutStatistics(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0B3D2E]" />
-                    <span>Continue and finalize round without recording statistics</span>
-                  </label>
-                ) : null}
+                  <div role="alert" className="mt-4 rounded-2xl border border-amber-400 bg-amber-50 p-3">
+                    <p className="text-xs font-black text-amber-900">Statistics still needed</p>
+                    <div className="mt-3 space-y-3">
+                      {missingStatisticDetails.map((detail) => (
+                        <div key={detail.holeNumber}>
+                          <p className="text-xs font-black text-amber-900">Hole {detail.holeNumber}</p>
+                          <ul className="mt-1 list-disc pl-5 text-xs font-semibold text-amber-900">
+                            {detail.fields.map((field) => <li key={field}>{field}</li>)}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-2xl border border-[#77B98E] bg-[#ECF8EF] p-3 text-xs font-semibold text-[#146233]">
+                    All required statistics are complete.
+                  </p>
+                )}
               </div>
             ) : null
           ) : (
@@ -2527,7 +2549,7 @@ function ReciprocalPlayerScorecardPage() {
                   Statistics Incomplete
                 </p>
                 <p className="mt-2 text-xs leading-5 text-amber-900">
-                  Complete the required statistics below or explicitly continue without recording them.
+                  Complete the required statistics below before submitting.
                 </p>
                 <ul className="mt-2 space-y-1">
                   {missingStatisticDetails.map((detail) => (
@@ -2536,19 +2558,10 @@ function ReciprocalPlayerScorecardPage() {
                     </li>
                   ))}
                 </ul>
-                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300 bg-white/70 p-3 text-xs font-semibold leading-5 text-[#0B3D2E]">
-                  <input
-                    type="checkbox"
-                    checked={submitWithoutStatistics}
-                    onChange={(event) => setSubmitWithoutStatistics(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-[#0B3D2E]"
-                  />
-                  <span>Continue and finalize round without recording statistics</span>
-                </label>
               </div>
             ) : (
               <p className="mt-4 rounded-2xl border border-[#77B98E] bg-[#ECF8EF] p-3 text-xs font-semibold text-[#146233]">
-                All required round statistics are complete.
+                All required statistics are complete.
               </p>
             )}
           </div>
@@ -2579,8 +2592,8 @@ function ReciprocalPlayerScorecardPage() {
                     ? "Complete Score Comparison to Submit"
                    : hasDiscrepancies
                       ? "Fix Score Mismatches to Submit"
-                      : !statisticsRequirementSatisfied
-                        ? "Complete Statistics or Opt Out to Submit"
+                       : !statisticsRequirementSatisfied
+                         ? "Complete Required Statistics to Submit"
                       : "Submit Verification"}
               </button>
             </div>
@@ -2589,9 +2602,7 @@ function ReciprocalPlayerScorecardPage() {
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Confirm Submission</p>
               <p className="mt-3 text-sm leading-6 text-[#0B3D2E]">
                 All scores have been verified for {scorecard.playerName || "Player"}.
-                {submitWithoutStatistics
-                  ? " You chose to continue without recording every required statistic."
-                  : " Required statistics are complete."}{" "}
+                Required statistics are complete.{" "}
                 Please confirm to submit.
               </p>
               {saveError ? (

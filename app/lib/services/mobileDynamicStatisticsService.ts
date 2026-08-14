@@ -46,6 +46,14 @@ export type MobileStatisticSummary = {
   displayValue: string;
 };
 
+export type MissingRequiredMobileStatistic = {
+  roundPosition: number;
+  courseHoleNumber: number;
+  definitionVersionId: string;
+  key: string;
+  name: string;
+};
+
 export const getMobileStatisticTapOptions = (item: MobileStatisticItem): StatisticValue[] | null => {
   if (item.key === "shots_100_and_in") {
     return Array.from({ length: 10 }, (_, index) => String(index + 1));
@@ -118,6 +126,20 @@ export const areRequiredMobileStatisticsComplete = (
   holes: Array<{ par: number }>,
   valuesByHole: Array<Record<string, StatisticValue | null>>
 ) => holes.every((hole, index) => missingRequiredMobileStatistics(items, hole.par, valuesByHole[index] ?? {}).length === 0);
+
+export const buildMissingRequiredMobileStatistics = (
+  items: MobileStatisticItem[],
+  holes: Array<{ holeNumber: number; courseHoleNumber?: number; par: number }>,
+  valuesByHole: Array<Record<string, StatisticValue | null>>
+): MissingRequiredMobileStatistic[] => holes.flatMap((hole, index) =>
+  missingRequiredMobileStatistics(items, hole.par, valuesByHole[index] ?? {}).map((item) => ({
+    roundPosition: index + 1,
+    courseHoleNumber: hole.courseHoleNumber ?? hole.holeNumber,
+    definitionVersionId: item.definitionVersionId,
+    key: item.key,
+    name: item.name,
+  }))
+);
 
 export const buildMobileStatisticSummaries = (
   items: MobileStatisticItem[],

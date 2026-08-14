@@ -126,6 +126,18 @@ export type ShareTokenReadOptions = {
   shareToken?: string;
 };
 
+export const getQualifyingBackingTournamentStatus = async (
+  tournamentId: string,
+  options: ShareTokenReadOptions = {}
+): Promise<boolean> => {
+  const client = await getReadClient(options);
+  const { data, error } = await client.rpc("is_qualifying_backing_tournament", {
+    target_tournament_id: tournamentId,
+  });
+  if (error) throw error;
+  return data === true;
+};
+
 const tournamentColumns =
   "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot";
 

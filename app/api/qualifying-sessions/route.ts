@@ -208,6 +208,7 @@ export async function POST(request: Request) {
     };
     if (hasStatisticSelection) {
       rpcArguments.input_statistic_definition_version_ids = input.statisticDefinitionVersionIds;
+      rpcArguments.input_statistics_required = input.statisticsRequired ?? false;
     }
     const { data, error } = await supabase.rpc(rpcName, rpcArguments);
     if (error) throw error;

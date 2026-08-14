@@ -209,6 +209,9 @@ const routeLeaderboardBackend = async (page: Page) => {
       body: JSON.stringify(scoreEntries),
     });
   });
+  await page.route("**/rest/v1/rpc/is_qualifying_backing_tournament", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "false" });
+  });
   await page.route("**/api/score-mutations", async (route) => {
     writes += 1;
     await route.fulfill({ status: 500, body: "{}" });

@@ -49,6 +49,7 @@ type LiveScoringLeaderboardProps = {
   onOpenQrModal: (player: ScorecardRow) => void;
   onOpenPrintScorecardModal: (player: ScorecardRow) => void;
   isReadOnly?: boolean;
+  isQualifyingTournament?: boolean;
   reviewResolutionItems?: ReviewResolutionItem[];
   reviewResolutionMessage?: string;
   reviewOverrideValues?: Record<string, string>;
@@ -92,6 +93,7 @@ export default function LiveScoringLeaderboard({
   onOpenQrModal,
   onOpenPrintScorecardModal,
   isReadOnly = false,
+  isQualifyingTournament = false,
   reviewResolutionItems = [],
   reviewResolutionMessage = "",
   reviewOverrideValues = {},
@@ -417,7 +419,7 @@ export default function LiveScoringLeaderboard({
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+            {!isQualifyingTournament ? <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
               <div>
                 <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
                   Team Scores
@@ -453,7 +455,7 @@ export default function LiveScoringLeaderboard({
                   </tbody>
                 </table>
               </div>
-            </div>
+            </div> : null}
 
             <div className="overflow-hidden rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
               <div className="overflow-x-auto">

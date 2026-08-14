@@ -67,7 +67,8 @@ test("Qualifying access stays distinct and suppresses Tournament team-code promp
 
 test("reciprocal marker totals require completion and share event par authority", () => {
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
-  expect(scorecard).toContain("reviewMarkerScores.every((score) => score > 0)");
+  expect(scorecard).toContain("markerScores.every((score) => score > 0)");
+  expect(scorecard).toContain("markerScores.reduce((sum, score) => sum + score, 0)");
   expect(scorecard).toContain("scorecard.holes.reduce((sum, hole) => sum + hole.par, 0)");
   expect(scorecard).toContain("reviewMarkerTotals.toPar");
 });

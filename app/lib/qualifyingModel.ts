@@ -137,6 +137,7 @@ export type CreateQualifyingSessionInput = {
   selectedPlayers: QualifyingRosterPlayer[];
   groups: QualifyingGroup[];
   statisticDefinitionVersionIds?: string[];
+  statisticsRequired?: boolean;
   days: Array<{
     dayNumber: number;
     playDate: string;

@@ -1246,7 +1246,7 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
   expect(sharedStore.savedHoleRows).toHaveLength(36);
 });
 
-test("statistics opt-out post-round card preserves missing values without synthetic rows", async ({ page }) => {
+test("legacy missing statistics remain blocked without synthetic rows", async ({ page }) => {
   const partialStatistics = [
     buildCompleteReviewStatistics(sharedTournamentId, "player-1")[0],
     buildCompleteReviewStatistics(sharedTournamentId, "player-2")[0],
@@ -1258,16 +1258,10 @@ test("statistics opt-out post-round card preserves missing values without synthe
     statisticEntries: partialStatistics,
   });
 
-  await page.getByLabel("Continue and finalize round without recording statistics").check();
-  await page.getByRole("button", { name: "Submit Verification" }).click();
-  await page.getByRole("button", { name: "Confirm Submit" }).click();
-  await page.getByRole("button", { name: "View My Scorecard and Stats" }).click();
-
   await expect(page.getByText("Statistics Incomplete", { exact: true })).toBeVisible();
-  const legacyFrontNine = page.getByRole("heading", { name: "Front 9" }).locator("xpath=ancestor::section[1]");
-  await expect(legacyFrontNine.locator("tbody tr td:nth-child(2)")).toHaveText(Array.from({ length: 9 }, () => "—"));
-  await expect(page.getByRole("cell", { name: "N/A" })).toHaveCount(4);
-  expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(2);
+  await expect(page.getByRole("button", { name: "Complete Required Statistics to Submit" })).toBeDisabled();
+  await expect(page.getByText(/opt.?out/i)).toHaveCount(0);
+  expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(0);
   expect(sharedStore.savedHoleRows).toHaveLength(2);
 });
 
@@ -1356,7 +1350,7 @@ test("Review hydrates current-player Self from snapshot fallback and submits cur
   await expect(page.getByText("10/18", { exact: true })).toBeVisible();
   await expect(page.getByText("Putts", { exact: true }).first().locator("..")).toContainText("36");
   await expect(page.getByRole("cell", { name: "N/A" })).toHaveCount(4);
-  await expect(page.getByText("All required round statistics are complete.")).toBeVisible();
+  await expect(page.getByText("All required statistics are complete.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Submit Verification" })).toBeEnabled();
   await page.getByRole("button", { name: "Submit Verification" }).click();
   await page.getByRole("button", { name: "Confirm Submit" }).click();
@@ -1721,7 +1715,7 @@ test("Review retains snapshot marker scores without creating compatibility rows"
   expect(sharedStore.savedHoleRows).toHaveLength(18);
 });
 
-test("missing required statistics list exact holes and opt-out enables score-matched submission", async ({ page }) => {
+test("missing required statistics list exact holes and block score-matched submission", async ({ page }) => {
   const statistics = buildCompleteReviewStatistics(sharedTournamentId, "player-1");
   statistics.find((entry) => entry.hole_number === 4)!.green_in_regulation = null;
   statistics.find((entry) => entry.hole_number === 5)!.putts = null;
@@ -1738,17 +1732,11 @@ test("missing required statistics list exact holes and opt-out enables score-mat
   await expect(page.getByText("Hole 4: Green in Regulation", { exact: true })).toBeVisible();
   await expect(page.getByText("Hole 5: Putts", { exact: true })).toBeVisible();
   await expect(page.getByText("Hole 6: Fairway Hit", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Complete Statistics or Opt Out to Submit" })).toBeDisabled();
-
-  await page
-    .getByRole("checkbox", {
-      name: "Continue and finalize round without recording statistics",
-    })
-    .check();
-  await expect(page.getByRole("button", { name: "Submit Verification" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Complete Required Statistics to Submit" })).toBeDisabled();
+  await expect(page.getByText(/opt.?out/i)).toHaveCount(0);
 });
 
-test("statistics opt-out never bypasses a score mismatch", async ({ page }) => {
+test("missing statistics never bypass a score mismatch", async ({ page }) => {
   const selfScores = Array.from({ length: 18 }, () => 4);
   const markerScores = [...selfScores];
   markerScores[0] = 5;
@@ -1759,11 +1747,6 @@ test("statistics opt-out never bypasses a score mismatch", async ({ page }) => {
     statisticEntries: [],
   });
 
-  await page
-    .getByRole("checkbox", {
-      name: "Continue and finalize round without recording statistics",
-    })
-    .check();
   await expect(page.getByText("Hole 1: Self 4 vs Marker 5", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
 });
@@ -1819,7 +1802,7 @@ test("missing current-player marker comparison blocks Review submission", async 
   await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
 });
 
 test("mobile scorecard omits penalty strokes and saves the available optional stats", async ({ page }) => {

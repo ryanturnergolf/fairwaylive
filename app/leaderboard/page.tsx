@@ -162,7 +162,7 @@ function ShareTokenLeaderboardContent() {
             </section>
 
             <div className="mt-5 space-y-5">
-              {model.teamLeaderboard.length > 0 ? (
+              {!model.isQualifying && model.teamLeaderboard.length > 0 ? (
                 <StandingsTable title="Team Leaderboard" rows={model.teamLeaderboard} isTeam />
               ) : null}
               <StandingsTable title="Individual Leaderboard" rows={model.individualLeaderboard} />

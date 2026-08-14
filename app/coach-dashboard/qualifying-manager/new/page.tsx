@@ -59,6 +59,7 @@ export default function CreateQualifyingPage() {
   const [rosterError, setRosterError] = useState("");
   const [statistics, setStatistics] = useState<QualifyingStatisticChoice[]>([]);
   const [selectedStatisticKeys, setSelectedStatisticKeys] = useState<Set<string>>(getDefaultQualifyingStatisticKeys);
+  const [statisticsRequired, setStatisticsRequired] = useState(false);
   const [statisticsError, setStatisticsError] = useState("");
   const [isStatisticsLoading, setIsStatisticsLoading] = useState(true);
 
@@ -69,7 +70,7 @@ export default function CreateQualifyingPage() {
     .filter((statistic) => selectedStatisticKeys.has(statistic.key))
     .map((statistic) => statistic.definitionVersionId);
   const input: CreateQualifyingSessionInput = {
-    name, rosterType, selectedPlayers, days, groups, scoringMode, statisticDefinitionVersionIds,
+    name, rosterType, selectedPlayers, days, groups, scoringMode, statisticDefinitionVersionIds, statisticsRequired,
   };
 
   useEffect(() => {
@@ -383,6 +384,22 @@ export default function CreateQualifyingPage() {
                     </fieldset>
                   ) : null)}
                   {statistics.length === 0 ? <p className="rounded-lg bg-[#FCFAF5] p-4 text-sm text-[#51635C]">No statistics are currently available. This Qualifying will be score-only.</p> : null}
+                  <fieldset className="rounded-lg border border-[#D9D0C0] p-4">
+                    <legend className="px-2 text-sm font-black uppercase tracking-[0.18em] text-[#B8892D]">Statistics Requirement</legend>
+                    <label className="flex items-start gap-3 rounded-lg bg-[#FCFAF5] p-4">
+                      <input
+                        type="checkbox"
+                        checked={statisticsRequired}
+                        disabled={statisticDefinitionVersionIds.length === 0}
+                        onChange={(event) => setStatisticsRequired(event.target.checked)}
+                        className="mt-0.5 h-5 w-5 accent-[#0B3D2E] disabled:opacity-50"
+                      />
+                      <span>
+                        <span className="block font-black">Require all selected statistics before round submission</span>
+                        <span className="mt-1 block text-sm text-[#51635C]">When enabled, players must complete every selected statistic before submitting their round.</span>
+                      </span>
+                    </label>
+                  </fieldset>
                 </div>
               ) : null}
             </div>
@@ -397,6 +414,7 @@ export default function CreateQualifyingPage() {
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Players</dt><dd className="mt-1">{selectedPlayers.map((player) => player.name).join(", ")}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Scoring mode</dt><dd className="mt-1 font-bold">{scoringMode === "reciprocal" ? "Reciprocal" : "Designated Group Scorer"}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Statistics</dt><dd className="mt-1 font-bold">{statisticDefinitionVersionIds.length > 0 ? statistics.filter((statistic) => selectedStatisticKeys.has(statistic.key)).map((statistic) => statistic.name).join(", ") : "Score only"}</dd></div>
+                <div><dt className="text-xs font-black uppercase text-[#B8892D]">Statistics requirement</dt><dd className="mt-1 font-bold">{statisticDefinitionVersionIds.length === 0 ? "Not applicable" : statisticsRequired ? "Required" : "Optional"}</dd></div>
               </dl>
               <h3 className="mt-6 font-black">Days and hole mapping</h3>
               <div className="mt-2 grid gap-2">
