@@ -340,7 +340,7 @@ test("package versions can be assigned to Tournament, Qualifying, and Practice e
   await page.getByLabel("Package version").selectOption(packageVersionId);
   await page.getByRole("button", { name: "Assign Package Version" }).click();
 
-  expect(state.assignments.map((assignment) => assignment.event_type).sort()).toEqual([
+  await expect.poll(() => state.assignments.map((assignment) => assignment.event_type).sort()).toEqual([
     "practice", "qualifying", "tournament",
   ]);
 });
