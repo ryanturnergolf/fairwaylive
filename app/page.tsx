@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { loadTournamentCatalog } from "./lib/services/tournamentCatalogService";
 import { getSupabaseBrowserClient } from "./lib/supabaseClient";
 import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
+import PlayerScoringCodeEntry from "./components/PlayerScoringCodeEntry";
 
 const teams = [
   {
@@ -60,7 +61,6 @@ const teams = [
 ];
 
 const programBadges = ["NCAA DI", "NCAA DII", "NCAA DIII", "NAIA", "NJCAA"];
-const demoPrograms = ["Demo North", "Demo South", "Demo East", "Demo West", "Demo Central"];
 
 const stats = [
   ["18", "Live Tournaments"],
@@ -137,7 +137,7 @@ export default function Home() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
+        <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 xl:flex">
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
             Live Scores
           </Link>
@@ -204,33 +204,17 @@ export default function Home() {
                   ))}
                 </div>
 
-                <div
-                  data-testid="homepage-demo-programs"
-                  className="mt-6 rounded-[24px] border border-white/15 bg-white/10 px-4 py-4 text-[#F6F1E6]/80 backdrop-blur"
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#F0C96A]">
-                    Built for college golf programs
+                <section data-testid="homepage-player-access" className="mt-8 rounded-[32px] border border-[#F0C96A]/60 bg-[#F6F1E6] p-6 text-[#0B3D2E] shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-8">
+                  <h3 className="text-4xl font-black uppercase leading-none tracking-[-0.03em] sm:text-5xl">Players</h3>
+                  <p className="mt-3 text-base leading-7 text-[#51635C] sm:text-lg">
+                    Enter your live scoring code here to access your scorecard.
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-[#F6F1E6]/70">
-                    Illustrative demo programs — not customer endorsements.
-                  </p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                    {demoPrograms.map((program) => (
-                      <div
-                        data-testid="demo-program-card"
-                        key={program}
-                        className="flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-[#F6F1E6] px-2 py-2 text-center text-[10px] font-black uppercase leading-4 tracking-[0.12em] text-[#0B3D2E]"
-                      >
-                        {program}
-                      </div>
-                    ))}
+                  <div className="mt-6">
+                    <PlayerScoringCodeEntry compact />
                   </div>
-                </div>
+                </section>
 
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                  <Link className="min-h-14 rounded-full bg-[#F0C96A] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.12em] text-[#0B3D2E] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1" href="/player-tournament-login">
-                    PLAYERS — Enter live scoring code HERE to access your scorecard
-                  </Link>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                   <Link className="rounded-full bg-[#F6F1E6] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1" href="/live">
                     View Live Scores
                   </Link>

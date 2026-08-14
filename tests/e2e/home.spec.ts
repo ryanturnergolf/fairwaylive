@@ -20,34 +20,24 @@ test("homepage leaderboard omits shot-location labels and retains hole progress"
 });
 
 for (const viewport of [
-  { name: "desktop", width: 1280, height: 900 },
-  { name: "mobile", width: 390, height: 844 },
+  { name: "mobile-small", width: 390, height: 844 },
+  { name: "mobile-large", width: 430, height: 932 },
+  { name: "tablet", width: 1024, height: 768 },
+  { name: "desktop", width: 1440, height: 900 },
 ]) {
-  test(`homepage demo-program trust treatment is readable without overlap on ${viewport.name}`, async ({ page }) => {
+  test(`homepage player access is prominent and contained on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await gotoApp(page, "/");
 
-    const section = page.getByTestId("homepage-demo-programs");
+    const section = page.getByTestId("homepage-player-access");
     await expect(section).toBeVisible();
-    await expect(section).toContainText("Illustrative demo programs — not customer endorsements.");
-    await expect(page.getByText("Trusted by college golf coaches across America", { exact: true })).toHaveCount(0);
-
-    const cards = page.getByTestId("demo-program-card");
-    await expect(cards).toHaveCount(5);
-    const boxes = await cards.evaluateAll((elements) =>
-      elements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
-      })
-    );
-    for (let leftIndex = 0; leftIndex < boxes.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < boxes.length; rightIndex += 1) {
-        const left = boxes[leftIndex];
-        const right = boxes[rightIndex];
-        const overlaps = left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top;
-        expect(overlaps).toBe(false);
-      }
-    }
+    await expect(section.getByText("Players", { exact: true })).toBeVisible();
+    await expect(section).toContainText("Enter your live scoring code here to access your scorecard.");
+    await expect(section.getByLabel("Live scoring code")).toBeVisible();
+    await expect(section.getByRole("button", { name: "Continue" })).toHaveCSS("min-height", "56px");
+    await expect(page.getByText("Built for college golf programs", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Illustrative demo programs — not customer endorsements.", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/^Demo (North|South|East|West|Central)$/)).toHaveCount(0);
     const hasPageOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(hasPageOverflow).toBe(false);
   });

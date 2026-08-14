@@ -44,16 +44,14 @@ const routeTeamLookup = async (page: Page) => {
   return requests;
 };
 
-test("homepage prominently links players to universal live scoring access", async ({ page }) => {
+test("homepage prominently resolves Tournament codes through universal live scoring access", async ({ page }) => {
+  const requests = await routeTeamLookup(page);
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  const entry = page.getByRole("link", {
-    name: "PLAYERS — Enter live scoring code HERE to access your scorecard",
-    exact: true,
-  });
-  await expect(entry).toBeVisible();
-  await entry.click();
-  await expect(page).toHaveURL(/\/player-tournament-login$/);
-  await expect(page.getByRole("heading", { name: "Player Scoring Access" })).toBeVisible();
+  const section = page.getByTestId("homepage-player-access");
+  await section.getByLabel("Live scoring code").fill(teamA.team.code);
+  await section.getByRole("button", { name: "Continue" }).click();
+  await expect(section.getByRole("heading", { name: "Falcons" })).toBeVisible();
+  expect(requests).toEqual([teamA.team.code]);
 });
 
 test("code input normalizes lowercase, spaces, and hyphens and submits with Enter", async ({ page }) => {
@@ -207,7 +205,7 @@ test("mobile viewport keeps code and player controls touch-friendly without hori
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test("qualifying code resolves isolated players and uses the existing exchange route", async ({ page }) => {
+test("homepage Qualifying code resolves isolated players and uses the existing exchange route", async ({ page }) => {
   await page.route("**/api/player-scoring-code/resolve", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -237,9 +235,10 @@ test("qualifying code resolves isolated players and uses the existing exchange r
     }),
   }));
 
-  await page.goto("/player-tournament-login");
-  await page.getByLabel("Live scoring code").fill("abc-234");
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.goto("/");
+  const section = page.getByTestId("homepage-player-access");
+  await section.getByLabel("Live scoring code").fill("abc-234");
+  await section.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Fall Qualifying")).toBeVisible();
   await expect(page.getByRole("button", { name: "Alex Morgan" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Jordan Lee" })).toBeVisible();
