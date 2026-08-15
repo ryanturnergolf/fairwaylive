@@ -20,7 +20,6 @@ import {
   saveRoundHoleStatistics,
 } from "../../lib/services/statisticsService";
 import {
-  buildReciprocalVerificationProjection,
   buildReviewOwnership,
   loadReviewComparisonModel,
   type ReviewComparisonModel,
@@ -1257,18 +1256,32 @@ function ReciprocalPlayerScorecardPage() {
     }
   }, [searchParams, submissionComplete]);
 
-  const reciprocalVerification = useMemo(() => buildReciprocalVerificationProjection({
-    selfScores: reviewSelfScores,
-    markerScores: reviewMarkerScores,
-    holes: scorecard.holes,
-  }), [reviewMarkerScores, reviewSelfScores, scorecard.holes]);
-  const discrepancies = reciprocalVerification.mismatches;
+  // Preserve the known-good golf-course projection: the table, match state,
+  // completion, and totals all read the same review score arrays.
+  const discrepancies = useMemo(() => {
+    return scorecard.holes
+      .map((hole, index) => {
+        const self = reviewSelfScores[index];
+        const marker = reviewMarkerScores[index];
+        if (self > 0 && marker > 0 && self !== marker) {
+          const diff = Math.abs(self - marker);
+          return { holeNumber: hole.holeNumber, self, marker, diff };
+        }
+        return null;
+      })
+      .filter((discrepancy) => discrepancy !== null) as Array<{
+        holeNumber: number;
+        self: number;
+        marker: number;
+        diff: number;
+      }>;
+  }, [reviewMarkerScores, reviewSelfScores, scorecard.holes]);
 
   const hasDiscrepancies = discrepancies.length > 0;
   const hasCompleteMarkedPlayerSelfScores =
-    reciprocalVerification.missingSelfHoles.length === 0;
+    reviewSelfScores.length === scorecard.holes.length && reviewSelfScores.every((score) => score > 0);
   const hasCompleteMarkerScores =
-    reciprocalVerification.missingMarkerHoles.length === 0;
+    reviewMarkerScores.length === scorecard.holes.length && reviewMarkerScores.every((score) => score > 0);
   const hasCompleteComparison = hasCompleteMarkedPlayerSelfScores && hasCompleteMarkerScores;
   const hasAssignedStatisticPackage = Boolean(dynamicStatistics?.assignment);
   const dynamicStatisticSummaries = hasAssignedStatisticPackage
@@ -1314,14 +1327,28 @@ function ReciprocalPlayerScorecardPage() {
   }, [scorecard.holes, scores]);
 
   // Totals for marked player (review view)
-  const reviewSelfTotals = {
-    total: reciprocalVerification.selfTotal,
-    toPar: reciprocalVerification.selfToPar === null ? "--" : formatToPar(reciprocalVerification.selfToPar),
-  };
-  const reviewMarkerTotals = {
-    total: reciprocalVerification.scoreComparisonComplete ? String(reciprocalVerification.markerTotal) : "—",
-    toPar: reciprocalVerification.markerToPar === null ? "" : formatToPar(reciprocalVerification.markerToPar),
-  };
+  const reviewSelfTotals = useMemo(() => {
+    const playedHoles = reviewSelfScores.filter((score) => score > 0).length;
+    const total = reviewSelfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
+    const parPlayed = reviewSelfScores.reduce(
+      (sum, score, index) => sum + (score > 0 ? scorecard.holes[index]?.par ?? 0 : 0),
+      0
+    );
+
+    return {
+      playedHoles,
+      total,
+      toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
+    };
+  }, [reviewSelfScores, scorecard.holes]);
+  const reviewMarkerTotals = useMemo(() => {
+    const isComplete =
+      reviewMarkerScores.length === scorecard.holes.length && reviewMarkerScores.every((score) => score > 0);
+    if (!isComplete) return { total: "—", toPar: "" };
+    const total = reviewMarkerScores.reduce((sum, score) => sum + score, 0);
+    const par = scorecard.holes.reduce((sum, hole) => sum + hole.par, 0);
+    return { total: String(total), toPar: formatToPar(total - par) };
+  }, [reviewMarkerScores, scorecard.holes]);
 
   const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
@@ -2300,11 +2327,10 @@ function ReciprocalPlayerScorecardPage() {
               <tbody>
                 {holes.map((hole, i) => {
                   const index = startIndex + i;
-                  const projectedHole = reciprocalVerification.holes[index];
-                  const selfScore = projectedHole?.self ?? 0;
-                  const markerScore = projectedHole?.marker ?? 0;
-                  const isMatch = projectedHole?.status === "match";
-                  const discrepancy = projectedHole?.diff ?? 0;
+                  const selfScore = reviewSelfScores[index];
+                  const markerScore = reviewMarkerScores[index];
+                  const isMatch = selfScore === markerScore;
+                  const discrepancy = Math.abs(selfScore - markerScore);
 
                   return (
                     <tr

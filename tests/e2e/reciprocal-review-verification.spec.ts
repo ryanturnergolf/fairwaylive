@@ -1,8 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  buildReciprocalVerificationProjection,
-  buildReviewComparisonModel,
-} from "../../app/lib/services/reviewComparisonService";
+import { buildReviewComparisonModel } from "../../app/lib/services/reviewComparisonService";
 import type { ScoreEntryRow } from "../../app/lib/repositories/scoreRepository";
 
 const scoreEntry = (playerId: string, enteredByPlayerId: string, holeScores: number[]): ScoreEntryRow => ({
@@ -19,35 +16,41 @@ const scoreEntry = (playerId: string, enteredByPlayerId: string, holeScores: num
   updated_at: null,
 });
 
-test("asymmetric reciprocal verification uses marker-for-self for holes, totals, and to-par", () => {
-  const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
-  const projection = buildReciprocalVerificationProjection({
-    selfScores: Array.from({ length: 9 }, () => 5),
-    markerScores: Array.from({ length: 9 }, () => 4),
+const buildComparison = (selfScores: number[], markerScores: number[], holes: Array<{ holeNumber: number; par: number }>) =>
+  buildReviewComparisonModel({
+    scoreEntries: [scoreEntry("player", "player", selfScores), scoreEntry("player", "marker", markerScores)],
+    statisticEntries: [],
+    markedPlayerIds: ["player"],
+    markerEnteredByPlayerIds: ["marker"],
+    statisticsPlayerIds: ["player"],
     holes,
   });
 
-  expect(projection.holes.map((hole) => hole.self)).toEqual(Array.from({ length: 9 }, () => 5));
-  expect(projection.holes.map((hole) => hole.marker)).toEqual(Array.from({ length: 9 }, () => 4));
-  expect(projection.holes.every((hole) => hole.status === "different")).toBe(true);
+test("asymmetric reciprocal verification preserves the known-good hole arrays and totals", () => {
+  const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
+  const projection = buildComparison(
+    Array.from({ length: 9 }, () => 5),
+    Array.from({ length: 9 }, () => 4),
+    holes
+  );
+
+  expect(projection.selfScores).toEqual(Array.from({ length: 9 }, () => 5));
+  expect(projection.markerScores).toEqual(Array.from({ length: 9 }, () => 4));
   expect(projection.mismatches).toHaveLength(9);
   expect(projection.selfTotal).toBe(45);
   expect(projection.markerTotal).toBe(36);
-  expect(projection.selfToPar).toBe(9);
-  expect(projection.markerToPar).toBe(0);
 });
 
 test("mixed reciprocal verification marks only equal complete holes as matches", () => {
-  const projection = buildReciprocalVerificationProjection({
-    selfScores: [4, 5, 4, 5, 4],
-    markerScores: [4, 4, 4, 6, 0],
-    holes: Array.from({ length: 5 }, (_, index) => ({ holeNumber: 12 + index, par: index === 2 ? 3 : 4 })),
-  });
+  const projection = buildComparison(
+    [4, 5, 4, 5, 4],
+    [4, 4, 4, 6, 0],
+    Array.from({ length: 5 }, (_, index) => ({ holeNumber: 12 + index, par: index === 2 ? 3 : 4 }))
+  );
 
-  expect(projection.holes.map((hole) => hole.status)).toEqual(["match", "different", "match", "different", "missing"]);
   expect(projection.mismatches.map((hole) => hole.holeNumber)).toEqual([13, 15]);
   expect(projection.missingMarkerHoles).toEqual([16]);
-  expect(projection.markerToPar).toBeNull();
+  expect(projection.scoreComparisonComplete).toBe(false);
 });
 
 test("inverse reciprocal scorer identities cannot be reversed with the forward marked card", () => {
@@ -94,16 +97,15 @@ for (const holeCount of [5, 7, 9, 18]) {
       par: index % 3 === 0 ? 3 : index % 3 === 1 ? 4 : 5,
     }));
     const par = holes.reduce((sum, hole) => sum + hole.par, 0);
-    const projection = buildReciprocalVerificationProjection({
-      selfScores: holes.map((hole) => hole.par + 1),
-      markerScores: holes.map((hole) => hole.par),
-      holes,
-    });
+    const projection = buildComparison(
+      holes.map((hole) => hole.par + 1),
+      holes.map((hole) => hole.par),
+      holes
+    );
 
-    expect(projection.holes.map((hole) => hole.holeNumber)).toEqual(holes.map((hole) => hole.holeNumber));
+    expect(projection.selfScores).toEqual(holes.map((hole) => hole.par + 1));
+    expect(projection.markerScores).toEqual(holes.map((hole) => hole.par));
     expect(projection.selfTotal).toBe(par + holeCount);
     expect(projection.markerTotal).toBe(par);
-    expect(projection.selfToPar).toBe(holeCount);
-    expect(projection.markerToPar).toBe(0);
   });
 }

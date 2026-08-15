@@ -60,15 +60,15 @@ test("optional package items never create missing submission requirements", () =
   )).toEqual([]);
 });
 
-test("scorecard verification uses one marker-for-self projection and removes statistics opt-out messaging", () => {
+test("scorecard verification totals use the same marker array as the known-good hole table", () => {
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
   const markerSummary = scorecard.slice(
     scorecard.indexOf("const reviewMarkerTotals"),
     scorecard.indexOf("const isQrScorecardRequest")
   );
-  expect(markerSummary).toContain("reciprocalVerification.markerTotal");
+  expect(markerSummary).toContain("reviewMarkerScores.reduce((sum, score) => sum + score, 0)");
   expect(markerSummary).not.toContain("markerScores.reduce((sum, score) => sum + score, 0)");
-  expect(scorecard).toContain("buildReciprocalVerificationProjection");
+  expect(scorecard).toContain("const markerScore = reviewMarkerScores[index]");
   expect(scorecard).toContain("Statistics still needed");
   expect(scorecard).toContain("All required statistics are complete.");
   expect(scorecard.toLowerCase()).not.toContain("statistics opt-out");

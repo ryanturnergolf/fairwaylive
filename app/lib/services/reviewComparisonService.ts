@@ -23,28 +23,6 @@ export type ReviewScoreMismatch = {
   diff: number;
 };
 
-export type ReviewScoreHoleProjection = {
-  holeNumber: number;
-  self: number;
-  marker: number;
-  status: "match" | "different" | "missing";
-  diff: number;
-};
-
-export type ReciprocalVerificationProjection = {
-  holes: ReviewScoreHoleProjection[];
-  selfScores: number[];
-  markerScores: number[];
-  selfTotal: number;
-  markerTotal: number;
-  selfToPar: number | null;
-  markerToPar: number | null;
-  missingSelfHoles: number[];
-  missingMarkerHoles: number[];
-  scoreComparisonComplete: boolean;
-  mismatches: ReviewScoreMismatch[];
-};
-
 export type ReviewOwnership = {
   reviewedPlayerId: string;
   selfEnteredByPlayerId: string;
@@ -64,8 +42,15 @@ export const buildReviewOwnership = (
   statisticsEnteredByPlayerId: currentPlayerId,
 });
 
-export type ReviewComparisonModel = ReciprocalVerificationProjection & {
+export type ReviewComparisonModel = {
+  selfScores: number[];
+  markerScores: number[];
+  selfTotal: number;
+  markerTotal: number;
   statistics: ReviewHoleStatistics[];
+  missingSelfHoles: number[];
+  missingMarkerHoles: number[];
+  scoreComparisonComplete: boolean;
   missingFairwayHoles: number[];
   missingGirHoles: number[];
   missingPuttsHoles: number[];
@@ -75,6 +60,7 @@ export type ReviewComparisonModel = ReciprocalVerificationProjection & {
   greensInRegulation: number;
   greensAvailable: number;
   totalPutts: number;
+  mismatches: ReviewScoreMismatch[];
 };
 
 type BuildReviewComparisonInput = {
@@ -114,53 +100,6 @@ const findScoreEntry = (
       enteredByPlayerIds.includes(String(entry.entered_by_player_id)) &&
       hasAnyScore(entry.hole_scores)
   );
-
-export const buildReciprocalVerificationProjection = ({
-  selfScores: inputSelfScores,
-  markerScores: inputMarkerScores,
-  holes,
-}: {
-  selfScores: number[];
-  markerScores: number[];
-  holes: ReviewHole[];
-}): ReciprocalVerificationProjection => {
-  const selfScores = normalizeScores(inputSelfScores, holes.length);
-  const markerScores = normalizeScores(inputMarkerScores, holes.length);
-  const projectedHoles = holes.map((hole, index): ReviewScoreHoleProjection => {
-    const self = selfScores[index];
-    const marker = markerScores[index];
-    return {
-      holeNumber: hole.holeNumber,
-      self,
-      marker,
-      status: self <= 0 || marker <= 0 ? "missing" : self === marker ? "match" : "different",
-      diff: self > 0 && marker > 0 ? Math.abs(self - marker) : 0,
-    };
-  });
-  const missingSelfHoles = projectedHoles.filter((hole) => hole.self <= 0).map((hole) => hole.holeNumber);
-  const missingMarkerHoles = projectedHoles.filter((hole) => hole.marker <= 0).map((hole) => hole.holeNumber);
-  const scoreComparisonComplete = missingSelfHoles.length === 0 && missingMarkerHoles.length === 0;
-  const selfTotal = selfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
-  const markerTotal = markerScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
-  const roundPar = holes.reduce((sum, hole) => sum + hole.par, 0);
-  const mismatches = projectedHoles.flatMap((hole) => hole.status === "different"
-    ? [{ holeNumber: hole.holeNumber, self: hole.self, marker: hole.marker, diff: hole.diff }]
-    : []);
-
-  return {
-    holes: projectedHoles,
-    selfScores,
-    markerScores,
-    selfTotal,
-    markerTotal,
-    selfToPar: scoreComparisonComplete ? selfTotal - roundPar : null,
-    markerToPar: scoreComparisonComplete ? markerTotal - roundPar : null,
-    missingSelfHoles,
-    missingMarkerHoles,
-    scoreComparisonComplete,
-    mismatches,
-  };
-};
 
 export const buildReviewComparisonModel = ({
   scoreEntries,
@@ -207,7 +146,12 @@ export const buildReviewComparisonModel = ({
       putts: entry?.putts ?? null,
     };
   });
-  const scoreProjection = buildReciprocalVerificationProjection({ selfScores, markerScores, holes });
+  const missingSelfHoles = holes
+    .filter((_, index) => selfScores[index] <= 0)
+    .map((hole) => hole.holeNumber);
+  const missingMarkerHoles = holes
+    .filter((_, index) => markerScores[index] <= 0)
+    .map((hole) => hole.holeNumber);
   const missingFairwayHoles = holes
     .filter((hole, index) => hole.par !== 3 && statistics[index].fairwayHit === null)
     .map((hole) => hole.holeNumber);
@@ -217,14 +161,27 @@ export const buildReviewComparisonModel = ({
   const missingPuttsHoles = holes
     .filter((_, index) => statistics[index].putts === null)
     .map((hole) => hole.holeNumber);
+  const mismatches = holes.flatMap((hole, index) => {
+    const self = selfScores[index];
+    const marker = markerScores[index];
+    return self > 0 && marker > 0 && self !== marker
+      ? [{ holeNumber: hole.holeNumber, self, marker, diff: Math.abs(self - marker) }]
+      : [];
+  });
   const fairwaysAvailable = holes.filter((hole) => hole.par !== 3).length;
 
   return {
-    ...scoreProjection,
+    selfScores,
+    markerScores,
+    selfTotal: selfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0),
+    markerTotal: markerScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0),
     statistics,
+    missingSelfHoles,
+    missingMarkerHoles,
     missingFairwayHoles,
     missingGirHoles,
     missingPuttsHoles,
+    scoreComparisonComplete: missingSelfHoles.length === 0 && missingMarkerHoles.length === 0,
     statisticsComplete:
       missingFairwayHoles.length === 0 &&
       missingGirHoles.length === 0 &&
@@ -239,6 +196,7 @@ export const buildReviewComparisonModel = ({
       (sum, statistic) => sum + (statistic.putts ?? 0),
       0
     ),
+    mismatches,
   };
 };
 
