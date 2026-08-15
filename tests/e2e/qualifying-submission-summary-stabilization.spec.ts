@@ -60,12 +60,14 @@ test("optional package items never create missing submission requirements", () =
   )).toEqual([]);
 });
 
-test("scorecard post-round tables and totals share one forward projection", () => {
+test("scorecard forward summary and independent verification retain separate score identities", () => {
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
   expect(scorecard.match(/buildForwardScoringSummary\(/g)).toHaveLength(1);
   expect(scorecard).toContain("markedPlayerScores: markerScores");
-  expect(scorecard).toContain("const markerScore = projectedHole?.markedPlayerScore ?? 0");
+  expect(scorecard).toContain("const selfScore = reviewSelfScores[index] ?? 0");
+  expect(scorecard).toContain("const markerScore = reviewMarkerScores[index] ?? 0");
   expect(scorecard).toContain("forwardScoringSummary.markedPlayerTotal");
+  expect(scorecard).toContain("reviewMarkerTotals.total");
   expect(scorecard).toContain("Statistics still needed");
   expect(scorecard).toContain("All required statistics are complete.");
   expect(scorecard.toLowerCase()).not.toContain("statistics opt-out");

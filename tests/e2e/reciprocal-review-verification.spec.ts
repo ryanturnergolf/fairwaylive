@@ -151,6 +151,46 @@ test("inverse reciprocal scorer identities cannot be reversed with the forward m
   expect(ajReview.markerScores).toEqual(drakeForAj);
 });
 
+test("two-player reciprocal verification cross-compares each player's independent card", () => {
+  const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
+  const playerASelf = Array.from({ length: 9 }, () => 4);
+  const playerBSelf = Array.from({ length: 9 }, () => 5);
+  const playerAForB = [...playerBSelf];
+  const playerBForA = [...playerASelf];
+  const scoreEntries = [
+    scoreEntry("player-a", "player-a", playerASelf),
+    scoreEntry("player-b", "player-a", playerAForB),
+    scoreEntry("player-b", "player-b", playerBSelf),
+    scoreEntry("player-a", "player-b", playerBForA),
+  ];
+
+  const reviewFor = (playerId: string, markerId: string) => buildReviewComparisonModel({
+    scoreEntries,
+    statisticEntries: [],
+    markedPlayerIds: [playerId],
+    markerEnteredByPlayerIds: [markerId],
+    statisticsPlayerIds: [playerId],
+    holes,
+  });
+  const playerAReview = reviewFor("player-a", "player-b");
+  const playerBReview = reviewFor("player-b", "player-a");
+
+  expect(playerAReview.selfScores).toEqual(playerASelf);
+  expect(playerAReview.markerScores).toEqual(playerBForA);
+  expect(playerAReview.selfTotal).toBe(36);
+  expect(playerAReview.markerTotal).toBe(36);
+  expect(playerAReview.mismatches).toEqual([]);
+  expect(playerBReview.selfScores).toEqual(playerBSelf);
+  expect(playerBReview.markerScores).toEqual(playerAForB);
+  expect(playerBReview.selfTotal).toBe(45);
+  expect(playerBReview.markerTotal).toBe(45);
+  expect(playerBReview.mismatches).toEqual([]);
+
+  playerBForA[2] = 5;
+  const mismatchedPlayerAReview = reviewFor("player-a", "player-b");
+  expect(mismatchedPlayerAReview.mismatches.map((hole) => hole.holeNumber)).toEqual([3]);
+});
+
 for (const holeCount of [5, 7, 9, 18]) {
   test(`${holeCount}-hole reciprocal projection uses the supplied custom par and positional values`, () => {
     const holes = Array.from({ length: holeCount }, (_, index) => ({
