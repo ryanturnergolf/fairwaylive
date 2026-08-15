@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildReviewComparisonModel } from "../../app/lib/services/reviewComparisonService";
+import { buildForwardScoringSummary } from "../../app/lib/services/reciprocalScoringSummaryService";
 import type { ScoreEntryRow } from "../../app/lib/repositories/scoreRepository";
 
 const scoreEntry = (playerId: string, enteredByPlayerId: string, holeScores: number[]): ScoreEntryRow => ({
@@ -25,6 +26,34 @@ const buildComparison = (selfScores: number[], markerScores: number[], holes: Ar
     statisticsPlayerIds: ["player"],
     holes,
   });
+
+test("forward scoring summary keeps the scorer's self and marked-player cards separate", () => {
+  const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
+  const summary = buildForwardScoringSummary({
+    holes,
+    selfScores: Array.from({ length: 9 }, () => 4),
+    markedPlayerScores: Array.from({ length: 9 }, () => 3),
+  });
+
+  expect(summary.holes.map((hole) => hole.selfScore)).toEqual(Array.from({ length: 9 }, () => 4));
+  expect(summary.holes.map((hole) => hole.markedPlayerScore)).toEqual(Array.from({ length: 9 }, () => 3));
+  expect(summary.selfTotal).toBe(36);
+  expect(summary.markedPlayerTotal).toBe(27);
+  expect(summary.selfToPar).toBe(0);
+  expect(summary.markedPlayerToPar).toBe(-9);
+});
+
+test("incomplete forward cards never report a completed projected to-par", () => {
+  const summary = buildForwardScoringSummary({
+    holes: Array.from({ length: 5 }, (_, index) => ({ holeNumber: 12 + index, par: index === 2 ? 3 : 4 })),
+    selfScores: [4, 4, 3, 4, 4],
+    markedPlayerScores: [3, 3, 0, 3, 3],
+  });
+
+  expect(summary.selfComplete).toBe(true);
+  expect(summary.markedPlayerComplete).toBe(false);
+  expect(summary.markedPlayerToPar).toBeNull();
+});
 
 test("asymmetric reciprocal verification preserves the known-good hole arrays and totals", () => {
   const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));

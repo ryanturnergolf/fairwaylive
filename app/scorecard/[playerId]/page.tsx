@@ -25,6 +25,7 @@ import {
   type ReviewComparisonModel,
 } from "../../lib/services/reviewComparisonService";
 import { resolveReciprocalScoringAssignments } from "../../lib/services/reciprocalScoringAssignmentService";
+import { buildForwardScoringSummary } from "../../lib/services/reciprocalScoringSummaryService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 import { findInitialScorecardHoleIndex } from "../../lib/services/scorecardResumeService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
@@ -1325,6 +1326,15 @@ function ReciprocalPlayerScorecardPage() {
       toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
     };
   }, [scorecard.holes, scores]);
+  const forwardScoringSummary = useMemo(
+    () =>
+      buildForwardScoringSummary({
+        holes: scorecard.holes,
+        selfScores: scores,
+        markedPlayerScores: markerScores,
+      }),
+    [markerScores, scorecard.holes, scores]
+  );
 
   // Totals for marked player (review view)
   const reviewSelfTotals = useMemo(() => {
@@ -2370,6 +2380,61 @@ function ReciprocalPlayerScorecardPage() {
               This tournament is finalized. Score entry is read-only for historical viewing.
             </div>
           ) : null}
+          <div className="mb-4 rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Scoring Summary</p>
+            <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#0B3D2E]">Cards You Entered</h2>
+            <p className="mt-1 text-xs leading-5 text-[#51635C]">
+              Your scorecard and the scorecard you entered for {scorecard.markerPlayerName || "the marked player"}.
+            </p>
+            <div className="mt-4 overflow-hidden rounded-2xl border border-[#E8DCC8]">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#E8DCC8] bg-[#FCFAF5]">
+                    <th className="px-2 py-2 text-left font-black uppercase tracking-[0.16em] text-[#51635C]">Hole</th>
+                    <th className="px-2 py-2 text-center font-black uppercase tracking-[0.16em] text-[#51635C]">Self</th>
+                    <th className="px-2 py-2 text-center font-black uppercase tracking-[0.16em] text-[#51635C]">Marked Player</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {forwardScoringSummary.holes.map((hole, index) => (
+                    <tr key={hole.holeNumber} className="border-b border-[#E8DCC8] last:border-0">
+                      <td className="px-2 py-2 font-black text-[#0B3D2E]">
+                        {getDisplayHoleNumber(scorecard.holes[index])}
+                      </td>
+                      <td className="px-2 py-2 text-center font-black text-[#0B3D2E]">
+                        {hole.selfScore > 0 ? hole.selfScore : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-center font-black text-[#0B3D2E]">
+                        {hole.markedPlayerScore > 0 ? hole.markedPlayerScore : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#0B3D2E]">Self Card</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">
+                  {forwardScoringSummary.selfComplete ? forwardScoringSummary.selfTotal : "—"}
+                </p>
+                {forwardScoringSummary.selfToPar !== null ? (
+                  <p className="text-xs font-semibold text-[#51635C]">{formatToPar(forwardScoringSummary.selfToPar)}</p>
+                ) : null}
+              </div>
+              <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#0B3D2E]">Marked Player Card</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">
+                  {forwardScoringSummary.markedPlayerComplete ? forwardScoringSummary.markedPlayerTotal : "—"}
+                </p>
+                {forwardScoringSummary.markedPlayerToPar !== null ? (
+                  <p className="text-xs font-semibold text-[#51635C]">
+                    {formatToPar(forwardScoringSummary.markedPlayerToPar)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <div className="rounded-[28px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Verify Score</p>
             <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#0B3D2E]">

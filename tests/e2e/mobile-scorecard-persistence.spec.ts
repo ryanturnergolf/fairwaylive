@@ -679,6 +679,7 @@ const openSharedSnapshotReview = async (
   page: Page,
   options: {
     snapshotMarkedSelfScores: number[];
+    snapshotForwardMarkedScores?: number[];
     markerEnteredScores?: number[];
     stableMarkedSelfScores?: number[];
     statisticsReadDelayMs?: number;
@@ -688,7 +689,9 @@ const openSharedSnapshotReview = async (
 ) => {
   const snapshot = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
   snapshot.uiState.scorecards.scorecardRows[0].scores = [...options.snapshotMarkedSelfScores];
-  snapshot.uiState.scorecards.scorecardRows[1].scores = Array.from({ length: 18 }, () => 4);
+  snapshot.uiState.scorecards.scorecardRows[1].scores = options.snapshotForwardMarkedScores
+    ? [...options.snapshotForwardMarkedScores]
+    : Array.from({ length: 18 }, () => 4);
   const sharedStore = await routeSharedScoreEntriesStore(page);
   const holeStatsStore = await routeScoreHoleEntriesStore(page, options.statisticsReadDelayMs);
   holeStatsStore.savedHoleRows.push(
@@ -1335,25 +1338,34 @@ test("Review submission compares and submits only the current player's round", a
   expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(0);
 });
 
-test("Verify Score renders asymmetric marker-for-self holes and totals from one identity", async ({ page }) => {
-  const selfScores = Array.from({ length: 18 }, () => 5);
-  const markerForSelfScores = Array.from({ length: 18 }, () => 4);
+test("forward scoring summary and reciprocal verification keep three score identities separate", async ({ page }) => {
+  const selfScores = Array.from({ length: 18 }, () => 4);
+  const forwardMarkedScores = Array.from({ length: 18 }, () => 3);
+  const markerForSelfScores = Array.from({ length: 18 }, () => 5);
   await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: selfScores,
+    snapshotForwardMarkedScores: forwardMarkedScores,
     stableMarkedSelfScores: selfScores,
     markerEnteredScores: markerForSelfScores,
   });
 
+  const forwardSummary = page.getByText("Scoring Summary", { exact: true }).locator("..");
+  await expect(forwardSummary.getByRole("row").nth(1).getByRole("cell").nth(1)).toHaveText("4");
+  await expect(forwardSummary.getByRole("row").nth(1).getByRole("cell").nth(2)).toHaveText("3");
+  await expect(forwardSummary.getByText("Self Card").locator("..")).toContainText("72");
+  await expect(forwardSummary.getByText("Marked Player Card").locator("..")).toContainText("54");
+
   const scoreRows = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "✗ Δ1" }) });
   await expect(scoreRows).toHaveCount(18);
-  await expect(scoreRows.first().getByRole("cell").nth(1)).toHaveText("5");
-  await expect(scoreRows.first().getByRole("cell").nth(2)).toHaveText("4");
-  await expect(page.getByText("Self Total").locator("..")).toContainText("90");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(scoreRows.first().getByRole("cell").nth(1)).toHaveText("4");
+  await expect(scoreRows.first().getByRole("cell").nth(2)).toHaveText("5");
+  await expect(page.getByText("Self Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("90");
   await expect(page.getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marked Player Card").locator("..")).toContainText("54");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("90");
   await expect(page.getByRole("cell", { name: "✗ Δ1" })).toHaveCount(18);
 });
 
