@@ -60,14 +60,15 @@ test("optional package items never create missing submission requirements", () =
   )).toEqual([]);
 });
 
-test("scorecard summary uses the scorer marker identity and removes statistics opt-out messaging", () => {
+test("scorecard verification uses one marker-for-self projection and removes statistics opt-out messaging", () => {
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
   const markerSummary = scorecard.slice(
     scorecard.indexOf("const reviewMarkerTotals"),
     scorecard.indexOf("const isQrScorecardRequest")
   );
-  expect(markerSummary).toContain("markerScores.reduce((sum, score) => sum + score, 0)");
-  expect(markerSummary).not.toContain("reviewMarkerScores.reduce((sum, score) => sum + score, 0)");
+  expect(markerSummary).toContain("reciprocalVerification.markerTotal");
+  expect(markerSummary).not.toContain("markerScores.reduce((sum, score) => sum + score, 0)");
+  expect(scorecard).toContain("buildReciprocalVerificationProjection");
   expect(scorecard).toContain("Statistics still needed");
   expect(scorecard).toContain("All required statistics are complete.");
   expect(scorecard.toLowerCase()).not.toContain("statistics opt-out");

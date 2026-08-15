@@ -1335,6 +1335,28 @@ test("Review submission compares and submits only the current player's round", a
   expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(0);
 });
 
+test("Verify Score renders asymmetric marker-for-self holes and totals from one identity", async ({ page }) => {
+  const selfScores = Array.from({ length: 18 }, () => 5);
+  const markerForSelfScores = Array.from({ length: 18 }, () => 4);
+  await openSharedSnapshotReview(page, {
+    snapshotMarkedSelfScores: selfScores,
+    stableMarkedSelfScores: selfScores,
+    markerEnteredScores: markerForSelfScores,
+  });
+
+  const scoreRows = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "✗ Δ1" }) });
+  await expect(scoreRows).toHaveCount(18);
+  await expect(scoreRows.first().getByRole("cell").nth(1)).toHaveText("5");
+  await expect(scoreRows.first().getByRole("cell").nth(2)).toHaveText("4");
+  await expect(page.getByText("Self Total").locator("..")).toContainText("90");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByRole("cell", { name: "✗ Δ1" })).toHaveCount(18);
+});
+
 test("Review hydrates current-player Self from snapshot fallback and submits current-player rows only", async ({ page }) => {
   const matchingScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
@@ -1702,15 +1724,15 @@ test("Review keeps current-player statistics separate and applies stable-first m
   expect(stableOverride.markerTotal).toBe(90);
 });
 
-test("Review retains snapshot marker scores without creating compatibility rows", async ({ page }) => {
+test("Review never treats a self snapshot as an independent marker card", async ({ page }) => {
   const snapshotScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: snapshotScores,
   });
 
-  await expect(page.getByText("My Round Statistics", { exact: true })).toBeVisible();
+  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
   expect(sharedStore.savedScoreRows).toHaveLength(0);
   expect(sharedStore.savedHoleRows).toHaveLength(18);
 });
@@ -1802,7 +1824,7 @@ test("missing current-player marker comparison blocks Review submission", async 
   await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
 });
 
 test("mobile scorecard omits penalty strokes and saves the available optional stats", async ({ page }) => {
