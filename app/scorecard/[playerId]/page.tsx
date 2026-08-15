@@ -1257,16 +1257,27 @@ function ReciprocalPlayerScorecardPage() {
     }
   }, [searchParams, submissionComplete]);
 
-  // Preserve the known-good golf-course projection: the table, match state,
-  // completion, and totals all read the same review score arrays.
+  const forwardScoringSummary = useMemo(
+    () =>
+      buildForwardScoringSummary({
+        holes: scorecard.holes,
+        selfScores: scores,
+        markedPlayerScores: markerScores,
+      }),
+    [markerScores, scorecard.holes, scores]
+  );
+
+  // Both post-round cards present the same two cards entered by this scorer.
   const discrepancies = useMemo(() => {
-    return scorecard.holes
-      .map((hole, index) => {
-        const self = reviewSelfScores[index];
-        const marker = reviewMarkerScores[index];
-        if (self > 0 && marker > 0 && self !== marker) {
-          const diff = Math.abs(self - marker);
-          return { holeNumber: hole.holeNumber, self, marker, diff };
+    return forwardScoringSummary.holes
+      .map((hole) => {
+        if (hole.selfScore > 0 && hole.markedPlayerScore > 0 && hole.selfScore !== hole.markedPlayerScore) {
+          return {
+            holeNumber: hole.holeNumber,
+            self: hole.selfScore,
+            marker: hole.markedPlayerScore,
+            diff: Math.abs(hole.selfScore - hole.markedPlayerScore),
+          };
         }
         return null;
       })
@@ -1276,14 +1287,10 @@ function ReciprocalPlayerScorecardPage() {
         marker: number;
         diff: number;
       }>;
-  }, [reviewMarkerScores, reviewSelfScores, scorecard.holes]);
+  }, [forwardScoringSummary.holes]);
 
   const hasDiscrepancies = discrepancies.length > 0;
-  const hasCompleteMarkedPlayerSelfScores =
-    reviewSelfScores.length === scorecard.holes.length && reviewSelfScores.every((score) => score > 0);
-  const hasCompleteMarkerScores =
-    reviewMarkerScores.length === scorecard.holes.length && reviewMarkerScores.every((score) => score > 0);
-  const hasCompleteComparison = hasCompleteMarkedPlayerSelfScores && hasCompleteMarkerScores;
+  const hasCompleteComparison = forwardScoringSummary.selfComplete && forwardScoringSummary.markedPlayerComplete;
   const hasAssignedStatisticPackage = Boolean(dynamicStatistics?.assignment);
   const dynamicStatisticSummaries = hasAssignedStatisticPackage
     ? buildMobileStatisticSummaries(dynamicStatistics?.items ?? [], scorecard.holes, dynamicHoleValues)
@@ -1326,40 +1333,6 @@ function ReciprocalPlayerScorecardPage() {
       toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
     };
   }, [scorecard.holes, scores]);
-  const forwardScoringSummary = useMemo(
-    () =>
-      buildForwardScoringSummary({
-        holes: scorecard.holes,
-        selfScores: scores,
-        markedPlayerScores: markerScores,
-      }),
-    [markerScores, scorecard.holes, scores]
-  );
-
-  // Totals for marked player (review view)
-  const reviewSelfTotals = useMemo(() => {
-    const playedHoles = reviewSelfScores.filter((score) => score > 0).length;
-    const total = reviewSelfScores.reduce((sum, score) => sum + (score > 0 ? score : 0), 0);
-    const parPlayed = reviewSelfScores.reduce(
-      (sum, score, index) => sum + (score > 0 ? scorecard.holes[index]?.par ?? 0 : 0),
-      0
-    );
-
-    return {
-      playedHoles,
-      total,
-      toPar: playedHoles > 0 ? formatToPar(total - parPlayed) : "--",
-    };
-  }, [reviewSelfScores, scorecard.holes]);
-  const reviewMarkerTotals = useMemo(() => {
-    const isComplete =
-      reviewMarkerScores.length === scorecard.holes.length && reviewMarkerScores.every((score) => score > 0);
-    if (!isComplete) return { total: "—", toPar: "" };
-    const total = reviewMarkerScores.reduce((sum, score) => sum + score, 0);
-    const par = scorecard.holes.reduce((sum, hole) => sum + hole.par, 0);
-    return { total: String(total), toPar: formatToPar(total - par) };
-  }, [reviewMarkerScores, scorecard.holes]);
-
   const isQrScorecardRequest = Boolean((requestedTournamentId || requestedShareToken) && requestedPairingId);
 
   if (isQrScorecardRequest && !hasResolvedQrScorecard) {
@@ -2337,8 +2310,9 @@ function ReciprocalPlayerScorecardPage() {
               <tbody>
                 {holes.map((hole, i) => {
                   const index = startIndex + i;
-                  const selfScore = reviewSelfScores[index];
-                  const markerScore = reviewMarkerScores[index];
+                  const projectedHole = forwardScoringSummary.holes[index];
+                  const selfScore = projectedHole?.selfScore ?? 0;
+                  const markerScore = projectedHole?.markedPlayerScore ?? 0;
                   const isMatch = selfScore === markerScore;
                   const discrepancy = Math.abs(selfScore - markerScore);
 
@@ -2476,13 +2450,23 @@ function ReciprocalPlayerScorecardPage() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Self Total</p>
-                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{reviewSelfTotals.total}</p>
-                <p className="text-xs font-semibold text-[#51635C]">{reviewSelfTotals.toPar}</p>
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">
+                  {forwardScoringSummary.selfComplete ? forwardScoringSummary.selfTotal : "—"}
+                </p>
+                {forwardScoringSummary.selfToPar !== null ? (
+                  <p className="text-xs font-semibold text-[#51635C]">{formatToPar(forwardScoringSummary.selfToPar)}</p>
+                ) : null}
               </div>
               <div className="rounded-2xl border border-[#0B3D2E]/20 bg-[#0B3D2E]/5 px-4 py-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0B3D2E]">Marker Total</p>
-                <p className="mt-1 text-xl font-black text-[#0B3D2E]">{reviewMarkerTotals.total}</p>
-                {reviewMarkerTotals.toPar ? <p className="text-xs font-semibold text-[#51635C]">{reviewMarkerTotals.toPar}</p> : null}
+                <p className="mt-1 text-xl font-black text-[#0B3D2E]">
+                  {forwardScoringSummary.markedPlayerComplete ? forwardScoringSummary.markedPlayerTotal : "—"}
+                </p>
+                {forwardScoringSummary.markedPlayerToPar !== null ? (
+                  <p className="text-xs font-semibold text-[#51635C]">
+                    {formatToPar(forwardScoringSummary.markedPlayerToPar)}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>

@@ -65,11 +65,12 @@ test("Qualifying access stays distinct and suppresses Tournament team-code promp
   expect(print).toContain("!isQualifyingTournament");
 });
 
-test("reciprocal verification totals use the known-good marker hole array and event par authority", () => {
+test("post-round reciprocal sections share the forward projection and event par authority", () => {
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
-  expect(scorecard).toContain("reviewMarkerScores.every((score) => score > 0)");
-  expect(scorecard).toContain("reviewMarkerScores.reduce((sum, score) => sum + score, 0)");
-  expect(scorecard).not.toContain("markerScores.reduce((sum, score) => sum + score, 0)");
-  expect(scorecard).toContain("scorecard.holes.reduce((sum, hole) => sum + hole.par, 0)");
-  expect(scorecard).toContain("reviewMarkerTotals.toPar");
+  const projection = source("app/lib/services/reciprocalScoringSummaryService.ts");
+  expect(scorecard).toContain("markedPlayerScores: markerScores");
+  expect(scorecard).toContain("forwardScoringSummary.markedPlayerTotal");
+  expect(scorecard).toContain("projectedHole?.markedPlayerScore");
+  expect(projection).toContain("projectedHoles.reduce((sum, hole) => sum + hole.par, 0)");
+  expect(projection).toContain("markedPlayerToPar: markedPlayerComplete ? markedPlayerTotal - par : null");
 });

@@ -1268,7 +1268,7 @@ test("legacy missing statistics remain blocked without synthetic rows", async ({
   expect(sharedStore.savedHoleRows).toHaveLength(2);
 });
 
-test("Review submission compares and submits only the current player's round", async ({ page }) => {
+test("post-round mismatch uses the forward marked-player card", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
   const holeStatsStore = await routeScoreHoleEntriesStore(page);
   holeStatsStore.savedHoleRows.push(...buildCompleteReviewStatistics(sharedTournamentId, "player-1"));
@@ -1278,8 +1278,8 @@ test("Review submission compares and submits only the current player's round", a
   mismatchedMarkedPlayerScores[0] = 5;
   sharedStore.savedScoreRows.push(
     buildScoreEntry("player-1", "player-1", markerScores),
-    buildScoreEntry("player-2", "player-1", markerScores),
-    buildScoreEntry("player-1", "player-2", mismatchedMarkedPlayerScores),
+    buildScoreEntry("player-2", "player-1", mismatchedMarkedPlayerScores),
+    buildScoreEntry("player-1", "player-2", markerScores),
     buildScoreEntry("player-2", "player-2", scorerScores)
   );
 
@@ -1338,22 +1338,22 @@ test("Review submission compares and submits only the current player's round", a
   expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(0);
 });
 
-test("forward scoring summary and reciprocal verification keep three score identities separate", async ({ page }) => {
+test("post-round scoring and Verify Score share the forward scoring projection", async ({ page }) => {
   const selfScores = Array.from({ length: 18 }, () => 4);
-  const forwardMarkedScores = Array.from({ length: 18 }, () => 3);
-  const markerForSelfScores = Array.from({ length: 18 }, () => 5);
+  const forwardMarkedScores = Array.from({ length: 18 }, () => 5);
+  const independentMarkerForSelfScores = Array.from({ length: 18 }, () => 4);
   await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: selfScores,
     snapshotForwardMarkedScores: forwardMarkedScores,
     stableMarkedSelfScores: selfScores,
-    markerEnteredScores: markerForSelfScores,
+    markerEnteredScores: independentMarkerForSelfScores,
   });
 
   const forwardSummary = page.getByText("Scoring Summary", { exact: true }).locator("..");
   await expect(forwardSummary.getByRole("row").nth(1).getByRole("cell").nth(1)).toHaveText("4");
-  await expect(forwardSummary.getByRole("row").nth(1).getByRole("cell").nth(2)).toHaveText("3");
+  await expect(forwardSummary.getByRole("row").nth(1).getByRole("cell").nth(2)).toHaveText("5");
   await expect(forwardSummary.getByText("Self Card").locator("..")).toContainText("72");
-  await expect(forwardSummary.getByText("Marked Player Card").locator("..")).toContainText("54");
+  await expect(forwardSummary.getByText("Marked Player Card").locator("..")).toContainText("90");
 
   const scoreRows = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "✗ Δ1" }) });
   await expect(scoreRows).toHaveCount(18);
@@ -1364,7 +1364,7 @@ test("forward scoring summary and reciprocal verification keep three score ident
   await expect(page.getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Marked Player Card").locator("..")).toContainText("54");
+  await expect(page.getByText("Marked Player Card").locator("..")).toContainText("90");
   await expect(page.getByText("Marker Total").locator("..")).toContainText("90");
   await expect(page.getByRole("cell", { name: "✗ Δ1" })).toHaveCount(18);
 });
@@ -1418,7 +1418,7 @@ test("Review hydrates current-player Self from snapshot fallback and submits cur
   await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
 });
 
-test("Review synchronizes the current player's marker card completed after initial hydration", async ({ page }) => {
+test("independent marker synchronization does not replace the forward post-round projection", async ({ page }) => {
   const matchingScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: emptyHoleScores,
@@ -1427,7 +1427,7 @@ test("Review synchronizes the current player's marker card completed after initi
     statisticEntries: [],
   });
 
-  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
+  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toHaveCount(0);
   sharedStore.savedScoreRows.push(
     buildScoreEntry("player-1", "player-2", matchingScores, sharedTournamentId)
   );
@@ -1736,7 +1736,7 @@ test("Review keeps current-player statistics separate and applies stable-first m
   expect(stableOverride.markerTotal).toBe(90);
 });
 
-test("legacy snapshot-only Review does not treat another player's self card as marker data", async ({ page }) => {
+test("legacy snapshot-only post-round presentation uses its forward snapshot cards", async ({ page }) => {
   const snapshotScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: snapshotScores,
@@ -1744,9 +1744,8 @@ test("legacy snapshot-only Review does not treat another player's self card as m
 
   await expect(page.getByText("Verify Score", { exact: true })).toBeVisible();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
-  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toHaveCount(0);
   expect(sharedStore.savedScoreRows).toHaveLength(0);
   expect(sharedStore.savedHoleRows).toHaveLength(18);
 });
@@ -1779,6 +1778,7 @@ test("missing statistics never bypass a score mismatch", async ({ page }) => {
 
   await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: selfScores,
+    snapshotForwardMarkedScores: markerScores,
     markerEnteredScores: markerScores,
     statisticEntries: [],
   });
@@ -1829,16 +1829,15 @@ test("stable current-player self entry overrides snapshot fallback and blocks a 
   await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
 });
 
-test("missing current-player marker comparison blocks Review submission", async ({ page }) => {
+test("missing independent marker data does not replace complete forward snapshot cards", async ({ page }) => {
   await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: emptyHoleScores,
     stableMarkedSelfScores: Array.from({ length: 18 }, () => 4),
   });
 
-  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
+  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
 });
 
 test("mobile scorecard omits penalty strokes and saves the available optional stats", async ({ page }) => {

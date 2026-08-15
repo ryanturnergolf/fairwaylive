@@ -60,15 +60,12 @@ test("optional package items never create missing submission requirements", () =
   )).toEqual([]);
 });
 
-test("scorecard verification totals use the same marker array as the known-good hole table", () => {
+test("scorecard post-round tables and totals share one forward projection", () => {
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
-  const markerSummary = scorecard.slice(
-    scorecard.indexOf("const reviewMarkerTotals"),
-    scorecard.indexOf("const isQrScorecardRequest")
-  );
-  expect(markerSummary).toContain("reviewMarkerScores.reduce((sum, score) => sum + score, 0)");
-  expect(markerSummary).not.toContain("markerScores.reduce((sum, score) => sum + score, 0)");
-  expect(scorecard).toContain("const markerScore = reviewMarkerScores[index]");
+  expect(scorecard.match(/buildForwardScoringSummary\(/g)).toHaveLength(1);
+  expect(scorecard).toContain("markedPlayerScores: markerScores");
+  expect(scorecard).toContain("const markerScore = projectedHole?.markedPlayerScore ?? 0");
+  expect(scorecard).toContain("forwardScoringSummary.markedPlayerTotal");
   expect(scorecard).toContain("Statistics still needed");
   expect(scorecard).toContain("All required statistics are complete.");
   expect(scorecard.toLowerCase()).not.toContain("statistics opt-out");

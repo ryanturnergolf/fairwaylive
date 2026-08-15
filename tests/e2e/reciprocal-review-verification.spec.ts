@@ -55,6 +55,38 @@ test("incomplete forward cards never report a completed projected to-par", () =>
   expect(summary.markedPlayerToPar).toBeNull();
 });
 
+for (const holeCount of [5, 7, 9, 18]) {
+  test(`${holeCount}-hole forward summaries preserve mixed matches and visible discrepancies`, () => {
+    const holes = Array.from({ length: holeCount }, (_, index) => ({
+      holeNumber: index + 1,
+      par: index % 3 === 0 ? 3 : index % 3 === 1 ? 4 : 5,
+    }));
+    const selfScores = Array.from({ length: holeCount }, (_, index) => index % 2 === 0 ? 3 : 4);
+    const markedPlayerScores = selfScores.map((score, index) => index % 3 === 0 ? score : score + 1);
+    const summary = buildForwardScoringSummary({ holes, selfScores, markedPlayerScores });
+
+    expect(summary.holes.map((hole) => hole.selfScore)).toEqual(selfScores);
+    expect(summary.holes.map((hole) => hole.markedPlayerScore)).toEqual(markedPlayerScores);
+    expect(summary.selfTotal).toBe(selfScores.reduce((sum, score) => sum + score, 0));
+    expect(summary.markedPlayerTotal).toBe(markedPlayerScores.reduce((sum, score) => sum + score, 0));
+    expect(summary.selfToPar).toBe(summary.selfTotal - holes.reduce((sum, hole) => sum + hole.par, 0));
+    expect(summary.markedPlayerToPar).toBe(summary.markedPlayerTotal - holes.reduce((sum, hole) => sum + hole.par, 0));
+  });
+}
+
+test("identical forward cards remain identical without consulting independent review rows", () => {
+  const scores = Array.from({ length: 9 }, () => 4);
+  const summary = buildForwardScoringSummary({
+    holes: Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 })),
+    selfScores: scores,
+    markedPlayerScores: scores,
+  });
+
+  expect(summary.holes.every((hole) => hole.selfScore === hole.markedPlayerScore)).toBe(true);
+  expect(summary.selfTotal).toBe(36);
+  expect(summary.markedPlayerTotal).toBe(36);
+});
+
 test("asymmetric reciprocal verification preserves the known-good hole arrays and totals", () => {
   const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
   const projection = buildComparison(
