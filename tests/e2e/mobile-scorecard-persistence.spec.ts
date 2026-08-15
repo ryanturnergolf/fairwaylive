@@ -1724,7 +1724,7 @@ test("Review keeps current-player statistics separate and applies stable-first m
   expect(stableOverride.markerTotal).toBe(90);
 });
 
-test("Review preserves the legacy complete snapshot presentation", async ({ page }) => {
+test("legacy snapshot-only Review does not treat another player's self card as marker data", async ({ page }) => {
   const snapshotScores = Array.from({ length: 18 }, () => 4);
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: snapshotScores,
@@ -1732,7 +1732,9 @@ test("Review preserves the legacy complete snapshot presentation", async ({ page
 
   await expect(page.getByText("Verify Score", { exact: true })).toBeVisible();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("—");
+  await expect(page.getByText("Score Comparison Incomplete", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Complete Score Comparison to Submit" })).toBeDisabled();
   expect(sharedStore.savedScoreRows).toHaveLength(0);
   expect(sharedStore.savedHoleRows).toHaveLength(18);
 });
