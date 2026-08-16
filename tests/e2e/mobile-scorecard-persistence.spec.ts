@@ -341,8 +341,12 @@ const routeSharedTournamentRoster = async (
   });
 };
 
-const routeSharedScoreEntriesStore = async (page: Page, writeDelayMs = 0) => {
-  const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
+const routeSharedScoreEntriesStore = async (
+  page: Page,
+  writeDelayMs = 0,
+  sharedRows?: Array<ReturnType<typeof buildScoreEntry>>
+) => {
+  const savedScoreRows = sharedRows ?? [];
   let scoreReadCount = 0;
 
   await page.route("**/rest/v1/score_entries**", async (route) => {
@@ -810,6 +814,158 @@ test.use({
 
 test.beforeEach(async ({ page }) => {
   await routeValidCoachSession(page);
+});
+
+test("two isolated homepage sessions create all four reciprocal score identities through UI saves", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
+  const contexts = await Promise.all([
+    browser.newContext({ viewport: { width: 390, height: 844 } }),
+    browser.newContext({ viewport: { width: 390, height: 844 } }),
+  ]);
+  const pages = await Promise.all(contexts.map((context) => context.newPage()));
+
+  const configurePlayerSession = async (page: Page) => {
+    await routeSharedScoreEntriesStore(page, 0, savedScoreRows);
+    await routeScoreHoleEntriesStore(page);
+    await routeSharedTournamentRoster(page);
+    await routeTournamentStateSnapshotStore(page, 201, [{
+      tournament_id: sharedTournamentId,
+      local_tournament_id: tournamentId,
+      schema_version: 2,
+      state_snapshot: tournamentEnvelope,
+    }]);
+    await page.context().route("**/api/player-scoring-code/resolve", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        eventType: "qualifying",
+        resolution: {
+          qualifyingSessionId: "reciprocal-session",
+          qualifyingName: "Two-context Reciprocal Qualifying",
+          scoringMode: "reciprocal",
+          players: [
+            { playerId: "player-1", playerName: "Ava Green" },
+            { playerId: "player-2", playerName: "Ben Marker" },
+          ],
+        },
+      }),
+    }));
+    await page.context().route("**/api/qualifying-access/exchange", async (route) => {
+      const input = route.request().postDataJSON() as { playerId?: string };
+      const selectedPlayerId = input.playerId === "player-2" ? "player-2" : "player-1";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          playerId: selectedPlayerId,
+          roundNumber: 1,
+          groupNumber: 1,
+          markerPlayerId: selectedPlayerId === "player-1" ? "player-2" : "player-1",
+          startingHole: 1,
+          shareToken: `reciprocal-${selectedPlayerId}`,
+        }),
+      });
+    });
+    await page.context().route("**/api/share-tokens/resolve", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ tournamentId: sharedTournamentId, purpose: "mobile_scoring", expiresAt: null }),
+    }));
+    await page.context().route("**/api/score-mutations", async (route) => {
+      const body = route.request().postDataJSON() as { action: string; input: Record<string, unknown> };
+      if (body.action !== "saveScoreEntry") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+        return;
+      }
+      const row = {
+        ...buildScoreEntry(
+          String(body.input.playerId),
+          String(body.input.enteredByPlayerId),
+          body.input.holeScores as number[],
+          String(body.input.tournamentId)
+        ),
+        entry_status: String(body.input.entryStatus),
+        submitted_at: body.input.submittedAt as string | null,
+      };
+      const index = savedScoreRows.findIndex((entry) =>
+        entry.player_id === row.player_id && entry.entered_by_player_id === row.entered_by_player_id
+      );
+      if (index >= 0) savedScoreRows.splice(index, 1, row);
+      else savedScoreRows.push(row);
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(row) });
+    });
+  };
+
+  await Promise.all(pages.map(configurePlayerSession));
+  const openFromHomepage = async (page: Page, playerName: string) => {
+    await gotoApp(page, baseUrl);
+    const access = page.getByTestId("homepage-player-access");
+    await access.getByLabel("Live scoring code").fill("RECIP1");
+    await access.getByRole("button", { name: "Continue" }).click();
+    const playerButton = page.getByRole("button", { name: playerName, exact: true });
+    await expect.poll(async () => {
+      if (await playerButton.isVisible()) return true;
+      const continueButton = access.getByRole("button", { name: "Continue" });
+      if (await continueButton.isEnabled()) await continueButton.click();
+      return false;
+    }, { timeout: 20_000 }).toBe(true);
+    await playerButton.click();
+    await expect(page).toHaveURL(/\/scorecard\/player-[12]\?pairing=1&round=1&shareToken=reciprocal-player-[12]/);
+  };
+  await openFromHomepage(pages[0], "Ava Green");
+  await openFromHomepage(pages[1], "Ben Marker");
+
+  const enterRound = async (page: Page, selfName: string, markedName: string, selfScore: number, markedScore: number) => {
+    for (let hole = 1; hole <= 18; hole += 1) {
+      await expect(page.getByText(`Hole ${hole}`, { exact: true })).toBeVisible();
+      await page.getByLabel(`${selfName}'s Score`).fill(String(selfScore));
+      await page.getByLabel(`${markedName}'s Score`).fill(String(markedScore));
+      await page.getByRole("button", { name: "Save Hole" }).click();
+    }
+  };
+  await Promise.all([
+    enterRound(pages[0], "Ava Green", "Ben Marker", 4, 5),
+    enterRound(pages[1], "Ben Marker", "Ava Green", 5, 4),
+  ]);
+
+  await expect.poll(() => savedScoreRows.map((row) => `${row.player_id}:${row.entered_by_player_id}`).sort()).toEqual([
+    "player-1:player-1",
+    "player-1:player-2",
+    "player-2:player-1",
+    "player-2:player-2",
+  ]);
+  await Promise.all(pages.map((page) => page.reload()));
+  await Promise.all(pages.map((page) => page.getByRole("button", { name: "Review & Submit Round" }).click()));
+
+  const verificationTables = pages.map((page) => page.getByText("Verify Score", { exact: true }).locator("xpath=.."));
+  await expect(verificationTables[0]).toContainText("Self Total");
+  await expect(verificationTables[0]).toContainText("72");
+  await expect(verificationTables[1]).toContainText("Marker Total");
+  await expect(verificationTables[1]).toContainText("90");
+  await expect(verificationTables[0]).toContainText("✓");
+  await expect(verificationTables[1]).toContainText("✓");
+
+  await pages[0].getByRole("button", { name: "Edit Scores" }).click();
+  await pages[0].getByRole("button", { name: "Next Hole" }).click();
+  await pages[0].getByRole("button", { name: "Next Hole" }).click();
+  await pages[0].getByLabel("Ben Marker's Score").fill("6");
+  await pages[0].getByRole("button", { name: "Save Hole" }).click();
+  await pages[1].reload();
+  await pages[1].getByRole("button", { name: "Review & Submit Round" }).click();
+  const mismatchedVerification = pages[1].getByText("Verify Score", { exact: true }).locator("xpath=..");
+  await expect(mismatchedVerification).toContainText("✗ Δ1");
+  await expect(pages[1].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
+
+  await pages[0].getByRole("button", { name: "Previous Hole" }).click();
+  await pages[0].getByLabel("Ben Marker's Score").fill("5");
+  await pages[0].getByRole("button", { name: "Save Hole" }).click();
+  await pages[1].reload();
+  await pages[1].getByRole("button", { name: "Review & Submit Round" }).click();
+  await expect(pages[1].getByText("Verify Score", { exact: true }).locator("xpath=..")).not.toContainText("✗");
+  await expect(pages[1].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toHaveCount(0);
+
+  await Promise.all(contexts.map((context) => context.close()));
 });
 
 test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {
