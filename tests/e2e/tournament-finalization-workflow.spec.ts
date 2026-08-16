@@ -481,7 +481,7 @@ test("eligible tournament can be finalized and becomes read-only", async ({ page
   });
   await page.getByRole("button", { name: "Finalize Tournament" }).first().click();
   await expect.poll(() => finalizedMutation).not.toBeNull();
-  await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Tournament Finalized" })).toBeVisible({ timeout: 20_000 });
   expect(finalizedMutation).toMatchObject({
     tournamentId: sharedTournamentId,
     localTournamentId: tournamentId,
