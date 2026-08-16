@@ -904,12 +904,7 @@ test("two isolated homepage sessions create all four reciprocal score identities
     await access.getByLabel("Live scoring code").fill("RECIP1");
     await access.getByRole("button", { name: "Continue" }).click();
     const playerButton = page.getByRole("button", { name: playerName, exact: true });
-    await expect.poll(async () => {
-      if (await playerButton.isVisible()) return true;
-      const continueButton = access.getByRole("button", { name: "Continue" });
-      if (await continueButton.isEnabled()) await continueButton.click();
-      return false;
-    }, { timeout: 20_000 }).toBe(true);
+    await expect(playerButton).toBeVisible({ timeout: 20_000 });
     await playerButton.click();
     await expect(page).toHaveURL(/\/scorecard\/player-[12]\?pairing=1&round=1&shareToken=reciprocal-player-[12]/);
   };
