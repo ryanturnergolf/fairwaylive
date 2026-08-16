@@ -819,6 +819,12 @@ test.beforeEach(async ({ page }) => {
 test("two isolated homepage sessions create all four reciprocal score identities through UI saves", async ({ browser }) => {
   test.setTimeout(120_000);
   const savedScoreRows: Array<ReturnType<typeof buildScoreEntry>> = [];
+  const savePayloads: Array<Record<string, unknown>> = [];
+  const reciprocalEnvelope = JSON.parse(JSON.stringify(tournamentEnvelope));
+  reciprocalEnvelope.uiState.scorecards.roundSetup.numberOfHoles = "9";
+  reciprocalEnvelope.uiState.scorecards.scorecardRows = reciprocalEnvelope.uiState.scorecards.scorecardRows.map(
+    (row: Record<string, unknown>) => ({ ...row, scores: Array(9).fill("") })
+  );
   const contexts = await Promise.all([
     browser.newContext({ viewport: { width: 390, height: 844 } }),
     browser.newContext({ viewport: { width: 390, height: 844 } }),
@@ -833,7 +839,7 @@ test("two isolated homepage sessions create all four reciprocal score identities
       tournament_id: sharedTournamentId,
       local_tournament_id: tournamentId,
       schema_version: 2,
-      state_snapshot: tournamentEnvelope,
+          state_snapshot: reciprocalEnvelope,
     }]);
     await page.context().route("**/api/player-scoring-code/resolve", (route) => route.fulfill({
       status: 200,
@@ -878,6 +884,7 @@ test("two isolated homepage sessions create all four reciprocal score identities
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
         return;
       }
+      savePayloads.push(body.input);
       const row = {
         ...buildScoreEntry(
           String(body.input.playerId),
@@ -911,17 +918,37 @@ test("two isolated homepage sessions create all four reciprocal score identities
   await openFromHomepage(pages[0], "Ava Green");
   await openFromHomepage(pages[1], "Ben Marker");
 
-  const enterRound = async (page: Page, selfName: string, markedName: string, selfScore: number, markedScore: number) => {
-    for (let hole = 1; hole <= 18; hole += 1) {
+  const latestPayload = (playerId: string, enteredByPlayerId: string) =>
+    [...savePayloads].reverse().find((input) =>
+      input.playerId === playerId && input.enteredByPlayerId === enteredByPlayerId
+    );
+  const enterRound = async (
+    page: Page,
+    selfName: string,
+    markedName: string,
+    scorerId: string,
+    markedPlayerId: string,
+    selfScore: number,
+    markedScore: number
+  ) => {
+    for (let hole = 1; hole <= 9; hole += 1) {
       await expect(page.getByText(`Hole ${hole}`, { exact: true })).toBeVisible();
-      await page.getByLabel(`${selfName}'s Score`).fill(String(selfScore));
-      await page.getByLabel(`${markedName}'s Score`).fill(String(markedScore));
+      const selfInput = page.getByLabel(`${selfName}'s Score`);
+      const markedInput = page.getByLabel(`${markedName}'s Score`);
+      await selfInput.fill(String(selfScore));
+      await markedInput.fill(String(markedScore));
+      await expect(selfInput).toHaveValue(String(selfScore));
+      await expect(markedInput).toHaveValue(String(markedScore));
       await page.getByRole("button", { name: "Save Hole" }).click();
+      await expect.poll(() => ({
+        self: (latestPayload(scorerId, scorerId)?.holeScores as number[] | undefined)?.[hole - 1],
+        marked: (latestPayload(markedPlayerId, scorerId)?.holeScores as number[] | undefined)?.[hole - 1],
+      })).toEqual({ self: selfScore, marked: markedScore });
     }
   };
   await Promise.all([
-    enterRound(pages[0], "Ava Green", "Ben Marker", 4, 5),
-    enterRound(pages[1], "Ben Marker", "Ava Green", 5, 4),
+    enterRound(pages[0], "Ava Green", "Ben Marker", "player-1", "player-2", 4, 3),
+    enterRound(pages[1], "Ben Marker", "Ava Green", "player-2", "player-1", 5, 2),
   ]);
 
   await expect.poll(() => savedScoreRows.map((row) => `${row.player_id}:${row.entered_by_player_id}`).sort()).toEqual([
@@ -930,34 +957,64 @@ test("two isolated homepage sessions create all four reciprocal score identities
     "player-2:player-1",
     "player-2:player-2",
   ]);
+  expect(latestPayload("player-1", "player-1")).toMatchObject({
+    tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-1", enteredByPlayerId: "player-1",
+    holeScores: Array(9).fill(4), total: 36,
+  });
+  expect(latestPayload("player-2", "player-1")).toMatchObject({
+    tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-2", enteredByPlayerId: "player-1",
+    holeScores: Array(9).fill(3), total: 27,
+  });
+  expect(latestPayload("player-2", "player-2")).toMatchObject({
+    tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-2", enteredByPlayerId: "player-2",
+    holeScores: Array(9).fill(5), total: 45,
+  });
+  expect(latestPayload("player-1", "player-2")).toMatchObject({
+    tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-1", enteredByPlayerId: "player-2",
+    holeScores: Array(9).fill(2), total: 18,
+  });
   await Promise.all(pages.map((page) => page.reload()));
   await Promise.all(pages.map((page) => page.getByRole("button", { name: "Review & Submit Round" }).click()));
 
   const verificationTables = pages.map((page) => page.getByText("Verify Score", { exact: true }).locator("xpath=.."));
-  await expect(verificationTables[0]).toContainText("Self Total");
-  await expect(verificationTables[0]).toContainText("72");
-  await expect(verificationTables[1]).toContainText("Marker Total");
-  await expect(verificationTables[1]).toContainText("90");
-  await expect(verificationTables[0]).toContainText("✓");
-  await expect(verificationTables[1]).toContainText("✓");
-
-  await pages[0].getByRole("button", { name: "Edit Scores" }).click();
-  await pages[0].getByRole("button", { name: "Next Hole" }).click();
-  await pages[0].getByRole("button", { name: "Next Hole" }).click();
-  await pages[0].getByLabel("Ben Marker's Score").fill("6");
-  await pages[0].getByRole("button", { name: "Save Hole" }).click();
-  await pages[1].reload();
-  await pages[1].getByRole("button", { name: "Review & Submit Round" }).click();
-  const mismatchedVerification = pages[1].getByText("Verify Score", { exact: true }).locator("xpath=..");
-  await expect(mismatchedVerification).toContainText("✗ Δ1");
+  await expect(verificationTables[0]).toContainText("Self 4 vs Marker 2");
+  await expect(verificationTables[0].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "4", "2", "✗ Δ2"]);
+  await expect(verificationTables[0]).toContainText("Self Total36");
+  await expect(verificationTables[0]).toContainText("Marker Total18");
+  await expect(verificationTables[1]).toContainText("Self 5 vs Marker 3");
+  await expect(verificationTables[1].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "3", "✗ Δ2"]);
+  await expect(verificationTables[1]).toContainText("Self Total45");
+  await expect(verificationTables[1]).toContainText("Marker Total27");
+  await expect(pages[0].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
   await expect(pages[1].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
 
-  await pages[0].getByRole("button", { name: "Previous Hole" }).click();
-  await pages[0].getByLabel("Ben Marker's Score").fill("5");
-  await pages[0].getByRole("button", { name: "Save Hole" }).click();
+  const correctMarkedCard = async (page: Page, markedName: string, markedPlayerId: string, scorerId: string, value: number) => {
+    await page.getByRole("button", { name: "Edit Scores" }).click();
+    for (let hole = 1; hole <= 9; hole += 1) {
+      await expect(page.getByText(`Hole ${hole}`, { exact: true })).toBeVisible();
+      const markedInput = page.getByLabel(`${markedName}'s Score`);
+      await markedInput.fill(String(value));
+      await expect(markedInput).toHaveValue(String(value));
+      await page.getByRole("button", { name: "Save Hole" }).click();
+      await expect.poll(() =>
+        (latestPayload(markedPlayerId, scorerId)?.holeScores as number[] | undefined)?.[hole - 1]
+      ).toBe(value);
+    }
+  };
+  await correctMarkedCard(pages[1], "Ava Green", "player-1", "player-2", 4);
+  await pages[0].reload();
+  await pages[0].getByRole("button", { name: "Review & Submit Round" }).click();
+  const matchedA = pages[0].getByText("Verify Score", { exact: true }).locator("xpath=..");
+  await expect(matchedA.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "4", "4", "✓"]);
+  await expect(matchedA).not.toContainText("✗");
+  await expect(pages[0].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toHaveCount(0);
+
+  await correctMarkedCard(pages[0], "Ben Marker", "player-2", "player-1", 5);
   await pages[1].reload();
   await pages[1].getByRole("button", { name: "Review & Submit Round" }).click();
-  await expect(pages[1].getByText("Verify Score", { exact: true }).locator("xpath=..")).not.toContainText("✗");
+  const matchedB = pages[1].getByText("Verify Score", { exact: true }).locator("xpath=..");
+  await expect(matchedB.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "5", "✓"]);
+  await expect(matchedB).not.toContainText("✗");
   await expect(pages[1].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toHaveCount(0);
 
   await Promise.all(contexts.map((context) => context.close()));
