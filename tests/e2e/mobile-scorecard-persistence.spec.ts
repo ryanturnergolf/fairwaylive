@@ -825,6 +825,16 @@ test("two isolated homepage sessions create all four reciprocal score identities
   reciprocalEnvelope.uiState.scorecards.scorecardRows = reciprocalEnvelope.uiState.scorecards.scorecardRows.map(
     (row: Record<string, unknown>) => ({ ...row, scores: Array(9).fill("") })
   );
+  reciprocalEnvelope.tournament.players[0] = {
+    ...reciprocalEnvelope.tournament.players[0], firstName: "Evan", lastName: "Kindred",
+  };
+  reciprocalEnvelope.tournament.players[1] = {
+    ...reciprocalEnvelope.tournament.players[1], firstName: "Daishaun", lastName: "Flippin",
+  };
+  reciprocalEnvelope.uiState.pairings[0].players[0].playerName = "Evan Kindred";
+  reciprocalEnvelope.uiState.pairings[0].players[1].playerName = "Daishaun Flippin";
+  reciprocalEnvelope.uiState.scorecards.scorecardRows[0].playerName = "Evan Kindred";
+  reciprocalEnvelope.uiState.scorecards.scorecardRows[1].playerName = "Daishaun Flippin";
   const contexts = await Promise.all([
     browser.newContext({ viewport: { width: 390, height: 844 } }),
     browser.newContext({ viewport: { width: 390, height: 844 } }),
@@ -834,7 +844,46 @@ test("two isolated homepage sessions create all four reciprocal score identities
   const configurePlayerSession = async (page: Page) => {
     await routeSharedScoreEntriesStore(page, 0, savedScoreRows);
     await routeScoreHoleEntriesStore(page);
-    await routeSharedTournamentRoster(page);
+    await routeSharedTournamentRoster(page, {
+      players: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          tournament_id: sharedTournamentId,
+          player_id: "player-1",
+          player_name: "Evan Kindred",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: 1,
+          tee_number: 1,
+          starting_hole: 1,
+          marker_player_id: "player-2",
+          is_individual: false,
+          position: 1,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          tournament_id: sharedTournamentId,
+          player_id: "player-2",
+          player_name: "Daishaun Flippin",
+          team_id: "team-1",
+          team_name: "E2E University",
+          round_number: 1,
+          group_number: 1,
+          tee_number: 1,
+          starting_hole: 1,
+          marker_player_id: "player-1",
+          is_individual: false,
+          position: 2,
+          status: "active",
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+    });
     await routeTournamentStateSnapshotStore(page, 201, [{
       tournament_id: sharedTournamentId,
       local_tournament_id: tournamentId,
@@ -851,8 +900,8 @@ test("two isolated homepage sessions create all four reciprocal score identities
           qualifyingName: "Two-context Reciprocal Qualifying",
           scoringMode: "reciprocal",
           players: [
-            { playerId: "player-1", playerName: "Ava Green" },
-            { playerId: "player-2", playerName: "Ben Marker" },
+            { playerId: "player-1", playerName: "Evan Kindred" },
+            { playerId: "player-2", playerName: "Daishaun Flippin" },
           ],
         },
       }),
@@ -915,8 +964,8 @@ test("two isolated homepage sessions create all four reciprocal score identities
     await playerButton.click();
     await expect(page).toHaveURL(/\/scorecard\/player-[12]\?pairing=1&round=1&shareToken=reciprocal-player-[12]/);
   };
-  await openFromHomepage(pages[0], "Ava Green");
-  await openFromHomepage(pages[1], "Ben Marker");
+  await openFromHomepage(pages[0], "Evan Kindred");
+  await openFromHomepage(pages[1], "Daishaun Flippin");
 
   const latestPayload = (playerId: string, enteredByPlayerId: string) =>
     [...savePayloads].reverse().find((input) =>
@@ -947,8 +996,8 @@ test("two isolated homepage sessions create all four reciprocal score identities
     }
   };
   await Promise.all([
-    enterRound(pages[0], "Ava Green", "Ben Marker", "player-1", "player-2", 4, 3),
-    enterRound(pages[1], "Ben Marker", "Ava Green", "player-2", "player-1", 5, 2),
+    enterRound(pages[0], "Evan Kindred", "Daishaun Flippin", "player-1", "player-2", 5, 4),
+    enterRound(pages[1], "Daishaun Flippin", "Evan Kindred", "player-2", "player-1", 3, 6),
   ]);
 
   await expect.poll(() => savedScoreRows.map((row) => `${row.player_id}:${row.entered_by_player_id}`).sort()).toEqual([
@@ -959,32 +1008,38 @@ test("two isolated homepage sessions create all four reciprocal score identities
   ]);
   expect(latestPayload("player-1", "player-1")).toMatchObject({
     tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-1", enteredByPlayerId: "player-1",
-    holeScores: Array(9).fill(4), total: 36,
+    holeScores: Array(9).fill(5), total: 45,
   });
   expect(latestPayload("player-2", "player-1")).toMatchObject({
     tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-2", enteredByPlayerId: "player-1",
-    holeScores: Array(9).fill(3), total: 27,
+    holeScores: Array(9).fill(4), total: 36,
   });
   expect(latestPayload("player-2", "player-2")).toMatchObject({
     tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-2", enteredByPlayerId: "player-2",
-    holeScores: Array(9).fill(5), total: 45,
+    holeScores: Array(9).fill(3), total: 27,
   });
   expect(latestPayload("player-1", "player-2")).toMatchObject({
     tournamentId: sharedTournamentId, roundNumber: 1, playerId: "player-1", enteredByPlayerId: "player-2",
-    holeScores: Array(9).fill(2), total: 18,
+    holeScores: Array(9).fill(6), total: 54,
   });
   await Promise.all(pages.map((page) => page.reload()));
   await Promise.all(pages.map((page) => page.getByRole("button", { name: "Review & Submit Round" }).click()));
 
+  const scoringSummaries = pages.map((page) => page.getByText("Cards You Entered", { exact: true }).locator("xpath=.."));
+  await expect(scoringSummaries[0].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "4"]);
+  await expect(scoringSummaries[0]).toContainText("Self Card45");
+  await expect(scoringSummaries[0]).toContainText("Marked Player Card36");
   const verificationTables = pages.map((page) => page.getByText("Verify Score", { exact: true }).locator("xpath=.."));
-  await expect(verificationTables[0]).toContainText("Self 4 vs Marker 2");
-  await expect(verificationTables[0].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "4", "2", "✗ Δ2"]);
-  await expect(verificationTables[0]).toContainText("Self Total36");
-  await expect(verificationTables[0]).toContainText("Marker Total18");
-  await expect(verificationTables[1]).toContainText("Self 5 vs Marker 3");
-  await expect(verificationTables[1].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "3", "✗ Δ2"]);
-  await expect(verificationTables[1]).toContainText("Self Total45");
-  await expect(verificationTables[1]).toContainText("Marker Total27");
+  await expect(verificationTables[0]).toContainText("Self 5 vs Marker 6");
+  await expect(verificationTables[0].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "6", "✗ Δ1"]);
+  await expect(verificationTables[0]).toContainText("Self Total45");
+  await expect(verificationTables[0]).toContainText("Marker Total54");
+  await expect(verificationTables[0]).not.toContainText("Marker Total45");
+  await expect(verificationTables[0]).not.toContainText("Marker Total36");
+  await expect(verificationTables[1]).toContainText("Self 3 vs Marker 4");
+  await expect(verificationTables[1].getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "3", "4", "✗ Δ1"]);
+  await expect(verificationTables[1]).toContainText("Self Total27");
+  await expect(verificationTables[1]).toContainText("Marker Total36");
   await expect(pages[0].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
   await expect(pages[1].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toBeDisabled();
 
@@ -1001,19 +1056,19 @@ test("two isolated homepage sessions create all four reciprocal score identities
       ).toBe(value);
     }
   };
-  await correctMarkedCard(pages[1], "Ava Green", "player-1", "player-2", 4);
+  await correctMarkedCard(pages[1], "Evan Kindred", "player-1", "player-2", 5);
   await pages[0].reload();
   await pages[0].getByRole("button", { name: "Review & Submit Round" }).click();
   const matchedA = pages[0].getByText("Verify Score", { exact: true }).locator("xpath=..");
-  await expect(matchedA.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "4", "4", "✓"]);
+  await expect(matchedA.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "5", "✓"]);
   await expect(matchedA).not.toContainText("✗");
   await expect(pages[0].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toHaveCount(0);
 
-  await correctMarkedCard(pages[0], "Ben Marker", "player-2", "player-1", 5);
+  await correctMarkedCard(pages[0], "Daishaun Flippin", "player-2", "player-1", 3);
   await pages[1].reload();
   await pages[1].getByRole("button", { name: "Review & Submit Round" }).click();
   const matchedB = pages[1].getByText("Verify Score", { exact: true }).locator("xpath=..");
-  await expect(matchedB.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "5", "5", "✓"]);
+  await expect(matchedB.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "3", "3", "✓"]);
   await expect(matchedB).not.toContainText("✗");
   await expect(pages[1].getByRole("button", { name: "Fix Score Mismatches to Submit" })).toHaveCount(0);
 
