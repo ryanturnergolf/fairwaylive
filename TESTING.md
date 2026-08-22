@@ -41,7 +41,11 @@ The suite primarily uses deterministic fixtures, route interception, and static 
 
 GitHub does not expose repository secrets to pull requests from forks. Those runs will fail at the explicit configuration step rather than silently skipping Supabase-dependent coverage.
 
-The current committed hosted baseline is 268 tests. A local untracked `tests/e2e/qualifying-data-foundation.spec.ts` contains four additional tests and is intentionally excluded from CI until a separate milestone explicitly approves it. An unfiltered local workspace run therefore reports 272 without changing the hosted baseline.
+The current committed Playwright inventory is **351 tests across 52 tracked specifications**. `tests/e2e/qualifying-data-foundation.spec.ts` is tracked as of commit `767ec301e73970848a01353df456a33b1ab7b64a` and contributes four tests to that inventory. Hosted CI configuration and verification are complete; the workflow runs the same committed suite rather than excluding a local-only Qualifying specification.
+
+Historical test counts in milestone documentation describe the repository at those dated checkpoints and are not the current baseline.
+
+The reciprocal mobile coverage includes deliberately asymmetric scorer/subject values, two isolated browser contexts entering through the homepage Qualifying-code flow, UI-generated durable rows for all four reciprocal identities, refresh verification, mismatch creation and correction, and submission blocking/enabling. The assertions distinguish the golfer whose score is represented from the player who entered it so equal totals cannot conceal an identity error.
 
 The temporary production smoke target is `https://fairwaylive-gold.vercel.app`. Release smoke verification must use an approved authenticated coach and pre-designated canary event, must not print scoring/share tokens, and must not create disposable production events without a supported cleanup path. The 2026-08-02 deployment verified public HTTPS, health/release identity, sign-in, authenticated dashboard and Tournament reads, live scoring, QR public-origin generation, signed-out scorecard access, finalized read-only presentation, and QA seed denial. Supabase Site URL and redirect allowlist readback plus production sign-out, fresh sign-in, and dashboard verification passed. A true create/delete canary remains a separate operator gate.
 

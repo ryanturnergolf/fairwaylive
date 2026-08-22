@@ -1,6 +1,16 @@
 # Clubhouse HQ Project Bible
 
-Last updated: 2026-08-02
+Last updated: 2026-08-21
+
+## Current Repository And Beta Baseline
+
+Status: **CONTROLLED BETA PREPARATION IN PROGRESS**
+
+The current committed verification inventory is 351 Playwright tests across 52 tracked specifications. The Qualifying data-foundation regression specification is tracked as of commit `767ec301e73970848a01353df456a33b1ab7b64a`; it is no longer a local-only exception. Hosted CI configuration and verification are operational, and the temporary Vercel production deployment remains available at `https://fairwaylive-gold.vercel.app`.
+
+Implementation completed after the earlier controlled-pilot and UX baselines includes durable roster management UI, Dynamic Statistics configuration/mobile/Review integration, the analytics engine and query API, Player Performance Profiles, Team Performance and Team Statistics surfaces, Course Management with immutable event snapshots, flexible multi-round Qualifying, Qualifying statistics selection, and reciprocal scoring stabilization. Reciprocal identity coverage now distinguishes scorer from score subject with asymmetric real-flow regressions so equal scores cannot conceal an identity error.
+
+Historical test counts and release commits below remain valid for their dated milestones; they are not the current repository baseline. Controlled Beta Preparation remains open because backup capability confirmation, named recovery ownership, the isolated recovery drill, monitoring/alert configuration, and the remaining operational drills have not been completed. The next milestone is **Controlled Beta Operational Recovery Drill**.
 
 ## Product Vision
 
@@ -106,7 +116,7 @@ Developer/QA seed tooling is not a standard coach capability. Complete Tournamen
 
 ## Controlled Beta Continuous Integration
 
-Status: **IMPLEMENTED; HOSTED SECRET CONFIGURATION REQUIRED**
+Status: **IMPLEMENTED AND HOSTED VERIFICATION COMPLETE**
 
 GitHub Actions runs the locked dependency install, production build, and complete Chromium Playwright suite on every pull request and every push to `main`. CI uses the supported Node 20 line, npm caching, least-privilege repository contents access, a bounded job timeout, and failure-only Playwright artifact retention.
 
@@ -114,7 +124,7 @@ The browser bundle requires the client-safe `NEXT_PUBLIC_SUPABASE_URL` and `NEXT
 
 CI keeps two URL roles separate: Playwright uses `http://127.0.0.1:3100` to reach its managed production server, while `NEXT_PUBLIC_APP_URL` uses a reserved `.example` origin to verify externally shareable QR links. Production supplies its real public deployment origin; application code never hardcodes that domain.
 
-The Phase 7 candidate hosted suite contains 255 tests. Four additional local tests live in an untracked Qualifying foundation spec and are not part of CI. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot. The 18-hole rapid-save persistence regression waits for each hole's controls to become editable and uses a test-scoped execution budget because it intentionally verifies serialized atomic writes under injected latency; global timeouts and application behavior remain unchanged.
+Hosted CI has the required client-safe configuration and has repeatedly verified configuration preflight, production builds, and the committed Playwright suite. The current committed inventory is 351 tests, including the tracked Qualifying data-foundation specification. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot. The 18-hole rapid-save persistence regression waits for each hole's controls to become editable and uses a test-scoped execution budget because it intentionally verifies serialized atomic writes under injected latency; global timeouts and application behavior remain unchanged.
 
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 
@@ -136,7 +146,7 @@ Public HTTPS, Coach Sign In, authenticated dashboard loading, existing Tournamen
 
 ## Durable Roster Foundation
 
-Status: **DATA FOUNDATION DEPLOYED**
+Status: **FOUNDATION AND ROSTER UI IMPLEMENTED**
 
 The durable roster and season identity foundation is available in the connected Supabase runtime. `roster_players` is the permanent coach-owned player identity, `seasons` defines the season boundary, and `season_roster_memberships` stores season-specific status and class year.
 
@@ -144,7 +154,7 @@ Tournament and Qualifying event records remain immutable historical snapshots. T
 
 Owner-scoped RLS, cross-owner event-link validation, archive-first lifecycle transitions, and restricted foreign-key deletion preserve player and event history. Real Supabase verification covered same-owner creation and linking, cross-owner isolation, archived-player readability, restricted linked-player deletion, and unchanged certified tournament snapshots.
 
-Roster-management UI is not implemented. Custom statistics and player analytics remain future work.
+Coach-facing Men’s and Women’s roster management, the season-aware Players Directory, and permanent-identity Player Performance Profiles are implemented. Event participants remain immutable historical snapshots linked to durable roster identities where available. Dynamic Statistics and analytics are implemented through their repository, service, query API, and UI layers.
 
 ## Current Architecture Snapshot
 
@@ -268,9 +278,9 @@ Responsibilities:
 
 Review Hub should be built on top of the Tournament Aggregate rather than duplicating score resolution logic in route components.
 
-## Approved Future Capability: Custom Statistics And Player Season Tracking
+## Implemented Capability: Custom Statistics And Player Season Tracking
 
-Status: **PHASE 4 REVIEW INTEGRATION VERIFIED**
+Status: **DYNAMIC STATISTICS, ANALYTICS, AND PERFORMANCE UI IMPLEMENTED**
 
 The Dynamic Statistics backend foundation is runtime-available in the connected Supabase project. It provides owner-scoped, versioned statistic definitions and packages, immutable event assignments and hole values, and the approved built-in definition catalog. Real Supabase verification covered RLS, cross-owner rejection, archive/restore, immutable definition and package revisions, pinned event assignments, original/official value preservation, and restricted historical deletion.
 
@@ -278,14 +288,14 @@ The follow-up migration `20260805000000_fix_dynamic_statistics_catalog_trigger.s
 
 Real Supabase verification covered Tournament and Qualifying package resolution, immutable package-version pinning, required-stat validation, checkbox, yes/no, bounded-number, and option-list inputs, append-only persistence, reload/reopen behavior, signed-out share-token and player authorization, and offline retry after reconnect. Events without an assigned package retain the certified Fairway, GIR, and Putts workflow.
 
-Dynamic Statistics now participates in the authenticated Review Hub through the pinned package version. The read model preserves package order and applicability, distinguishes Match, Different, Missing, and Required Missing states, and supports accepting player or marker values plus append-only official corrections. Original player and marker rows remain unchanged; later official corrections supersede earlier official values without deleting history. Finalized events remain readable and disable Review controls. Analytics and player-profile presentation remain unimplemented.
+Dynamic Statistics now participates in the authenticated Review Hub through the pinned package version. The read model preserves package order and applicability, distinguishes Match, Different, Missing, and Required Missing states, and supports accepting player or marker values plus append-only official corrections. Original player and marker rows remain unchanged; later official corrections supersede earlier official values without deleting history. Finalized events remain readable and disable Review controls. The analytics engine, authenticated query API, Player Performance Profiles, Team Performance Dashboard, and sortable Team Statistics table are implemented consumers of the same durable observation authority.
 
-Coaches will be able to select which statistics appear on mobile scorecards, organize them into event stat packages, and create configuration-driven custom statistics. Initial and anticipated fields include:
+Coaches can select which statistics appear on mobile scorecards, organize them into event stat packages, and create configuration-driven custom statistics. Implemented and supported catalog fields include:
 
 - Fairway,
 - Green in Regulation,
 - Putts,
-- Shots from 100 yards and in with a selectable 1–6+ value,
+- Shots from 100 yards and in with selectable 1–10 values,
 - Up-and-down opportunity,
 - Up-and-down success or failure,
 - Sand save,
@@ -304,7 +314,7 @@ Stat definitions must not require a new database column for every field. A durab
 - applicability rules,
 - season and package assignment.
 
-Anticipated input types are checkbox, yes/no, bounded number, selectable options, rating, and optional text in a later phase.
+Implemented input types include checkbox, yes/no, bounded number, and selectable options. Rating and optional text remain possible later extensions rather than current behavior.
 
 Event stat packages select and order definitions for Tournament, Qualifying, Practice, or another future scored event. The selected package controls mobile scorecard inputs while preserving the certified Fairway, GIR, and Putts behavior during migration.
 
@@ -312,7 +322,7 @@ Event stat packages select and order definitions for Tournament, Qualifying, Pra
 
 Statistics for rostered players attach to a durable rostered-player ID, never a player name, temporary event label, or presentation-only tournament identity. Player development history must survive roster edits, event completion, event finalization, season transitions, and changes to stat definitions.
 
-Durable season tracking should support:
+Durable analytics currently support:
 
 - season totals and averages,
 - percentages and per-round averages,
@@ -320,7 +330,7 @@ Durable season tracking should support:
 - Tournament versus Qualifying splits,
 - recent rolling trends,
 - custom-stat summaries,
-- career and multi-season history in a later phase.
+- career and multi-season history.
 
 ### Hole-Level Statistical Authority
 

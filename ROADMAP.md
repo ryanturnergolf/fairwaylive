@@ -6,7 +6,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 - Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
 
-Last updated: 2026-08-02
+Last updated: 2026-08-21
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -30,15 +30,15 @@ Status: **IN PROGRESS**
 - Controlled Beta Phase 1 — Backup & Recovery Operational Readiness documentation: **COMPLETE; PLAN CONFIRMATION AND RECOVERY DRILL PENDING**.
 - Controlled Beta Phase 2 — Release & Rollback Operational Readiness documentation: **COMPLETE; HOSTING CONFIRMATION AND RELEASE DRILL PENDING**.
 - Controlled Beta Phase 3 — Production Monitoring & Incident Response documentation: **COMPLETE; TOOLING CONFIGURATION AND INCIDENT DRILL PENDING**.
-- Controlled Beta Phase 4 — Continuous Integration: **IMPLEMENTED; HOSTED SECRET CONFIGURATION AND PASSING RUN PENDING**.
+- Controlled Beta Phase 4 — Continuous Integration: **IMPLEMENTED; HOSTED CONFIGURATION AND VERIFICATION COMPLETE**.
 - Added the authoritative `BACKUP_RECOVERY.md` runbook covering backup scope/cadence, RPO/RTO, targeted and full restore procedures, snapshot/cache reconciliation, tournament-day response, and post-restore validation.
 - Added the authoritative `RELEASE_ROLLBACK.md` runbook covering release roles, prerequisites, build/Playwright and migration gates, deployment sequence, production smoke tests, tournament-day freezes, application rollback, database forward-fix policy, communications, and rehearsal.
 - Added the authoritative `MONITORING_INCIDENT_RESPONSE.md` runbook covering health signals, P1–P4 alerts, investigation, tournament-day triage, mitigation, recovery verification, vendor-neutral dashboard/log requirements, communications, postmortems, and readiness checks.
 - Added GitHub Actions verification for every pull request and push to `main`, using Node 20.x, npm caching, `npm ci`, the production build, the complete Chromium Playwright suite, and failure-only artifacts.
 - Phase 4B supplies required client-safe Supabase configuration through GitHub Actions secrets and fails early when configuration is absent; service-role credentials remain prohibited.
-- Phase 4C separates the local Playwright server origin from the public QR/share origin by using a reserved `.example` URL for hosted verification; a passing hosted run remains required.
-- Phase 4D reconciles the 240-test committed baseline and replaces a timing-sensitive mobile Review helper poll with a focused rendered-state assertion; hosted verification remains pending.
-- Phase 4E stabilizes the 18-hole rapid-save regression with per-hole editability assertions and a test-scoped execution budget; 15/15 CI-like repetitions and the 240/240 committed local suite pass, with hosted verification pending.
+- Phase 4C separates the local Playwright server origin from the public QR/share origin by using a reserved `.example` URL for hosted verification; hosted verification is complete.
+- Phase 4D replaced a timing-sensitive mobile Review helper poll with a focused rendered-state assertion and passed hosted verification.
+- Phase 4E stabilized the 18-hole rapid-save regression with per-hole editability assertions and a test-scoped execution budget; focused and hosted verification passed without changing application behavior.
 - Controlled Beta Phase 5 — Centralized Error Reporting & Health Checks: **FOUNDATION IMPLEMENTED; PRODUCTION COLLECTION AND ALERTING PENDING**.
 - Controlled Beta Phase 6 — Production Environment Validation: **IMPLEMENTED; PRODUCTION VALUES REQUIRE OPERATOR CONFIRMATION**.
 - Controlled Beta Phase 7 — Developer/QA Seed Tool Gating: **IMPLEMENTED; PRODUCTION DISABLED BY DEFAULT**.
@@ -53,21 +53,22 @@ Status: **IN PROGRESS**
 - Phase 7 hides and denies complete Tournament, incomplete Tournament, and Qualifying seed tools in deployed environments unless an authenticated coach is explicitly allowlisted. Local development and managed Playwright retain the operator workflow without changing standard coach permissions or creation behavior.
 - Phase 8 adds durable dismiss/resume coach guidance and a first-tournament checklist that consumes the existing readiness service. It remains non-blocking and does not change Tournament or Qualifying behavior.
 - Phase 9 adds the authoritative beta support guide, limitations register, issue-intake template, and a read-only Coach Help entry point. Production must assign primary/backup support owners and optionally configure the public support contact before invitations.
-- CI readiness requires configuring `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in GitHub Actions, preferably from a current-schema test/staging project, followed by one successful hosted run. CI remains separate from production Supabase deployment and smoke verification.
-- Current deployment baseline: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125`; production build passed; committed hosted Playwright passed 268/268; unfiltered local Playwright passed 272/272 including four intentionally untracked Qualifying foundation tests; production migrations remain current.
+- Hosted CI receives `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` through GitHub Actions secrets and has completed configuration, build, and Playwright verification. CI remains separate from production Supabase deployment and smoke verification.
+- Historical deployment baseline: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` established the temporary Vercel production deployment and its production smoke baseline. It is retained as a historical release record, not the current repository commit.
+- Current repository baseline: commit `767ec301e73970848a01353df456a33b1ab7b64a`; 351 committed Playwright tests across 52 tracked specifications. `tests/e2e/qualifying-data-foundation.spec.ts` is tracked and included in that inventory.
 - The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.
-- Next planned milestone: configure and verify the Phase 1–3 operational capabilities, execute the recovery, release/rollback, and incident drills, then reassess controlled-beta readiness.
+- Next planned milestone: **Controlled Beta Operational Recovery Drill**. Confirm the available Supabase backup/restore capability, name recovery owners, execute the documented isolated recovery drill, record measured RPO/RTO and integrity evidence, and keep Backup & Recovery readiness open until that drill passes. Release/rollback and incident drills follow; none is recorded as complete yet.
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 
 ### Durable Roster Foundation
 
-Status: **DATA FOUNDATION COMPLETE; UI NOT STARTED**
+Status: **FOUNDATION AND ROSTER UI COMPLETE**
 
 - Deployed permanent coach-owned `roster_players`, minimal `seasons`, and season-specific `season_roster_memberships`.
 - Added nullable permanent-identity links to Tournament and Qualifying participant snapshots without changing event scoring IDs.
 - Verified real owner RLS, cross-owner rejection, archive readability, restricted historical deletion, legacy null-link compatibility, and unchanged certified snapshots.
-- Roster-management UI, roster import/mapping, custom statistics, and player analytics remain separate future milestones.
+- Men’s and Women’s roster management, the season-aware Players Directory, and durable-identity Player Performance Profiles are implemented. Event snapshots retain their historical participant identity and nullable durable roster links.
 
 ### Approved Future Capability - Custom Statistics And Player Season Tracking
 
@@ -114,18 +115,30 @@ This work follows UX polish, onboarding, and durable roster preparation. It must
 
 #### Phase 5 - Player Season Analytics
 
-- Add rostered-player profiles with season totals, averages, percentages, and per-round averages.
-- Add event history, Tournament/Qualifying splits, recent trends, and custom-stat summaries.
-- Derive analytics from durable hole-level data.
-- Defer team comparisons and career/multi-season analysis until the player-season foundation is certified.
+- Status: **COMPLETE**
+- Implemented the reusable analytics engine and authenticated read-only Analytics Query API for round, event, season, and career projections.
+- Added rostered-player profiles with filters, summaries, histories, trends, comparisons, distributions, and applicable custom statistics.
+- Added Team Performance and compact sortable Team Statistics surfaces using batched API queries and durable hole-level authority.
+- Preserved official-value precedence, legacy compatibility, deterministic filters, and normalized 9-/18-hole projections without UI-owned calculation logic.
 
-Open design questions to resolve before runtime integration:
+### Completed Platform Extensions After The 2026-08-02 Roadmap Baseline
 
-- immutable definition versioning versus value-level definition snapshots,
-- the applicability-rule format and validation boundary,
-- which custom definitions require self/marker Review,
-- migration of existing Fairway, GIR, Putts, and historical Penalty Strokes into the package model,
-- privacy, retention, and export rules for multi-season player development records.
+Status: **COMPLETE AND REGRESSION-COVERED**
+
+- Course Management provides catalog courses, tee sets, mixed/custom overrides, reusable coach setups, and immutable event-specific par/yardage snapshots for Tournament and Qualifying scorecards.
+- Flexible Qualifying supports any number of rounds per day, 1–18 holes per round, repeated ranges, custom starting holes, multi-day schedules, and legacy session compatibility.
+- Qualifying creation pins selected Dynamic Statistics packages, supports an explicit empty score-only package, and preserves the legacy Fairway/GIR/Putts fallback for unassigned sessions.
+- Qualifying workspace, live-scoring, submission, summary, course/scorecard, and reciprocal presentation stabilization are complete.
+- Reciprocal scoring now has asymmetric write-boundary and two-browser real-flow coverage for all four scorer-to-subject identities, refresh, mismatch creation/correction, submission gating, and independent verification.
+
+Runtime design decisions completed during implementation:
+
+- Immutable package/definition versioning and event pinning preserve historical meaning.
+- Package-item applicability and validation metadata control mobile and Review behavior.
+- Review participation follows the configured definition and scoring policy while original and official values remain append-only.
+- Legacy unassigned events retain Fairway, GIR, and Putts compatibility; assigned packages, including explicit empty packages, remain distinct.
+
+Privacy, retention, and export policy for broader multi-season distribution remains a future operational/product decision; no export milestone is implied here.
 
 ### Qualifying Milestone Q7 - Finalization and Historical Results
 

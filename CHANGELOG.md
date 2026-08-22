@@ -1,5 +1,20 @@
 # Clubhouse HQ Changelog
 
+## 2026-08-21
+
+### Documentation Synchronization
+
+- Recorded the current 351-test committed Playwright inventory across 52 tracked specifications.
+- Recorded `tests/e2e/qualifying-data-foundation.spec.ts` as recovered tracked regression coverage in commit `767ec301e73970848a01353df456a33b1ab7b64a`; it is no longer a local-only test exception.
+- Reconciled the documentation with completed hosted CI configuration/verification and the existing temporary Vercel controlled-beta deployment.
+- Reconciled completed roster UI, Dynamic Statistics, analytics engine/API, Player Performance Profiles, Team Performance, Team Statistics, Course Management, flexible Qualifying rounds, and Qualifying statistics selection.
+- Recorded the completed reciprocal scoring stabilization and asymmetric scorer/subject regression coverage, including commit `b85f579` for strengthened identity coverage.
+- Kept Controlled Beta Preparation active and identified the **Controlled Beta Operational Recovery Drill** as the next milestone. Backup/PITR capability, named owners, recovery evidence, monitoring configuration, and operational drills remain unverified and open.
+
+### Historical Baseline Note
+
+- Earlier release commits and test counts below remain accurate for their dated checkpoints. They must not be read as the current repository baseline.
+
 ## 2026-08-02
 
 ### Controlled Beta Temporary Production Deployment
@@ -60,7 +75,7 @@
 
 ### Controlled Beta Phase 4D — Hosted Mobile Review Test Stability
 
-- Reconciled the 240 committed hosted tests with four additional tests in an intentionally untracked local Qualifying foundation spec.
+- At this historical checkpoint, reconciled 240 committed hosted tests with four then-untracked local Qualifying foundation tests. Those four tests were later recovered into the committed suite in `767ec301e73970848a01353df456a33b1ab7b64a`.
 - Replaced a timing-sensitive 10-second mobile Review helper poll with a focused race between the two valid web-first states: rendered `Verify Score` or enabled `Review & Submit Round`.
 - Preserved scoring, persistence, Review behavior, assertions, and application code without sleeps, retries, skipped tests, or global timeout changes.
 
@@ -115,7 +130,7 @@
 - Verified legacy events without packages continue using Fairway, GIR, and Putts, with existing score tables and score-saving behavior unchanged.
 - Verified original player and marker values remain immutable while official values append and later corrections supersede without deleting history.
 - Verified finalized Dynamic Statistics Review is read-only and package-free and legacy Review behavior remains unchanged.
-- Production build passed and Playwright passed 202/202. Analytics and player profiles remain unimplemented.
+- Production build passed and Playwright passed 202/202. Analytics and player profiles were unimplemented at this historical checkpoint and were completed in subsequent milestones.
 
 ## 2026-07-27
 
@@ -137,7 +152,7 @@
 
 - Verified real Supabase RLS and integrity for owner creation, lifecycle updates, archival readability, cross-owner isolation, same-owner event links, restricted historical deletion, and legacy null links.
 - Confirmed the roster migration performs no player backfill or name-based mapping and leaves certified tournament snapshots unchanged.
-- Reconfirmed the production build and Playwright 174/174 after deployment. Roster-management UI and custom statistics remain unimplemented.
+- Reconfirmed the production build and Playwright 174/174 after deployment. Roster-management UI and custom statistics were unimplemented at this historical checkpoint and were completed in subsequent milestones.
 
 ### Fixed
 
