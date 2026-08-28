@@ -269,15 +269,90 @@ Perform this drill against a disposable non-production project or an isolated re
 8. Record defects, revise the runbook, and repeat until the targets are met.
 9. Store the drill date, operators, backup identifier, measured RPO/RTO, verification evidence, and approval in the beta release record.
 
-The documentation milestone is complete when this runbook is reviewed. Operational backup readiness is complete only after the Supabase plan/capabilities are confirmed, recovery roles are named, and the drill passes.
+### Verified between-events drill — 2026-08-28
 
-## Unresolved Pre-Beta Assumptions
+Status: **PASSED FOR BETWEEN-EVENTS RECOVERY**
 
-- Whether the connected Supabase plan includes managed daily backups and PITR.
-- The managed backup retention window and whether isolated restore is available.
-- The production hosting target and mechanism used to pause traffic during a full restore.
+The production-safe logical backup and restore path was exercised from production project `gfpkhptrnddvwzorhgkm` in `us-east-2` to isolated recovery project `frskkyrtgponplmhgrgn` in `us-east-2`. Production release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` supplied the compatible application identity.
+
+Backup evidence:
+
+- backup ID: `20260828T030142Z-between-events`,
+- encrypted artifact: `clubhouse-hq-production-20260828T030142Z-between-events-20260813000000-9cfa8fd1.tar.age`,
+- SHA-256: `89A6D08F03048E26417AB03E8F0FD38CE6895EDDE085C2BF7E0745C060E64837`,
+- migration count: 46,
+- latest migration: `20260813000000`,
+- Auth scope: `auth.users` and `auth.identities` data only; Supabase-managed Auth DDL was not restored wholesale.
+
+Restore integrity matched all 36 public and four private application tables. Critical restored counts included 168 tournaments, 621 tournament players, 100 rounds, 362 scorecards, 595 score entries, 5,558 hole entries, 62 Qualifying sessions, 216 Qualifying participants, 1,642 statistic values, 23 roster players, two courses, and 97 snapshots. The restore retained 56 functions, 55 triggers, 126 indexes, 229 constraints, 36 RLS-enabled tables, and 79 policies. Storage contained zero objects and Realtime contained zero publication members.
+
+Reciprocal score identity remained intact across 297 self entries and 298 cross-player entries; `player_id` and `entered_by_player_id` relationships were preserved. Pre-existing source conditions were recorded separately and were not classified as restore defects: one score-hole scorer lacked a tournament-player row, 21 coach records lacked Auth users, 115 tournament owners lacked Auth users, and 36 Qualifying owners lacked Auth users.
+
+Measured timings:
+
+| Step | Duration |
+| --- | ---: |
+| Application database restore | 20.459 seconds |
+| Auth data restore | 1.111 seconds |
+| Core validation query | 0.687 seconds |
+| Restore to initial validation | 102.638 seconds |
+| Database restore/comparison/cleanup total | 209.103 seconds |
+| Application validation | approximately 14.1 minutes |
+| Controlled synthetic write | 1.052 seconds |
+
+The isolated application passed `/api/health`, synthetic coach authentication, Coach Dashboard, Qualifying Manager, restored Tournament and Qualifying workspaces, player/group/scoring/statistics reads, and one controlled Tournament creation returning HTTP 201. No request was made to production Supabase during application validation. Synthetic data was removed and the restored tournament count returned to 168.
+
+### Cross-schema application-object sidecar
+
+The drill found that `application-db.dump` restores `public.create_coach_profile_for_auth_user()` but does not recreate its trigger on Supabase-managed `auth.users`. Future backups and restores must pair the application dump with a separately reviewed `cross-schema-application-objects.sql` artifact. Do not solve this by restoring the entire Auth schema DDL.
+
+The sidecar must use `ON_ERROR_STOP`, run in one transaction, and validate that:
+
+- `public.create_coach_profile_for_auth_user()` exists,
+- its owner is `postgres`,
+- it is `SECURITY DEFINER`,
+- its search path is exactly `pg_catalog, public`,
+- its reviewed function fingerprint matches,
+- `auth.users` exists.
+
+It must enforce production-equivalent privileges:
+
+```sql
+REVOKE EXECUTE
+ON FUNCTION public.create_coach_profile_for_auth_user()
+FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE
+ON FUNCTION public.create_coach_profile_for_auth_user()
+TO postgres, service_role;
+```
+
+It must create this reviewed trigger only when absent:
+
+```sql
+CREATE TRIGGER create_coach_profile_for_auth_user
+AFTER INSERT OR UPDATE OF email, raw_user_meta_data
+ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.create_coach_profile_for_auth_user();
+```
+
+If the trigger already exists, the sidecar must validate its exact definition and normal enabled state. It must fail on conflicting state, never replace a Supabase-managed trigger, and commit only after all validation succeeds. The manifest must inventory the managed attachment point, function/trigger names and definition hashes, enabled state, owner/security/search path, exact EXECUTE grantees, production inspection timestamp, source migration `20260712000000_establish_coach_auth_foundation.sql`, and sidecar SHA-256. The artifact must not contain Auth schema DDL, managed triggers or roles, secrets, or unrelated platform objects.
+
+After correcting the trigger and privileges in recovery, synthetic Auth creation automatically created `public.coaches`, password authentication and authenticated self-read passed, and cleanup left zero synthetic Auth or coach rows. Production and recovery fingerprints matched for the function, trigger, owner, security, search path, enabled state, grants, five Supabase-managed triggers, and one application cross-schema trigger.
+
+The current encrypted backup remains acceptable when paired with this reviewed sidecar; a new backup is not required.
+
+The documentation and between-events drill milestones are complete. Overall Backup & Recovery readiness remains open until recovery roles are named, off-device key escrow and recurring cadence are operational, and active-tournament protection is resolved or explicitly accepted.
+
+## Remaining Pre-Beta Recovery Gaps
+
+- The production Supabase Free plan has no user-restorable PITR; do not claim a managed PITR retention window.
+- The isolated logical restore path is verified, but a production promotion/import procedure remains subject to incident-specific approval and Supabase platform constraints.
+- The production hosting target is verified; the mechanism and authority used to pause traffic during a full restore still require an assigned operator.
 - Named primary and backup owners for release, database recovery, incident response, and verification.
-- The encrypted off-platform storage location if logical backups are required.
-- Whether the 15-minute active-tournament RPO can be met without PITR.
+- Off-device escrow for the age recovery identity.
+- A recurring logical-backup cadence and rehearsal outside this one verified drill.
+- Whether the 15-minute active-tournament RPO can be met without PITR; it is not satisfied by the passed between-events drill.
 
 These assumptions must be resolved and recorded before opening controlled beta.

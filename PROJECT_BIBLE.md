@@ -1,6 +1,6 @@
 # Clubhouse HQ Project Bible
 
-Last updated: 2026-08-21
+Last updated: 2026-08-28
 
 ## Current Repository And Beta Baseline
 
@@ -10,7 +10,7 @@ The current committed verification inventory is 351 Playwright tests across 52 t
 
 Implementation completed after the earlier controlled-pilot and UX baselines includes durable roster management UI, Dynamic Statistics configuration/mobile/Review integration, the analytics engine and query API, Player Performance Profiles, Team Performance and Team Statistics surfaces, Course Management with immutable event snapshots, flexible multi-round Qualifying, Qualifying statistics selection, and reciprocal scoring stabilization. Reciprocal identity coverage now distinguishes scorer from score subject with asymmetric real-flow regressions so equal scores cannot conceal an identity error.
 
-Historical test counts and release commits below remain valid for their dated milestones; they are not the current repository baseline. Controlled Beta Preparation remains open because backup capability confirmation, named recovery ownership, the isolated recovery drill, monitoring/alert configuration, and the remaining operational drills have not been completed. The next milestone is **Controlled Beta Operational Recovery Drill**.
+Historical test counts and release commits below remain valid for their dated milestones; they are not the current repository baseline. Controlled Beta Preparation remains open. The verified between-events recovery drill is complete, but the active-tournament 15-minute RPO, off-device key escrow, recurring backup cadence, named recovery ownership, monitoring/alert configuration, and the remaining operational drills are not complete.
 
 ## Product Vision
 
@@ -86,11 +86,15 @@ Current verification baseline:
 
 ## Controlled Beta Backup And Recovery
 
-Status: **RUNBOOK COMPLETE; CAPABILITY CONFIRMATION AND DRILL REQUIRED**
+Status: **BETWEEN-EVENTS RECOVERY VERIFIED; ACTIVE-EVENT PROTECTION AND OWNERSHIP REMAIN OPEN**
 
 The operational recovery contract is documented in `BACKUP_RECOVERY.md`. Supabase durable tables remain recovery authority; `tournament_state_snapshots` and browser localStorage remain cached compatibility/recovery inputs and may never replace durable player, round, pairing, scorecard, score, Review, official, or finalization rows. Recovery preserves stable UUIDs, self/marker identities, immutable official audit history, and Tournament/Qualifying authority.
 
-Controlled beta requires confirmed backup capability for the connected Supabase plan, named recovery owners, evidence that the active-tournament RPO/RTO targets can be met, and a successful isolated recovery drill. The documentation does not claim PITR is enabled or that a drill has already passed.
+The 2026-08-28 isolated recovery drill restored encrypted logical backup `20260828T030142Z-between-events` from production project `gfpkhptrnddvwzorhgkm` into recovery project `frskkyrtgponplmhgrgn`. Database integrity, application reads, authentication, controlled writes, Tournament and Qualifying workspaces, reciprocal scorer/subject identities, and synthetic onboarding passed. The measured restore and application-validation window was well within the four-hour between-events RTO, so between-events recovery is verified.
+
+The drill also established that application-owned objects attached to Supabase-managed schemas require a reviewed `cross-schema-application-objects.sql` sidecar. The sidecar validates and recreates `create_coach_profile_for_auth_user` on `auth.users`, preserves the restored `public.create_coach_profile_for_auth_user()` function, and restricts function execution to `postgres` and `service_role`. It never restores the Auth schema or Supabase-managed triggers wholesale.
+
+The production project is on the Supabase Free plan with no user-restorable PITR. Controlled beta still requires named recovery owners, off-device recovery-key escrow, a rehearsed recurring logical-backup cadence, and evidence that active scoring can meet its 15-minute RPO and two-hour RTO. The passed between-events drill does not satisfy those active-tournament requirements.
 
 ## Controlled Beta Release And Rollback
 

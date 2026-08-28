@@ -45,6 +45,14 @@ The current committed Playwright inventory is **351 tests across 52 tracked spec
 
 Historical test counts in milestone documentation describe the repository at those dated checkpoints and are not the current baseline.
 
+### Operational recovery validation
+
+The 2026-08-28 Controlled Beta Operational Recovery Drill was an operator-run infrastructure and application acceptance, not an addition to the Playwright inventory. Encrypted backup `20260828T030142Z-between-events` was restored into isolated Supabase project `frskkyrtgponplmhgrgn`, never into production. Validation covered exact application-table counts, migration continuity, RLS/policies, scorer/subject identity preservation, restored application health and workspaces, synthetic coach onboarding, one controlled synthetic Tournament write, and complete synthetic cleanup.
+
+The drill found that logical restoration of application schemas does not automatically recreate application-owned triggers attached to Supabase-managed tables. Recovery validation must therefore apply and verify the reviewed `cross-schema-application-objects.sql` sidecar, including exact function privileges, before authentication smoke tests. Synthetic recovery identities must use non-production addresses, must not send email, and must be removed from both `auth.users` and `public.coaches` after validation.
+
+The between-events recovery path passed its four-hour RTO. This does not alter the 351-test Playwright baseline and does not prove the active-tournament 15-minute RPO.
+
 The reciprocal mobile coverage includes deliberately asymmetric scorer/subject values, two isolated browser contexts entering through the homepage Qualifying-code flow, UI-generated durable rows for all four reciprocal identities, refresh verification, mismatch creation and correction, and submission blocking/enabling. The assertions distinguish the golfer whose score is represented from the player who entered it so equal totals cannot conceal an identity error.
 
 The temporary production smoke target is `https://fairwaylive-gold.vercel.app`. Release smoke verification must use an approved authenticated coach and pre-designated canary event, must not print scoring/share tokens, and must not create disposable production events without a supported cleanup path. The 2026-08-02 deployment verified public HTTPS, health/release identity, sign-in, authenticated dashboard and Tournament reads, live scoring, QR public-origin generation, signed-out scorecard access, finalized read-only presentation, and QA seed denial. Supabase Site URL and redirect allowlist readback plus production sign-out, fresh sign-in, and dashboard verification passed. A true create/delete canary remains a separate operator gate.

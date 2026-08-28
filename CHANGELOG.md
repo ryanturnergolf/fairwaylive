@@ -1,5 +1,17 @@
 # Clubhouse HQ Changelog
 
+## 2026-08-28
+
+### Controlled Beta Operational Recovery Drill
+
+- Completed the first encrypted production-safe logical backup and isolated restore into Supabase recovery project `frskkyrtgponplmhgrgn`; production project `gfpkhptrnddvwzorhgkm` remained read-only throughout validation.
+- Verified all 36 public and four private application tables with exact critical row counts, 46 migrations through `20260813000000`, reciprocal scorer/subject identity preservation, RLS/policies, functions, triggers, indexes, constraints, empty Storage, and empty Realtime publication membership.
+- Validated the restored application through health, synthetic coach authentication, Coach Dashboard, Qualifying Manager, Tournament and Qualifying workspaces, scoring/statistics reads, and one controlled synthetic Tournament write followed by complete cleanup.
+- Measured database restoration and comparison well within the four-hour between-events RTO and recorded **BETWEEN-EVENTS RECOVERY: PASSED**.
+- Identified and corrected the recovery-only omission of application trigger `create_coach_profile_for_auth_user` on `auth.users`, then verified exact production parity for its function definition, owner, `SECURITY DEFINER`, search path, trigger definition/enabled state, and EXECUTE grants limited to `postgres` and `service_role`.
+- Established the reviewed `cross-schema-application-objects.sql` sidecar contract for application-owned DDL attached to Supabase-managed schemas. The current encrypted backup remains valid when paired with that reviewed sidecar; no replacement backup is required.
+- Kept active-tournament recovery open: the Free Supabase plan has no user-restorable PITR, the 15-minute active-scoring RPO is not demonstrated, and off-device escrow, recurring cadence, and named recovery ownership remain pending.
+
 ## 2026-08-21
 
 ### Documentation Synchronization
@@ -9,7 +21,7 @@
 - Reconciled the documentation with completed hosted CI configuration/verification and the existing temporary Vercel controlled-beta deployment.
 - Reconciled completed roster UI, Dynamic Statistics, analytics engine/API, Player Performance Profiles, Team Performance, Team Statistics, Course Management, flexible Qualifying rounds, and Qualifying statistics selection.
 - Recorded the completed reciprocal scoring stabilization and asymmetric scorer/subject regression coverage, including commit `b85f579` for strengthened identity coverage.
-- Kept Controlled Beta Preparation active and identified the **Controlled Beta Operational Recovery Drill** as the next milestone. Backup/PITR capability, named owners, recovery evidence, monitoring configuration, and operational drills remain unverified and open.
+- Kept Controlled Beta Preparation active and identified the **Controlled Beta Operational Recovery Drill** as the next milestone. This was the status on 2026-08-21; the between-events drill subsequently passed on 2026-08-28, while active-event protection and other operational gates remain open.
 
 ### Historical Baseline Note
 

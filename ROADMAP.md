@@ -6,7 +6,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 - Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
 
-Last updated: 2026-08-21
+Last updated: 2026-08-28
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -27,7 +27,7 @@ Status: **IN PROGRESS**
 - Phase 9B — Tournament Director Experience UX Polish: **COMPLETE**.
 - Phase 9C — Mobile Scoring Experience UX Polish: **COMPLETE**.
 - Phase 10A — End-to-End Tournament UX Audit and Final Polish: **COMPLETE**.
-- Controlled Beta Phase 1 — Backup & Recovery Operational Readiness documentation: **COMPLETE; PLAN CONFIRMATION AND RECOVERY DRILL PENDING**.
+- Controlled Beta Phase 1 — Backup & Recovery Operational Readiness: **BETWEEN-EVENTS RECOVERY DRILL PASSED; ACTIVE-EVENT RPO, RECURRING CADENCE, OFF-DEVICE ESCROW, AND NAMED OWNERS REMAIN OPEN**.
 - Controlled Beta Phase 2 — Release & Rollback Operational Readiness documentation: **COMPLETE; HOSTING CONFIRMATION AND RELEASE DRILL PENDING**.
 - Controlled Beta Phase 3 — Production Monitoring & Incident Response documentation: **COMPLETE; TOOLING CONFIGURATION AND INCIDENT DRILL PENDING**.
 - Controlled Beta Phase 4 — Continuous Integration: **IMPLEMENTED; HOSTED CONFIGURATION AND VERIFICATION COMPLETE**.
@@ -45,7 +45,7 @@ Status: **IN PROGRESS**
 - Controlled Beta Phase 8 — Coach Onboarding & First-Tournament Guidance: **IMPLEMENTED; BETA COACH FEEDBACK PENDING**.
 - Controlled Beta Phase 9 — Beta Support & Known Limitations: **IMPLEMENTED; NAMED SUPPORT OWNERS AND CONTACT CONFIGURATION PENDING**.
 - Controlled Beta temporary Vercel production deployment: **DEPLOYED; SUPABASE AUTH URLS VERIFIED; MONITORING AND OPERATIONAL DRILLS PENDING**.
-- Opening beta remains gated on confirming the connected Supabase backup/PITR capabilities, assigning named recovery owners, and passing the documented isolated recovery drill.
+- The production Supabase Free plan has no user-restorable PITR. The 2026-08-28 isolated logical-backup restore drill passed the 24-hour between-events RPO/four-hour RTO contract; opening beta remains gated on active-event protection, recurring backup rehearsal, off-device key escrow, and named recovery owners.
 - The production host and stable temporary URL are confirmed as `ez-golf-scoring/fairwaylive` at `https://fairwaylive-gold.vercel.app`; release readiness still requires named release owners, approved canary data, and a successful release/rollback drill.
 - Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.
 - Phase 5 adds native Next.js client/server exception capture, redacted structured output, release identity, production configuration validation, and `/api/health` without changing scoring or persistence. The selected production host/log collector must still retain the stream and deliver tested alerts.
@@ -57,7 +57,8 @@ Status: **IN PROGRESS**
 - Historical deployment baseline: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` established the temporary Vercel production deployment and its production smoke baseline. It is retained as a historical release record, not the current repository commit.
 - Current repository baseline: commit `767ec301e73970848a01353df456a33b1ab7b64a`; 351 committed Playwright tests across 52 tracked specifications. `tests/e2e/qualifying-data-foundation.spec.ts` is tracked and included in that inventory.
 - The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.
-- Next planned milestone: **Controlled Beta Operational Recovery Drill**. Confirm the available Supabase backup/restore capability, name recovery owners, execute the documented isolated recovery drill, record measured RPO/RTO and integrity evidence, and keep Backup & Recovery readiness open until that drill passes. Release/rollback and incident drills follow; none is recorded as complete yet.
+- Controlled Beta Operational Recovery Drill: **BETWEEN-EVENTS PATH PASSED**. Backup `20260828T030142Z-between-events` restored to isolated project `frskkyrtgponplmhgrgn` with exact application-table counts, preserved reciprocal score identities, authenticated application validation, controlled write/cleanup, and production-equivalent cross-schema trigger/function privileges. The active-tournament path remains open because a 15-minute RPO is not yet demonstrated and PITR is unavailable.
+- Next operational readiness work is to complete off-device key escrow, assign recovery owners, establish and rehearse the recurring logical-backup cadence, and resolve or explicitly accept the active-tournament RPO limitation. Release/rollback and incident-response drills also remain open.
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 
