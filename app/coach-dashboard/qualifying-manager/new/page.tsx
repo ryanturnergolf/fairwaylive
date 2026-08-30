@@ -19,6 +19,7 @@ import {
 } from "../../../lib/services/qualifyingCreationService";
 import { loadCurrentQualifyingRoster } from "../../../lib/services/rosterFoundationService";
 import { buildQualifyingPresetRounds, buildQualifyingRoundPlan } from "../../../lib/services/qualifyingScheduleService";
+import { countQualifyingRounds, MAX_CONFIGURED_ROUNDS } from "../../../lib/services/roundDomainService";
 import { createQualifyingSessionDraft } from "../../../lib/services/qualifyingSessionService";
 import {
   getDefaultQualifyingStatisticKeys,
@@ -66,6 +67,7 @@ export default function CreateQualifyingPage() {
   const roster = rosters[rosterType];
   const selectedPlayers = roster.filter((player) => selectedPlayerIds.includes(player.id));
   const groupedSelectedPlayers = orderQualifyingPlayersByGroup(selectedPlayers, groups);
+  const configuredRoundCount = countQualifyingRounds(days);
   const statisticDefinitionVersionIds = statistics
     .filter((statistic) => selectedStatisticKeys.has(statistic.key))
     .map((statistic) => statistic.definitionVersionId);
@@ -154,10 +156,10 @@ export default function CreateQualifyingPage() {
   const validateStep = () => {
     if (step === 0 && !name.trim()) return "Qualifying name is required.";
     if (step === 1 && selectedPlayers.length < 1) return "Select at least one player.";
-    if (
-      step === 2 &&
-      days.some((day) => !day.playDate || !day.courseName.trim() || !day.teeName.trim() || day.rounds.length < 1 || day.rounds.some((round) => round.startingHole < 1 || round.startingHole > 18 || round.holeCount < 1 || round.holeCount > 18))
-    ) return "Complete every day before continuing.";
+    if (step === 2 && (configuredRoundCount < 1 || configuredRoundCount > MAX_CONFIGURED_ROUNDS)) {
+      return `Qualifying must contain between 1 and ${MAX_CONFIGURED_ROUNDS} total configured rounds.`;
+    }
+    if (step === 2 && days.some((day) => !day.playDate || !day.courseName.trim() || !day.teeName.trim() || day.rounds.length < 1 || day.rounds.some((round) => round.startingHole < 1 || round.startingHole > 18 || round.holeCount < 1 || round.holeCount > 18))) return "Complete every day before continuing.";
     if (step === 3) {
       if (groups.length < 1 || groups.some((group) => group.playerIds.length < 1)) return "Empty groups are not allowed.";
       const assigned = groups.flatMap((group) => group.playerIds);
@@ -269,6 +271,9 @@ export default function CreateQualifyingPage() {
           {step === 2 && (
             <div>
               <h2 className="text-2xl font-black">Qualifying schedule</h2>
+              <p className="mt-2 text-sm font-bold text-[#51635C]" aria-live="polite">
+                {configuredRoundCount}/{MAX_CONFIGURED_ROUNDS} configured rounds
+              </p>
               <label className="mt-5 block max-w-xs font-bold">Number of qualifying days
                 <input aria-label="Number of qualifying days" type="number" min={1} max={14} className={inputClass} value={days.length} onChange={(event) => setNumberOfDays(Number(event.target.value))} />
               </label>
@@ -303,7 +308,7 @@ export default function CreateQualifyingPage() {
                           <p className="mt-2 text-sm text-[#51635C]">Ends on hole {endingHole} · {round.holeCount} scoring positions</p>
                         </div>;
                       })}
-                      <button type="button" className="justify-self-start rounded-lg bg-[#0B3D2E] px-4 py-2 font-black text-white" onClick={() => replaceDayRounds(index, [...day.rounds, { roundOrder: day.rounds.length + 1, startingHole: 1, holeCount: 9, displayName: "" }])}>Add Round</button>
+                      <button type="button" disabled={configuredRoundCount >= MAX_CONFIGURED_ROUNDS} className="justify-self-start rounded-lg bg-[#0B3D2E] px-4 py-2 font-black text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => replaceDayRounds(index, [...day.rounds, { roundOrder: day.rounds.length + 1, startingHole: 1, holeCount: 9, displayName: "" }])}>Add Round</button>
                     </div>
                   </fieldset>
                 ))}
@@ -415,6 +420,7 @@ export default function CreateQualifyingPage() {
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Scoring mode</dt><dd className="mt-1 font-bold">{scoringMode === "reciprocal" ? "Reciprocal" : "Designated Group Scorer"}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Statistics</dt><dd className="mt-1 font-bold">{statisticDefinitionVersionIds.length > 0 ? statistics.filter((statistic) => selectedStatisticKeys.has(statistic.key)).map((statistic) => statistic.name).join(", ") : "Score only"}</dd></div>
                 <div><dt className="text-xs font-black uppercase text-[#B8892D]">Statistics requirement</dt><dd className="mt-1 font-bold">{statisticDefinitionVersionIds.length === 0 ? "Not applicable" : statisticsRequired ? "Required" : "Optional"}</dd></div>
+                <div><dt className="text-xs font-black uppercase text-[#B8892D]">Configured rounds</dt><dd className="mt-1 font-bold">{configuredRoundCount}</dd></div>
               </dl>
               <h3 className="mt-6 font-black">Days and hole mapping</h3>
               <div className="mt-2 grid gap-2">

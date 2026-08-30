@@ -23,6 +23,7 @@ export type TournamentRow = {
   saved_course_setup_id?: string | null;
   course_setup_name?: string | null;
   course_hole_snapshot?: import("../courseModel").EventCourseHoleSnapshot[];
+  operational_current_round_id?: string | null;
 };
 
 export type CreateTournamentRowInput = {
@@ -59,8 +60,10 @@ export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
 };
 
 export type TournamentRoundReadRow = {
+  id: string;
   tournament_id: string;
   round_number: number;
+  name: string;
   hole_count: number;
   qualifying_session_id: string | null;
   starting_hole?: number | null;
@@ -139,7 +142,7 @@ export const getQualifyingBackingTournamentStatus = async (
 };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
 
 const tournamentPlayerColumns =
   "id,tournament_id,roster_player_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
@@ -223,23 +226,19 @@ export const createTournamentRow = async (
   }
 
   const supabase = getClient();
-  const { data, error } = await supabase
-    .from("tournaments")
-    .insert({
-      name: input.name,
-      course: input.course,
-      tournament_date: input.tournamentDate || null,
-      number_of_rounds: input.numberOfRounds,
-      status: input.status,
-      creation_key: input.idempotencyKey,
-      course_id: input.courseSetup?.courseId ?? null,
-      tee_set_id: input.courseSetup?.teeSetId ?? null,
-      saved_course_setup_id: input.courseSetup?.savedSetupId ?? null,
-      course_setup_name: input.courseSetup?.setupName ?? null,
-      course_hole_snapshot: input.courseSetup?.holes ?? [],
-    })
-    .select(tournamentColumns)
-    .single();
+  const { data, error } = await supabase.rpc("create_tournament_with_rounds", {
+    input_creation_key: input.idempotencyKey,
+    input_name: input.name,
+    input_course: input.course,
+    input_tournament_date: input.tournamentDate || null,
+    input_number_of_rounds: input.numberOfRounds,
+    input_status: input.status,
+    input_course_id: input.courseSetup?.courseId ?? null,
+    input_tee_set_id: input.courseSetup?.teeSetId ?? null,
+    input_saved_course_setup_id: input.courseSetup?.savedSetupId ?? null,
+    input_course_setup_name: input.courseSetup?.setupName ?? null,
+    input_course_hole_snapshot: input.courseSetup?.holes ?? [],
+  });
 
   if (error) {
     throw error;
@@ -472,12 +471,28 @@ export const getTournamentRounds = async (
 ): Promise<TournamentRoundReadRow[]> => {
   const supabase = await getReadClient(options);
   const { data, error } = await supabase.from("tournament_rounds")
-    .select("tournament_id,round_number,hole_count,qualifying_session_id,starting_hole,ending_hole,hole_sequence")
+    .select("id,tournament_id,round_number,name,hole_count,qualifying_session_id,starting_hole,ending_hole,hole_sequence")
     .eq("tournament_id", tournamentId)
     .order("round_number");
   if (error) throw error;
   return (data ?? []) as TournamentRoundReadRow[];
 };
+
+export const configureTournamentRoundCount = async (
+  tournamentId: string,
+  numberOfRounds: number
+): Promise<TournamentRoundReadRow[]> => postTournamentMutation<TournamentRoundReadRow[]>({
+  action: "configureTournamentRounds",
+  input: { tournamentId, numberOfRounds },
+});
+
+export const setTournamentOperationalRound = async (
+  tournamentId: string,
+  roundId: string
+) => postTournamentMutation<TournamentRow>({
+  action: "setOperationalRound",
+  input: { tournamentId, roundId },
+});
 
 export const getTournamentScorecards = async (
   tournamentId: string,

@@ -39,6 +39,7 @@ type PairingsScorecardGenerationProps =
       pairingsMessage: string;
       isAutoRepairModalOpen: boolean;
       autoRepairState: AutoRepairState;
+      roundOptions: Array<{ roundNumber: number; name: string }>;
       onGeneratePairings: () => void;
       onOpenAutoRepairModal: () => void;
       onCloseAutoRepairModal: () => void;
@@ -65,6 +66,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
       pairingsMessage,
       isAutoRepairModalOpen,
       autoRepairState,
+      roundOptions,
       onGeneratePairings,
       onOpenAutoRepairModal,
       onCloseAutoRepairModal,
@@ -242,9 +244,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                       onChange={onAutoRepairInputChange}
                       className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                     >
-                      <option>Round 1</option>
-                      <option>Round 2</option>
-                      <option>Round 3</option>
+                      {roundOptions.map((round) => <option key={round.roundNumber}>{round.name}</option>)}
                     </select>
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
@@ -255,9 +255,7 @@ export default function PairingsScorecardGeneration(props: PairingsScorecardGene
                       onChange={onAutoRepairInputChange}
                       className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                     >
-                      <option>Round 2</option>
-                      <option>Round 3</option>
-                      <option>Round 4</option>
+                      {roundOptions.map((round) => <option key={round.roundNumber}>{round.name}</option>)}
                     </select>
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">

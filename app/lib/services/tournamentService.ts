@@ -38,6 +38,7 @@ import type {
   Tournament,
   TournamentStorageEnvelope,
 } from "../tournamentModel";
+import { parseConfiguredRoundCount, resolveConfiguredTournamentRound } from "./roundDomainService";
 import { legacyUiStateToTournamentModel } from "../tournamentModel";
 import type { EventCourseSetupSelection } from "../courseModel";
 
@@ -188,8 +189,17 @@ const getRoundId = (roundNumber: number) => `round-${Math.max(1, roundNumber)}`;
 const getRoundNumberFromSetup = (uiState: LegacyTournamentUiState) =>
   asPositiveInteger(uiState.scorecards.roundSetup.roundNumber) ?? 1;
 
-const getActiveRoundNumberFromEnvelope = (envelope: TournamentStorageEnvelope) =>
-  asPositiveInteger(envelope.tournament.settings.activeRoundNumber) ?? getRoundNumberFromSetup(envelope.uiState);
+const getSelectedRoundNumberFromEnvelope = (envelope: TournamentStorageEnvelope) => {
+  const selectedRoundId = typeof envelope.tournament.settings.selectedRoundId === "string"
+    ? envelope.tournament.settings.selectedRoundId
+    : "";
+  const selectedRound = selectedRoundId
+    ? resolveConfiguredTournamentRound(envelope.tournament.rounds, selectedRoundId)
+    : null;
+  return selectedRound?.roundNumber ??
+    asPositiveInteger(envelope.tournament.settings.activeRoundNumber) ??
+    getRoundNumberFromSetup(envelope.uiState);
+};
 
 const getRoundSetupMap = (settings: TournamentStorageEnvelope["tournament"]["settings"]) =>
   asRecord(settings.roundSetups) as Record<string, LegacyTournamentUiState["scorecards"]["roundSetup"]> | null;
@@ -354,7 +364,10 @@ export const reconcileSnapshotWithDurableTournamentState = ({
     durableScorecardCoverageComplete &&
     (
       !envelope.uiState.scorecards.scorecardsGenerated ||
-      !getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated
+      (
+        Boolean(envelope.roundPresentationsById) &&
+        !getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated
+      )
     );
 
   if (!playersIncomplete && !pairingsIncomplete && !scorecardsIncomplete && !scorecardReadinessIncomplete) {
@@ -433,9 +446,13 @@ export const reconcileSnapshotWithDurableTournamentState = ({
     numberOfHoles: String(holeCount),
     startingHole: String(durableRound?.starting_hole ?? roundPlayerRows[0]?.starting_hole ?? 1),
   };
+  const hasRoundKeyedPresentation = Boolean(envelope.roundPresentationsById);
+  const roundIdentity = hasRoundKeyedPresentation
+    ? durableRound?.id ?? envelope.tournament.rounds.find((round) => round.roundNumber === roundNumber)?.id ?? getRoundId(roundNumber)
+    : getRoundId(roundNumber);
   const nextPairings = [
-    ...envelope.tournament.pairings.filter((pairing) => pairing.roundId !== getRoundId(roundNumber)),
-    ...durablePairings,
+    ...envelope.tournament.pairings.filter((pairing) => pairing.roundId !== roundIdentity && pairing.roundId !== getRoundId(roundNumber)),
+    ...durablePairings.map((pairing) => ({ ...pairing, roundId: roundIdentity })),
   ];
   const nextRounds = envelope.tournament.rounds.some(
     (round) => round.roundNumber === roundNumber
@@ -444,7 +461,7 @@ export const reconcileSnapshotWithDurableTournamentState = ({
     : [
         ...envelope.tournament.rounds,
         {
-          id: getRoundId(roundNumber),
+          id: roundIdentity,
           name: `Round ${roundNumber}`,
           roundNumber,
           status: roundNumber === 1 ? "live" as const : "upcoming" as const,
@@ -480,7 +497,10 @@ export const reconcileSnapshotWithDurableTournamentState = ({
       rounds: nextRounds,
       settings: {
         ...envelope.tournament.settings,
+        // Legacy snapshot read alias only. Operational authority is the durable
+        // operationalCurrentRoundId and UI selection is selectedRoundId.
         activeRoundNumber: roundNumber,
+        selectedRoundId: roundIdentity,
         roundSetups,
         roundStates,
       },
@@ -580,13 +600,17 @@ const blankScorecardRowsForRound = (
         };
       });
 
-const hydrateTournamentPageEnvelopeForRound = (
+export const hydrateTournamentPageEnvelopeForRound = (
   envelope: TournamentStorageEnvelope,
-  requestedRoundNumber = getActiveRoundNumberFromEnvelope(envelope)
+  requestedRoundNumber = getSelectedRoundNumberFromEnvelope(envelope)
 ): TournamentPageHydration => {
   const roundNumber = Math.max(1, requestedRoundNumber);
-  const roundId = getRoundId(roundNumber);
+  const configuredRound = envelope.tournament.rounds.find((round) => round.roundNumber === roundNumber);
+  const roundId = envelope.roundPresentationsById
+    ? configuredRound?.id ?? getRoundId(roundNumber)
+    : getRoundId(roundNumber);
   const hydratedTournamentState = envelope.uiState;
+  const persistedPresentation = envelope.roundPresentationsById?.[roundId];
   const roundSetup = getRoundSetup(envelope, roundNumber);
   const holeCount = Math.max(1, Math.min(18, Number(roundSetup.numberOfHoles) || 18));
   const roundPairings = envelope.tournament.pairings
@@ -598,11 +622,11 @@ const hydrateTournamentPageEnvelopeForRound = (
       players: pairing.players.map((player) => ({ ...player })),
     }));
   const isLegacyUiRound = roundNumber === getRoundNumberFromSetup(envelope.uiState);
-  const fallbackToLegacyPairings = isLegacyUiRound && roundPairings.length === 0;
+  const fallbackToLegacyPairings = !persistedPresentation && isLegacyUiRound && roundPairings.length === 0;
   const roundScores = envelope.tournament.scores.filter((score) => score.roundId === roundId);
   const fallbackToLegacyScorecards =
     isLegacyUiRound &&
-    hydratedTournamentState.scorecards.scorecardRows.length > 0;
+    !persistedPresentation && hydratedTournamentState.scorecards.scorecardRows.length > 0;
   const scorecardsGenerated =
     getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated ??
     (roundScores.length > 0 || (isLegacyUiRound && hydratedTournamentState.scorecards.scorecardsGenerated));
@@ -617,6 +641,8 @@ const hydrateTournamentPageEnvelopeForRound = (
   const baseScorecardRows =
     fallbackToLegacyScorecards
       ? hydratedTournamentState.scorecards.scorecardRows
+      : persistedPresentation?.scorecards.scorecardRows?.length
+        ? persistedPresentation.scorecards.scorecardRows
       : roundScores.length > 0
         ? roundScores
             .filter((score, index, scores) => scores.findIndex((item) => item.playerId === score.playerId) === index)
@@ -634,10 +660,10 @@ const hydrateTournamentPageEnvelopeForRound = (
   return {
     teams: hydratedTournamentState.teams,
     players: hydratedTournamentState.players,
-    pairings: fallbackToLegacyPairings ? hydratedTournamentState.pairings : roundPairings,
-    scorecardsGenerated,
+    pairings: persistedPresentation?.pairings ?? (fallbackToLegacyPairings ? hydratedTournamentState.pairings : roundPairings),
+    scorecardsGenerated: persistedPresentation?.scorecards.scorecardsGenerated ?? scorecardsGenerated,
     scorecardRows: mergedScorecardRows,
-    roundSetup,
+    roundSetup: persistedPresentation?.scorecards.roundSetup ?? roundSetup,
     clippdExportState: hydratedTournamentState.clippdExportState,
     scoreboardImportState: hydratedTournamentState.scoreboardImportState,
     autoRepairState: hydratedTournamentState.autoRepairState,
@@ -646,7 +672,7 @@ const hydrateTournamentPageEnvelopeForRound = (
 
 export const buildTournamentRoundManagerReadModel = (
   envelope: TournamentStorageEnvelope | null,
-  activeRoundNumber = envelope ? getActiveRoundNumberFromEnvelope(envelope) : 1
+  activeRoundNumber = envelope ? getSelectedRoundNumberFromEnvelope(envelope) : 1
 ): TournamentRoundManagerReadModel => {
   const roundCount = Math.max(
     1,
@@ -660,8 +686,8 @@ export const buildTournamentRoundManagerReadModel = (
     activeRoundNumber,
     roundOptions: Array.from({ length: roundCount }, (_, index) => {
       const roundNumber = index + 1;
-      const roundId = getRoundId(roundNumber);
-      const round = envelope?.tournament.rounds.find((item) => item.id === roundId || item.roundNumber === roundNumber);
+      const round = envelope?.tournament.rounds.find((item) => item.roundNumber === roundNumber);
+      const roundId = round?.id ?? getRoundId(roundNumber);
       const durablePresentationCount = roundNumber === activeRoundNumber
         ? envelope?.uiState.scorecards.scorecardRows.length ?? 0
         : 0;
@@ -701,7 +727,7 @@ const mergeRoundIntoTournament = ({
   existingTournament: Tournament | null;
 }): Tournament => {
   const activeRoundNumber = getRoundNumberFromSetup(state);
-  const activeRoundId = getRoundId(activeRoundNumber);
+  const activeRoundId = existingTournament?.rounds.find((round) => round.roundNumber === activeRoundNumber)?.id ?? getRoundId(activeRoundNumber);
   const activeModel = legacyUiStateToTournamentModel(tournamentId, tournamentName, course, state, settings, roundCount);
   const baseTournament = existingTournament ?? activeModel;
   const activePairings = activeModel.pairings.map((pairing) => ({
@@ -740,7 +766,7 @@ const mergeRoundIntoTournament = ({
     settings: {
       ...settings,
       rounds: nextRoundCount,
-      activeRoundNumber,
+      selectedRoundId: activeRoundId,
       roundSetups: {
         ...existingRoundSetups,
         [String(activeRoundNumber)]: state.scorecards.roundSetup,
@@ -798,8 +824,7 @@ export type SharedTournamentScorecardState = {
 };
 
 const toRoundCount = (rounds: string) => {
-  const parsed = Number(rounds);
-  return Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+  return parseConfiguredRoundCount(rounds);
 };
 
 const toTournamentRowInput = (input: CreateTournamentInput): CreateTournamentRowInput => ({
@@ -1129,10 +1154,13 @@ const loadTournamentAggregate = async (
   }
 
   const durableRounds = await getTournamentRounds(sharedTournamentUuidOrId).catch(() => []);
+  const operationalRoundNumber = durableRounds.find(
+    (round) => round.id === tournamentRow?.operational_current_round_id
+  )?.round_number;
   const roundNumber = durableRounds.length > 0
-    ? durableRounds.some((round) => round.round_number === snapshotRoundNumber)
+    ? operationalRoundNumber ?? (durableRounds.some((round) => round.round_number === snapshotRoundNumber)
       ? snapshotRoundNumber
-      : durableRounds[0].round_number
+      : durableRounds[0].round_number)
     : snapshotRoundNumber;
 
   const tournamentPlayers = await getTournamentPlayers(
@@ -1213,7 +1241,11 @@ export const loadTournamentList = async <T extends StoredTournament>(
     tournamentsById.set(tournament.id, tournament);
   });
   localTournaments.forEach((tournament) => {
-    tournamentsById.set(tournament.id, tournament);
+    const aggregate = sharedAggregates.find((candidate) => candidate.localTournamentId === tournament.id);
+    const canonicalId = aggregate?.sharedTournamentId || tournament.id;
+    if (!tournamentsById.has(canonicalId)) {
+      tournamentsById.set(canonicalId, canonicalId === tournament.id ? tournament : { ...tournament, id: canonicalId } as T);
+    }
   });
 
   return Array.from(tournamentsById.values());
@@ -1484,6 +1516,24 @@ export const persistTournamentPageState = ({
     roundCount,
     mergedTournament
   );
+  const selectedRound = mergedTournament.rounds.find(
+    (round) => round.roundNumber === (Number(safeState.scorecards.roundSetup.roundNumber) || 1)
+  );
+  const selectedRoundId = selectedRound?.id ?? getRoundId(Number(safeState.scorecards.roundSetup.roundNumber) || 1);
+  envelope.roundPresentationsById = {
+    ...(currentEnvelope?.roundPresentationsById ?? {}),
+    [selectedRoundId]: {
+      pairings: safeState.pairings.map((pairing) => ({
+        ...pairing,
+        players: pairing.players.map((player) => ({ ...player })),
+      })),
+      scorecards: {
+        ...safeState.scorecards,
+        scorecardRows: safeState.scorecards.scorecardRows.map((row) => ({ ...row, scores: [...row.scores] })),
+        roundSetup: { ...safeState.scorecards.roundSetup },
+      },
+    },
+  };
 
   const savedLocally = saveTournamentStorageEnvelope(tournamentId, envelope);
   if (!savedLocally) return;

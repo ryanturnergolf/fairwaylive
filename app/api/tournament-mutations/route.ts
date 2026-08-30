@@ -71,10 +71,18 @@ type MutationBody =
         stateSnapshot: unknown;
         finalizedAt: string;
       };
+    }
+  | {
+      action: "configureTournamentRounds";
+      input: { tournamentId: string; numberOfRounds: number };
+    }
+  | {
+      action: "setOperationalRound";
+      input: { tournamentId: string; roundId: string };
     };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
 
 const getAuthenticatedClient = async (request: Request) => {
   const authorization = request.headers.get("authorization") ?? "";
@@ -155,33 +163,53 @@ export async function POST(request: Request) {
       if (!/^[A-Za-z0-9:_-]{8,128}$/.test(idempotencyKey)) {
         throw new Error("A valid tournament creation idempotency key is required.");
       }
-      const { error: createError } = await supabase
-        .from("tournaments")
-        .insert({
-          name: body.input.name,
-          course: body.input.course,
-          tournament_date: body.input.tournamentDate || null,
-          number_of_rounds: body.input.numberOfRounds,
-          status: body.input.status,
-          owner_id: coachId,
-          creation_key: idempotencyKey,
-          course_id: body.input.courseSetup?.courseId ?? null,
-          tee_set_id: body.input.courseSetup?.teeSetId ?? null,
-          saved_course_setup_id: body.input.courseSetup?.savedSetupId ?? null,
-          course_setup_name: body.input.courseSetup?.setupName ?? null,
-          course_hole_snapshot: body.input.courseSetup?.holes ?? [],
-        });
-      if (createError && createError.code !== "23505") throw createError;
+      if (!Number.isInteger(body.input.numberOfRounds) || body.input.numberOfRounds < 1 || body.input.numberOfRounds > 10) {
+        throw new Error("Tournament round count must be between 1 and 10.");
+      }
+      const { data, error } = await supabase.rpc("create_tournament_with_rounds", {
+        input_creation_key: idempotencyKey,
+        input_name: body.input.name,
+        input_course: body.input.course,
+        input_tournament_date: body.input.tournamentDate || null,
+        input_number_of_rounds: body.input.numberOfRounds,
+        input_status: body.input.status,
+        input_course_id: body.input.courseSetup?.courseId ?? null,
+        input_tee_set_id: body.input.courseSetup?.teeSetId ?? null,
+        input_saved_course_setup_id: body.input.courseSetup?.savedSetupId ?? null,
+        input_course_setup_name: body.input.courseSetup?.setupName ?? null,
+        input_course_hole_snapshot: body.input.courseSetup?.holes ?? [],
+      });
+      if (error) throw error;
+      if (!data) throw new Error("Tournament creation did not return its durable round configuration.");
+      return NextResponse.json(data, { status: 201 });
+    }
 
-      const { data: existing, error: readError } = await supabase
-        .from("tournaments")
-        .select(tournamentColumns)
-        .eq("owner_id", coachId)
-        .eq("creation_key", idempotencyKey)
+    if (body.action === "configureTournamentRounds") {
+      const { data, error } = await supabase.rpc("configure_tournament_round_count", {
+        input_tournament_id: body.input.tournamentId,
+        input_number_of_rounds: body.input.numberOfRounds,
+      });
+      if (error) throw error;
+      return NextResponse.json(data ?? []);
+    }
+
+    if (body.action === "setOperationalRound") {
+      const { data: round, error: roundError } = await supabase
+        .from("tournament_rounds")
+        .select("id,tournament_id")
+        .eq("id", body.input.roundId)
+        .eq("tournament_id", body.input.tournamentId)
         .maybeSingle();
-      if (readError) throw readError;
-      if (!existing) throw new Error("Tournament creation could not be resolved by its idempotency key.");
-      return NextResponse.json(existing, { status: createError ? 200 : 201 });
+      if (roundError) throw roundError;
+      if (!round) throw new Error("Operational round must belong to this Tournament.");
+      const { data, error } = await supabase
+        .from("tournaments")
+        .update({ operational_current_round_id: body.input.roundId })
+        .eq("id", body.input.tournamentId)
+        .select(tournamentColumns)
+        .single();
+      if (error) throw error;
+      return NextResponse.json(data);
     }
 
     if (body.action === "reconcileTournamentPlayers") {

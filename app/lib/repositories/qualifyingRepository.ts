@@ -17,6 +17,7 @@ type QualifyingSessionRow = {
   roster_type: QualifyingSession["rosterType"];
   scoring_mode: QualifyingSession["scoringMode"];
   status: QualifyingSession["status"];
+  operational_current_qualifying_round_id: string | null;
   selected_players: QualifyingSession["selectedPlayers"];
   groups: QualifyingSession["groups"];
   finalized_at: string | null;
@@ -64,6 +65,18 @@ type QualifyingScorerAssignmentRow = {
   updated_at: string | null;
 };
 
+export type QualifyingRoundRow = {
+  id: string;
+  qualifying_session_id: string;
+  qualifying_day_id: string;
+  round_order: number;
+  display_name: string;
+  starting_hole: number;
+  hole_count: number;
+  ending_hole: number;
+  hole_sequence: number[];
+};
+
 type QualifyingParticipantRow = {
   id: string;
   qualifying_session_id: string;
@@ -107,6 +120,7 @@ const mapSession = (row: QualifyingSessionRow): QualifyingSession => ({
   rosterType: row.roster_type,
   scoringMode: row.scoring_mode,
   status: row.status,
+  operationalCurrentQualifyingRoundId: row.operational_current_qualifying_round_id ?? null,
   selectedPlayers: row.selected_players,
   groups: row.groups,
   finalizedAt: row.finalized_at,
@@ -252,7 +266,7 @@ export const getQualifyingSessionRow = async (
 ): Promise<QualifyingSession | null> => {
   const { data, error } = await getClient()
     .from("qualifying_sessions")
-    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
+    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,created_at,updated_at")
     .eq("id", sessionId)
     .maybeSingle();
   if (error) throw error;
@@ -262,7 +276,7 @@ export const getQualifyingSessionRow = async (
 export const listQualifyingSessionRows = async (): Promise<QualifyingSession[]> => {
   const { data, error } = await getClient()
     .from("qualifying_sessions")
-    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
+    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,created_at,updated_at")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => mapSession(row as QualifyingSessionRow));
@@ -291,6 +305,31 @@ export const listQualifyingRoundMappings = async (
     .order("qualifying_segment");
   if (error) throw error;
   return (data ?? []).map((row) => mapRound(row as TournamentRoundRow));
+};
+
+export const listConfiguredQualifyingRounds = async (sessionId: string): Promise<QualifyingRoundRow[]> => {
+  const { data, error } = await getClient()
+    .from("qualifying_rounds")
+    .select("id,qualifying_session_id,qualifying_day_id,round_order,display_name,starting_hole,hole_count,ending_hole,hole_sequence")
+    .eq("qualifying_session_id", sessionId)
+    .order("qualifying_day_id")
+    .order("round_order");
+  if (error) throw error;
+  return (data ?? []) as QualifyingRoundRow[];
+};
+
+export const setQualifyingOperationalRound = async (
+  sessionId: string,
+  qualifyingRoundId: string
+) => {
+  const { data, error } = await getClient()
+    .from("qualifying_sessions")
+    .update({ operational_current_qualifying_round_id: qualifyingRoundId })
+    .eq("id", sessionId)
+    .select("id,operational_current_qualifying_round_id")
+    .single();
+  if (error) throw error;
+  return data as { id: string; operational_current_qualifying_round_id: string };
 };
 
 export const listQualifyingScorerAssignments = async (

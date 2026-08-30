@@ -4,6 +4,7 @@ import type {
   QualifyingRosterPlayer,
 } from "../qualifyingModel";
 import { buildQualifyingRoundPlan } from "./qualifyingScheduleService";
+import { countQualifyingRounds, MAX_CONFIGURED_ROUNDS } from "./roundDomainService";
 
 export type QualifyingCreationValidation = {
   ok: boolean;
@@ -63,6 +64,10 @@ export const validateQualifyingCreation = (
     errors.push("Selected players must belong to the chosen roster.");
   }
   if (input.days.length < 1) errors.push("Configure at least one qualifying day.");
+  const configuredRoundCount = countQualifyingRounds(input.days);
+  if (configuredRoundCount < 1 || configuredRoundCount > MAX_CONFIGURED_ROUNDS) {
+    errors.push(`Qualifying must contain between 1 and ${MAX_CONFIGURED_ROUNDS} total configured rounds.`);
+  }
   if (
     input.days.some(
       (day, index) =>

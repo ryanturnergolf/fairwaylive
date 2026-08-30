@@ -434,9 +434,12 @@ export const finalizeTournament = async ({
   }
 
   const effectiveSharedTournamentId = status.sharedTournamentId || sharedTournamentId;
+  let effectiveLocalTournamentId = tournamentId;
   let envelope = loadTournamentStorageEnvelope(tournamentId);
   if (!envelope && effectiveSharedTournamentId) {
-    envelope = (await getTournamentAggregate(effectiveSharedTournamentId).catch(() => null))?.envelope ?? null;
+    const aggregate = await getTournamentAggregate(effectiveSharedTournamentId).catch(() => null);
+    envelope = aggregate?.envelope ?? null;
+    effectiveLocalTournamentId = aggregate?.localTournamentId || envelope?.tournament.id || tournamentId;
   }
   if (!envelope) {
     return {
@@ -499,13 +502,13 @@ export const finalizeTournament = async ({
 
   await finalizeTournamentAggregate({
     tournamentId: effectiveSharedTournamentId,
-    localTournamentId: tournamentId,
+    localTournamentId: effectiveLocalTournamentId,
     schemaVersion: finalizedEnvelope.version,
     stateSnapshot: finalizedEnvelope,
     finalizedAt: finalizationRecord.finalizedAt,
   });
-  saveTournamentStorageEnvelope(tournamentId, finalizedEnvelope);
-  updateStoredTournamentFinalizationSettings(tournamentId, "Finalized", finalizationRecord);
+  saveTournamentStorageEnvelope(effectiveLocalTournamentId, finalizedEnvelope);
+  updateStoredTournamentFinalizationSettings(effectiveLocalTournamentId, "Finalized", finalizationRecord);
 
   return {
     finalized: true,

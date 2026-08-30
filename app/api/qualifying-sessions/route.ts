@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const supabase = await getAuthenticatedClient(request);
     const { data: sessions, error: sessionError } = await supabase
       .from("qualifying_sessions")
-      .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,finalized_at,finalized_by,created_at,updated_at")
+      .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,created_at,updated_at")
       .order("created_at", { ascending: false });
     if (sessionError) throw sessionError;
 
@@ -125,6 +125,7 @@ export async function GET(request: Request) {
           rosterType: session.roster_type,
           scoringMode: session.scoring_mode,
           status: session.status,
+          operationalCurrentQualifyingRoundId: session.operational_current_qualifying_round_id,
           selectedPlayers,
           groups: mappedGroups,
           finalizedAt: session.finalized_at,

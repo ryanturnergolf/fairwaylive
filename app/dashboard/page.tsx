@@ -5,6 +5,7 @@ import CourseSetupEditor from "../components/CourseSetupEditor";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabaseClient";
+import { getTournamentRounds } from "../lib/repositories/tournamentRepository";
 import {
   loadDirectorDashboardReadModel,
   loadDirectorTournamentSummary,
@@ -37,6 +38,7 @@ import {
 import { loadQaSeedAccess, requireQaSeedAccess } from "../lib/services/qaSeedAccessService";
 import { createOperationId } from "../lib/services/operationIdService";
 import type { EventCourseSetupSelection } from "../lib/courseModel";
+import { createEmptyTournamentModel } from "../lib/tournamentModel";
 import {
   buildTournamentStorageEnvelope,
   getTournamentStateStorageKey,
@@ -249,6 +251,7 @@ export default function DashboardPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [directorReadModel, setDirectorReadModel] = useState<DirectorDashboardReadModel>(emptyDirectorReadModel);
   const [finalizationStatuses, setFinalizationStatuses] = useState<TournamentFinalizationStatusById>({});
+  const directorRefreshRequestRef = useRef(0);
   const [templates, setTemplates] = useState<TournamentTemplate[]>(() => loadTemplatesFromStorage());
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
@@ -304,10 +307,12 @@ export default function DashboardPage() {
     router.refresh();
   };
 
-  const refreshDirectorReadModel = (sourceTournaments: Tournament[]) =>
-    loadDirectorDashboardReadModel(sourceTournaments, {
+  const refreshDirectorReadModel = (sourceTournaments: Tournament[]) => {
+    const requestId = ++directorRefreshRequestRef.current;
+    return loadDirectorDashboardReadModel(sourceTournaments, {
       stalledTimeoutMinutes: directorStalledTimeoutMinutes,
     }).then((readModel) => {
+      if (requestId !== directorRefreshRequestRef.current) return;
       setDirectorReadModel(readModel);
 
       void Promise.all(
@@ -323,6 +328,7 @@ export default function DashboardPage() {
         })
       )
         .then((entries) => {
+          if (requestId !== directorRefreshRequestRef.current) return;
           setFinalizationStatuses(Object.fromEntries(entries));
         })
         .catch((error) => {
@@ -331,6 +337,7 @@ export default function DashboardPage() {
     }).catch((error) => {
       console.warn("[DirectorDashboardService] Unable to load director dashboard read model.", error);
     });
+  };
 
   const handleFinalizeTournament = async (summaryTournamentId: string, summarySharedTournamentId: string) => {
     if (typeof window !== "undefined") {
@@ -809,6 +816,31 @@ export default function DashboardPage() {
     const newTournament = createResult.tournament as Tournament;
 
     const normalizedRoundCount = Number(normalizedFormState.rounds) || 1;
+    const durableRounds = await getTournamentRounds(newTournament.id);
+    if (durableRounds.length !== normalizedRoundCount) {
+      setCreationError("Tournament creation did not return every configured durable round.");
+      setIsCreatingTournament(false);
+      return;
+    }
+    const durableTournamentModel = createEmptyTournamentModel(
+      newTournament.id,
+      newTournament.name,
+      newTournament.course,
+      {
+        ...normalizedFormState,
+        operationalCurrentRoundId: createResult.row?.operational_current_round_id ?? durableRounds[0]?.id,
+        selectedRoundId: createResult.row?.operational_current_round_id ?? durableRounds[0]?.id,
+      },
+      normalizedRoundCount
+    );
+    durableTournamentModel.rounds = durableRounds.map((round) => ({
+      id: round.id,
+      name: round.name,
+      roundNumber: round.round_number,
+      status: "upcoming",
+      pairings: [],
+      leaderboard: [],
+    }));
 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(
@@ -859,7 +891,8 @@ export default function DashboardPage() {
               },
             },
             normalizedFormState,
-            normalizedRoundCount
+            normalizedRoundCount,
+            durableTournamentModel
           )
         )
       );
@@ -1615,10 +1648,9 @@ export default function DashboardPage() {
                       }}
                       className="rounded-2xl border border-[#E8DCC8] bg-white px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
                     >
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
+                      {Array.from({ length: 10 }, (_, index) => index + 1).map((roundCount) => (
+                        <option key={roundCount} value={roundCount}>{roundCount}</option>
+                      ))}
                     </select>
                     {errors.rounds ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8892D]">{errors.rounds}</p> : null}
                   </label>

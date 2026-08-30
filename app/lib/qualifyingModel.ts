@@ -22,6 +22,7 @@ export type QualifyingSession = {
   rosterType: QualifyingRosterType;
   scoringMode: QualifyingScoringMode;
   status: QualifyingSessionStatus;
+  operationalCurrentQualifyingRoundId?: string | null;
   selectedPlayers: QualifyingRosterPlayer[];
   groups: QualifyingGroup[];
   finalizedAt: string | null;
@@ -111,6 +112,15 @@ export type QualifyingRoundMapping = {
   qualifyingSegment: number;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type ConfiguredQualifyingRound = {
+  qualifyingRoundId: string;
+  tournamentRoundId: string | null;
+  roundNumber: number;
+  displayLabel: string;
+  qualifyingDay: number;
+  qualifyingSegment: number;
 };
 
 export type QualifyingScorerAssignment = {

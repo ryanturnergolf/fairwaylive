@@ -550,7 +550,8 @@ export const parseTournamentStorageEnvelope = (
       return {
         version: 2,
         tournament: completeTournament,
-          uiState: normalizeLegacyUiState((parsedValue as TournamentStorageEnvelope).uiState),
+        uiState: normalizeLegacyUiState((parsedValue as TournamentStorageEnvelope).uiState),
+        roundPresentationsById: (parsedValue as TournamentStorageEnvelope).roundPresentationsById,
       };
     }
 
@@ -656,6 +657,14 @@ export const buildTournamentStorageEnvelope = (
     version: 2,
     tournament,
     uiState,
+    roundPresentationsById: existingTournament
+      ? undefined
+      : {
+          [tournament.rounds.find((round) => round.roundNumber === Number(uiState.scorecards.roundSetup.roundNumber))?.id ?? "round-1"]: {
+            pairings: uiState.pairings,
+            scorecards: uiState.scorecards,
+          },
+        },
   };
 };
 
@@ -740,6 +749,7 @@ export const mergeTournamentScoreSubmission = (
     version: 2,
     tournament: nextTournament,
     uiState: nextUiState,
+    roundPresentationsById: envelope.roundPresentationsById,
   });
 
   return saved;

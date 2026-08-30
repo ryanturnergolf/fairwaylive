@@ -3,6 +3,7 @@ import type {
   QualifyingRoundDefinition,
   QualifyingRoundMapping,
 } from "../qualifyingModel";
+import { MAX_CONFIGURED_ROUNDS, validateQualifyingRoundCount } from "./roundDomainService";
 
 export type QualifyingScheduleDayInput = {
   dayNumber: number;
@@ -47,6 +48,10 @@ export const buildQualifyingRoundPlan = (
     throw new Error("Qualifying days must be a non-empty, contiguous sequence starting at Day 1.");
   }
 
+  validateQualifyingRoundCount(orderedDays.map((day) => ({
+    rounds: day.rounds?.length ? day.rounds : buildQualifyingPresetRounds(day.holesTotal as 9 | 18 | 27 | 36),
+  })));
+
   let roundNumber = 0;
   return orderedDays.flatMap((day) => {
     const hasExplicitRounds = Boolean(day.rounds?.length);
@@ -78,6 +83,8 @@ export const buildQualifyingRoundPlan = (
     });
   });
 };
+
+export { MAX_CONFIGURED_ROUNDS };
 
 export const buildUniformQualifyingRoundPlan = (
   numberOfDays: number,

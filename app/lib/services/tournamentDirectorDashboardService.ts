@@ -768,7 +768,7 @@ export const loadDirectorDashboardReadModel = async (
     )
   );
   for (const summary of sharedSummaries) {
-    summariesById.set(summary.tournamentId || summary.sharedTournamentId, summary);
+    summariesById.set(summary.sharedTournamentId || summary.tournamentId, summary);
   }
 
   const localSummaries = await Promise.all(
@@ -780,7 +780,7 @@ export const loadDirectorDashboardReadModel = async (
     })
   );
   for (const summary of localSummaries) {
-    summariesById.set(summary.tournamentId || summary.sharedTournamentId, summary);
+    summariesById.set(summary.sharedTournamentId || summary.tournamentId, summary);
   }
 
   return {

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
-import { getTournamentPlayers } from "../../lib/repositories/tournamentRepository";
+import { configureTournamentRoundCount, getTournamentPlayers } from "../../lib/repositories/tournamentRepository";
 import {
   normalizeTournamentRoundSetup,
   projectOfficialLeaderboardScorecards,
@@ -975,9 +975,23 @@ export default function TournamentPage() {
     }
 
     const nextRoundNumber = roundManager.roundOptions.length + 1;
+    if (nextRoundNumber > 10) {
+      setPairingsMessage("A Tournament supports at most 10 configured rounds.");
+      return;
+    }
     const requestId = ++roundHydrationRequestRef.current;
     await flushPendingSaves();
     if (requestId !== roundHydrationRequestRef.current) return;
+    let durableRoundId = `round-${nextRoundNumber}`;
+    if (sharedTournamentId) {
+      try {
+        const durableRounds = await configureTournamentRoundCount(sharedTournamentId, nextRoundNumber);
+        durableRoundId = durableRounds.find((round) => round.round_number === nextRoundNumber)?.id ?? durableRoundId;
+      } catch (error) {
+        setPairingsMessage(error instanceof Error ? error.message : "Unable to add the durable Tournament round.");
+        return;
+      }
+    }
     setTournamentMeta((current) => ({
       ...current,
       rounds: String(Math.max(Number(current.rounds) || 1, nextRoundNumber)),
@@ -997,7 +1011,7 @@ export default function TournamentPage() {
         ...current.roundOptions.map((round) => ({ ...round, isActive: false })),
         {
           roundNumber: nextRoundNumber,
-          roundId: `round-${nextRoundNumber}`,
+          roundId: durableRoundId,
           name: `Round ${nextRoundNumber}`,
           status: "upcoming",
           pairingsCount: 0,
@@ -1424,12 +1438,12 @@ export default function TournamentPage() {
             </nav>
 
             <section aria-labelledby="round-control-title" className="mt-4 rounded-[24px] border border-[#D6E0D8] bg-white p-5 shadow-sm">
-              <h3 id="round-control-title" className="sr-only">Active round controls</h3>
+              <h3 id="round-control-title" className="sr-only">Selected round controls</h3>
               <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div className="grid gap-3 md:grid-cols-[220px_minmax(220px,1fr)]">
                   <label className="block">
                     <span className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
-                      Active Round
+                      Selected Round
                     </span>
                     <select
                       value={normalizedRoundSetup.roundNumber}
@@ -1472,7 +1486,7 @@ export default function TournamentPage() {
                       </div>
                     ))}
                   </div>
-                  {!isTournamentFinalized ? (
+                  {!isTournamentFinalized && roundManager.roundOptions.length < 10 ? (
                     <button
                       type="button"
                       onClick={handleAddRound}
@@ -1624,6 +1638,7 @@ export default function TournamentPage() {
                 pairingsMessage={pairingsMessage}
                 isAutoRepairModalOpen={isAutoRepairModalOpen}
                 autoRepairState={autoRepairState}
+                roundOptions={roundManager.roundOptions.map((round) => ({ roundNumber: round.roundNumber, name: round.name }))}
                 onGeneratePairings={handleGeneratePairings}
                 onOpenAutoRepairModal={openAutoRepairModal}
                 onCloseAutoRepairModal={closeAutoRepairModal}

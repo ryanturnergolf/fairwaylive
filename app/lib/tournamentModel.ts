@@ -11,9 +11,19 @@ export type TournamentSettings = Record<string, unknown> & {
   scoringFormat?: string;
   status?: string;
   activeRoundNumber?: number;
+  operationalCurrentRoundId?: string;
+  selectedRoundId?: string;
   roundSetups?: Record<string, LegacyRoundSetupState>;
   roundStates?: Record<string, { scorecardsGenerated?: boolean }>;
   finalization?: TournamentFinalizationRecord;
+};
+
+export type ConfiguredTournamentRound = {
+  id: string;
+  roundNumber: number;
+  displayLabel: string;
+  name: string;
+  status: RoundStatus;
 };
 
 export type TournamentFinalizationRecord = {
@@ -182,6 +192,10 @@ export type TournamentStorageEnvelope = {
   version: 2;
   tournament: Tournament;
   uiState: LegacyTournamentUiState;
+  roundPresentationsById?: Record<string, {
+    pairings: LegacyPairingGroup[];
+    scorecards: LegacyTournamentUiState["scorecards"];
+  }>;
 };
 
 const defaultRoundSetupState: LegacyRoundSetupState = {
@@ -298,7 +312,11 @@ export const legacyUiStateToTournamentModel = (
       .filter((player): player is LegacyPlayer => Boolean(player))
       .map((player) => [`${asString(player.firstName).trim()} ${asString(player.lastName).trim()}`.trim(), String(player.id)])
   );
-  const roundId = createRoundId(0);
+  const legacyRoundNumber = Math.min(
+    10,
+    Math.max(1, Math.trunc(asNumber(legacyRoundSetup.roundNumber, 1)))
+  );
+  const roundId = createRoundId(legacyRoundNumber - 1);
 
   const teams: Team[] = legacyTeams
     .map((team) => (isRecord(team) ? team : null))
@@ -385,8 +403,8 @@ export const legacyUiStateToTournamentModel = (
       id: createRoundId(index),
       name: `Round ${index + 1}`,
       roundNumber: index + 1,
-      status: index === 0 ? "live" : "upcoming",
-      pairings: index === 0 ? pairings.map((pairing) => pairing.id) : [],
+      status: index + 1 === legacyRoundNumber ? "live" : "upcoming",
+      pairings: index + 1 === legacyRoundNumber ? pairings.map((pairing) => pairing.id) : [],
       leaderboard: [],
     })),
     teams,
@@ -410,7 +428,11 @@ export const tournamentModelToLegacyUiState = (
   const legacyScorecardRows = Array.isArray(legacyScorecardsRecord.scorecardRows)
     ? (legacyScorecardsRecord.scorecardRows as LegacyScorecardRow[])
     : [];
-  const firstRound = model.rounds[0];
+  const selectedRoundNumber = Math.min(
+    10,
+    Math.max(1, Math.trunc(asNumber(roundSetup.roundNumber, 1)))
+  );
+  const selectedRound = model.rounds.find((round) => round.roundNumber === selectedRoundNumber) ?? model.rounds[0];
 
   return {
     ...uiState,
@@ -430,9 +452,9 @@ export const tournamentModelToLegacyUiState = (
       handicap: asString(player.statistics.handicap, "0"),
       email: asString(player.statistics.email, ""),
     })),
-    pairings: legacyPairings.length > 0 ? legacyPairings : (firstRound
+    pairings: legacyPairings.length > 0 ? legacyPairings : (selectedRound
       ? model.pairings
-          .filter((pairing) => pairing.roundId === firstRound.id)
+          .filter((pairing) => pairing.roundId === selectedRound.id)
           .map((pairing) => ({
             groupNumber: pairing.groupNumber,
             teeTime: pairing.teeTime,
@@ -450,7 +472,7 @@ export const tournamentModelToLegacyUiState = (
       scorecardsGenerated: Boolean(legacyScorecardsRecord.scorecardsGenerated) || model.scores.length > 0,
       scorecardRows: legacyScorecardRows.length > 0
         ? legacyScorecardRows
-        : model.scores.map((score) => ({
+        : model.scores.filter((score) => score.roundId === selectedRound?.id).map((score) => ({
             id: Number.isFinite(Number(score.playerId)) ? Number(score.playerId) : Date.now(),
             playerName: model.players.find((player) => player.id === score.playerId)
               ? `${model.players.find((player) => player.id === score.playerId)?.firstName || ""} ${model.players.find((player) => player.id === score.playerId)?.lastName || ""}`.trim()
@@ -486,6 +508,9 @@ export const normalizeTournamentStorageEnvelope = (
       version: 2,
       tournament,
       uiState,
+      roundPresentationsById: isRecord(rawValue.roundPresentationsById)
+        ? rawValue.roundPresentationsById as TournamentStorageEnvelope["roundPresentationsById"]
+        : undefined,
     };
   }
 
