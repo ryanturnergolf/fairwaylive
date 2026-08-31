@@ -2749,7 +2749,9 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
     .toBe(true);
   const mobileScorecardLink = page.getByRole("link", { name: "Open Mobile Scorecard" });
   await expect(mobileScorecardLink).toBeVisible();
-  await expect(qrDialog.getByLabel("Player scoring link")).toHaveValue(/\/scorecard\/player-1\?pairing=1&round=1&shareToken=/);
+  await expect(qrDialog.getByLabel("Player scoring link")).toHaveValue(
+    /\/scorecard\/player-1\?pairing=1&round=1&roundId=round-1&shareToken=/
+  );
 
   const href = await mobileScorecardLink.getAttribute("href");
   expect(href).toBeTruthy();

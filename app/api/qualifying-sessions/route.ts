@@ -116,6 +116,13 @@ export async function GET(request: Request) {
                 .filter((playerId): playerId is string => Boolean(playerId)),
             }))
           : session.groups;
+        const orderedConfiguredRounds = (configuredRounds ?? [])
+          .filter((round) => round.qualifying_session_id === session.id)
+          .sort((left, right) => {
+            const leftDay = (days ?? []).find((day) => day.id === left.qualifying_day_id)?.day_number ?? 0;
+            const rightDay = (days ?? []).find((day) => day.id === right.qualifying_day_id)?.day_number ?? 0;
+            return leftDay - rightDay || left.round_order - right.round_order;
+          });
         return {
         session: {
           id: session.id,
@@ -163,6 +170,14 @@ export async function GET(request: Request) {
           })),
         rounds: [],
         scorerAssignments: [],
+        configuredRounds: orderedConfiguredRounds.map((round, index) => ({
+          qualifyingRoundId: round.id,
+          tournamentRoundId: null,
+          roundNumber: index + 1,
+          displayLabel: `R${index + 1}`,
+          qualifyingDay: (days ?? []).find((day) => day.id === round.qualifying_day_id)?.day_number ?? 0,
+          qualifyingSegment: round.round_order,
+        })),
       };
       }),
     });

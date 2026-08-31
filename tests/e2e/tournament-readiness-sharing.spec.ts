@@ -387,7 +387,9 @@ test("Ready tournaments can share QR mobile scoring", async ({ page }) => {
 
   const qrDialog = page.getByRole("dialog", { name: "Ava Green" });
   await expect(qrDialog).toBeVisible();
-  await expect(qrDialog.getByLabel("Player scoring link")).toHaveValue(/\/scorecard\/player-1\?pairing=1&round=1&shareToken=/);
+  await expect(qrDialog.getByLabel("Player scoring link")).toHaveValue(
+    /\/scorecard\/player-1\?pairing=1&round=1&roundId=round-1&shareToken=/
+  );
   await expect(qrDialog).toHaveCSS("overflow-y", "auto");
   await expect(page.getByRole("heading", { name: "Sharing is blocked" })).toBeHidden();
 });

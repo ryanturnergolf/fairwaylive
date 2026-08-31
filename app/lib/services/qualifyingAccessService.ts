@@ -109,6 +109,8 @@ export const exchangeQualifyingPlayerAccess = async (code: string, playerId: str
   const result = await response.json() as {
     playerId: string;
     roundNumber: number;
+    tournamentRoundId?: string;
+    qualifyingRoundId?: string;
     groupNumber: number;
     markerPlayerId: string;
     startingHole: number;
@@ -119,6 +121,7 @@ export const exchangeQualifyingPlayerAccess = async (code: string, playerId: str
   const path = buildMobileScorecardPath({
     shareToken: result.shareToken,
     roundNumber: result.roundNumber,
+    scorecardRoundId: result.tournamentRoundId,
     activeQrScoringPlayerId: result.playerId,
     activeQrPairing: {
       groupNumber: result.groupNumber,

@@ -9,6 +9,7 @@ import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisi
 import {
   getQualifyingTournamentWorkspaceHref,
   listQualifyingSessionFoundations,
+  changeQualifyingOperationalRound,
 } from "../../lib/services/qualifyingSessionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
@@ -21,6 +22,7 @@ export default function QualifyingSessionsPage() {
   const [provisioningId, setProvisioningId] = useState("");
   const [activatingId, setActivatingId] = useState("");
   const [provisionedTournamentIds, setProvisionedTournamentIds] = useState<Record<string, string>>({});
+  const [operationalRoundMessage, setOperationalRoundMessage] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +98,27 @@ export default function QualifyingSessionsPage() {
       );
     } finally {
       setActivatingId("");
+    }
+  };
+
+  const handleOperationalRoundChange = async (qualifyingSessionId: string, qualifyingRoundId: string) => {
+    try {
+      const updated = await changeQualifyingOperationalRound(qualifyingSessionId, qualifyingRoundId);
+      setSessions((current) => current.map((foundation) => foundation.session.id === qualifyingSessionId
+        ? {
+            ...foundation,
+            session: {
+              ...foundation.session,
+              operationalCurrentQualifyingRoundId: updated.operational_current_qualifying_round_id,
+            },
+          }
+        : foundation));
+      setOperationalRoundMessage((current) => ({ ...current, [qualifyingSessionId]: "Current scoring round updated." }));
+    } catch (cause) {
+      setOperationalRoundMessage((current) => ({
+        ...current,
+        [qualifyingSessionId]: cause instanceof Error ? cause.message : "Unable to update the current scoring round.",
+      }));
     }
   };
 
@@ -199,6 +222,30 @@ export default function QualifyingSessionsPage() {
                         item.session.id === session.id ? { ...item, scorerAssignments: assignments } : item
                       ))}
                     />
+                  ) : null}
+                  {session.status === "active" && (foundation.configuredRounds?.length ?? 0) > 1 ? (
+                    <div className="mt-4 rounded-lg border border-[#D6E0D8] bg-white p-4">
+                      <label className="block text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
+                        Current Scoring Round
+                        <select
+                          value={session.operationalCurrentQualifyingRoundId ?? ""}
+                          onChange={(event) => void handleOperationalRoundChange(session.id, event.target.value)}
+                          className="mt-2 min-h-12 w-full rounded-lg border border-[#D6E0D8] bg-white px-3 text-sm font-black text-[#0B3D2E]"
+                        >
+                          <option value="" disabled>Select a configured round</option>
+                          {foundation.configuredRounds?.map((round) => (
+                            <option key={round.qualifyingRoundId} value={round.qualifyingRoundId}>
+                              {round.displayLabel} · Day {round.qualifyingDay} · Segment {round.qualifyingSegment}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {operationalRoundMessage[session.id] ? (
+                        <p role="status" className="mt-2 text-sm font-semibold text-[#51635C]">
+                          {operationalRoundMessage[session.id]}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                   {["active", "finalized"].includes(session.status) ? (
                     <>

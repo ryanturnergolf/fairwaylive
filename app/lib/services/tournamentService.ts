@@ -39,6 +39,7 @@ import type {
   TournamentStorageEnvelope,
 } from "../tournamentModel";
 import { parseConfiguredRoundCount, resolveConfiguredTournamentRound } from "./roundDomainService";
+import { resolveScorecardRound } from "./scorecardRoundResolutionService";
 import { legacyUiStateToTournamentModel } from "../tournamentModel";
 import type { EventCourseSetupSelection } from "../courseModel";
 
@@ -798,6 +799,7 @@ export type SharedTournamentScorecardState = {
   isFinalized: boolean;
   updatedAt: string | null;
   courseHoles: import("../courseModel").EventCourseHoleSnapshot[];
+  scorecardRoundId: string;
   pairings: Array<{
     groupNumber: number;
     teeTime: string;
@@ -1646,17 +1648,50 @@ export const loadSharedTournamentScorecardState = async (
   tournamentId: string,
   roundNumber = 1,
   _holeCount = 18,
-  shareToken = ""
+  shareToken = "",
+  scorecardRoundId = ""
 ): Promise<SharedTournamentScorecardState | null> => {
-  const [tournamentRow, playerRows, snapshot] = await Promise.all([
+  const [tournamentRow, snapshot] = await Promise.all([
     getTournamentRow(tournamentId, { shareToken }),
-    getTournamentPlayers(tournamentId, roundNumber, { shareToken }),
     getTournamentStateSnapshot(tournamentId, { shareToken }).catch(() => null),
   ]);
-
+  if (!tournamentRow) return null;
   const snapshotEnvelope = isTournamentStorageEnvelope(snapshot?.state_snapshot)
     ? snapshot.state_snapshot
     : null;
+  const snapshotRoundCandidates = (snapshotEnvelope?.tournament.rounds ?? []).map((round) => ({
+    id: round.id,
+    tournamentId,
+    roundNumber: round.roundNumber,
+  }));
+  let resolvedRound;
+  try {
+    resolvedRound = resolveScorecardRound({
+      tournamentId,
+      configuredRounds: snapshotRoundCandidates,
+      explicitScorecardRoundId: scorecardRoundId || null,
+      legacyRoundIdentity: scorecardRoundId || !Number.isInteger(roundNumber) || roundNumber < 1
+        ? null
+        : String(roundNumber),
+    });
+  } catch {
+    const durableRound = Number.isInteger(roundNumber) && roundNumber > 0
+      ? await getTournamentRound(tournamentId, roundNumber, { shareToken }).catch(() => null)
+      : null;
+    if (!durableRound) return null;
+    resolvedRound = resolveScorecardRound({
+      tournamentId,
+      configuredRounds: [{
+        id: durableRound.id,
+        tournamentId: durableRound.tournament_id,
+        roundNumber: durableRound.round_number,
+      }],
+      explicitScorecardRoundId: scorecardRoundId || null,
+      legacyRoundIdentity: scorecardRoundId ? null : String(roundNumber),
+    });
+  }
+  roundNumber = resolvedRound.roundNumber;
+  const playerRows = await getTournamentPlayers(tournamentId, roundNumber, { shareToken });
   const hasSnapshot = Boolean(snapshotEnvelope);
   const configuredRoundSetup = snapshotEnvelope
     ? getRoundSetupMap(snapshotEnvelope.tournament.settings)?.[String(roundNumber)]
@@ -1685,7 +1720,7 @@ export const loadSharedTournamentScorecardState = async (
     durableScorecards.every((scorecard) =>
       playerRows.some((player) => player.player_id === scorecard.player_id)
     );
-  if (!tournamentRow || playerRows.length === 0 || (!hasSnapshot && !hasDurableQualifyingArtifacts)) {
+  if (playerRows.length === 0 || (!hasSnapshot && !hasDurableQualifyingArtifacts)) {
     return null;
   }
 
@@ -1766,6 +1801,7 @@ export const loadSharedTournamentScorecardState = async (
     ),
     updatedAt: snapshot?.updated_at ?? tournamentRow.updated_at,
     courseHoles: tournamentRow.course_hole_snapshot ?? [],
+    scorecardRoundId: resolvedRound.scorecardRoundId,
     pairings,
     scorecardRows: sharedPlayerRows.map((row) => {
       const snapshotScorecard = findSnapshotScorecard(row);

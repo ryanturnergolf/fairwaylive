@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
-import { configureTournamentRoundCount, getTournamentPlayers } from "../../lib/repositories/tournamentRepository";
+import { configureTournamentRoundCount, getTournamentPlayers, setTournamentOperationalRound } from "../../lib/repositories/tournamentRepository";
 import {
   normalizeTournamentRoundSetup,
   projectOfficialLeaderboardScorecards,
@@ -228,6 +228,7 @@ export default function TournamentPage() {
   const [roundManager, setRoundManager] = useState<TournamentRoundManagerReadModel>(() =>
     buildTournamentRoundManagerReadModel(null, 1)
   );
+  const [operationalRoundMessage, setOperationalRoundMessage] = useState("");
   const [clippdExportState, setClippdExportState] = useState<ClippdExportState>(defaultClippdExportState);
   const [scoreboardImportState, setScoreboardImportState] = useState<ScoreboardImportState>({
     tournamentId: "",
@@ -268,6 +269,15 @@ export default function TournamentPage() {
     teeTimeInterval: "8 minutes",
   });
   const normalizedRoundSetup = normalizeTournamentRoundSetup(roundSetup, defaultRoundSetupState, scorecardRows);
+  const selectedRoundOption = roundManager.roundOptions.find(
+    (round) => round.roundNumber === Number(normalizedRoundSetup.roundNumber)
+  ) ?? null;
+  const operationalCurrentRoundId = tournamentMeta.settings && typeof tournamentMeta.settings === "object"
+    ? String((tournamentMeta.settings as { operationalCurrentRoundId?: unknown }).operationalCurrentRoundId ?? "")
+    : "";
+  const operationalRoundOption = roundManager.roundOptions.find(
+    (round) => round.roundId === operationalCurrentRoundId
+  ) ?? null;
   const eventCourseHoles = useMemo(() => {
     const settings = tournamentMeta.settings && typeof tournamentMeta.settings === "object"
       ? tournamentMeta.settings as { courseSetup?: { holes?: EventCourseHoleSnapshot[] } }
@@ -969,6 +979,23 @@ export default function TournamentPage() {
     applyRoundHydration(nextRoundNumber);
   };
 
+  const handleMakeSelectedRoundOperational = async () => {
+    if (!sharedTournamentId || !selectedRoundOption || isTournamentFinalized) return;
+    try {
+      const updated = await setTournamentOperationalRound(sharedTournamentId, selectedRoundOption.roundId);
+      setTournamentMeta((current) => ({
+        ...current,
+        settings: {
+          ...(current.settings && typeof current.settings === "object" ? current.settings : {}),
+          operationalCurrentRoundId: updated.operational_current_round_id ?? selectedRoundOption.roundId,
+        },
+      }));
+      setOperationalRoundMessage(`${selectedRoundOption.name} is now the current scoring round.`);
+    } catch (error) {
+      setOperationalRoundMessage(error instanceof Error ? error.message : "Unable to change the current scoring round.");
+    }
+  };
+
   const handleAddRound = async () => {
     if (isTournamentFinalized) {
       return;
@@ -1474,6 +1501,21 @@ export default function TournamentPage() {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="rounded-2xl border border-[#D6E0D8] bg-[#F8FBF8] px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#51635C]">Current Scoring Round</p>
+                    <p className="mt-1 text-sm font-black text-[#0B3D2E]">
+                      {operationalRoundOption?.name ?? "Not set"}
+                    </p>
+                    {!isTournamentFinalized && selectedRoundOption && selectedRoundOption.roundId !== operationalCurrentRoundId ? (
+                      <button
+                        type="button"
+                        onClick={handleMakeSelectedRoundOperational}
+                        className="mt-2 min-h-12 rounded-full border border-[#B8892D] px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#0B3D2E]"
+                      >
+                        Make {selectedRoundOption.name} Current
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     {[
                       ["Groups", roundManager.roundOptions.find((round) => round.isActive)?.pairingsCount ?? pairings.length],
@@ -1497,6 +1539,9 @@ export default function TournamentPage() {
                   ) : null}
                 </div>
               </div>
+              {operationalRoundMessage ? (
+                <p role="status" className="mt-3 text-sm font-semibold text-[#51635C]">{operationalRoundMessage}</p>
+              ) : null}
             </section>
 
             <section aria-labelledby="tournament-readiness-title" className="mt-4 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
@@ -1678,6 +1723,7 @@ export default function TournamentPage() {
                 sharedTournamentId={qrSharedTournamentId}
                 tournament={tournament}
                 normalizedRoundSetup={normalizedRoundSetup}
+                selectedRoundId={selectedRoundOption?.roundId ?? ""}
                 pairings={pairings}
                 scorecardRows={scorecardRows}
                 clippdExportState={clippdExportState}

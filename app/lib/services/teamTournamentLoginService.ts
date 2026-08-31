@@ -21,6 +21,7 @@ export type TeamTournamentLoginResolution = {
   players: TeamTournamentLoginPlayer[];
   pairings: LegacyPairingGroup[];
   roundNumber: number;
+  tournamentRoundId?: string;
   shareToken: string;
   shareTokenExpiresAt: string;
 };
@@ -171,5 +172,6 @@ export const resolveTeamPlayerScorecardPath = (
     activeQrPairing: pairing,
     activeQrScoringPlayerId: player.playerId,
     roundNumber: resolution.roundNumber,
+    scorecardRoundId: resolution.tournamentRoundId,
   });
 };

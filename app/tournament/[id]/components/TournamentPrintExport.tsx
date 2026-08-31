@@ -75,6 +75,7 @@ type TournamentPrintExportProps = {
   sharedTournamentId: string;
   tournament: TournamentMeta;
   normalizedRoundSetup: NormalizedRoundSetup;
+  selectedRoundId: string;
   pairings: LegacyPairingGroup[];
   scorecardRows: LegacyScorecardRow[];
   clippdExportState: ClippdExportState;
@@ -110,6 +111,7 @@ export default function TournamentPrintExport({
   sharedTournamentId,
   tournament,
   normalizedRoundSetup,
+  selectedRoundId,
   pairings,
   scorecardRows,
   clippdExportState,
@@ -172,8 +174,9 @@ export default function TournamentPrintExport({
       activeQrPairing,
       activeQrScoringPlayerId,
       roundNumber: normalizedRoundSetup.roundNumber,
+      scorecardRoundId: selectedRoundId,
     });
-  }, [activeQrPairing, activeQrScoringPlayerId, activeQrShareToken, normalizedRoundSetup.roundNumber]);
+  }, [activeQrPairing, activeQrScoringPlayerId, activeQrShareToken, normalizedRoundSetup.roundNumber, selectedRoundId]);
 
   const resolvedMobileScorecardUrl = useMemo(() => buildAppUrl(qrMobileScorecardPath), [qrMobileScorecardPath]);
   const isQrMobileScorecardReady = Boolean(activeQrShareToken && activeQrPairing && activeQrScoringPlayerId);

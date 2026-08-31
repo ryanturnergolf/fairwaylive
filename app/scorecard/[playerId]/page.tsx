@@ -45,6 +45,7 @@ import {
   type MobileStatisticItem,
 } from "../../lib/services/mobileDynamicStatisticsService";
 import { createOperationId } from "../../lib/services/operationIdService";
+import { resolveScorecardRound } from "../../lib/services/scorecardRoundResolutionService";
 
 type Hole = {
   holeNumber: number;
@@ -59,6 +60,8 @@ type PlayerScorecard = {
   playerName: string;
   team: string;
   round: string;
+  scorecardRoundId?: string;
+  roundNumber?: number;
   holes: Hole[];
   hasCourseYardageSnapshot?: boolean;
   markerPlayerId?: string;
@@ -298,6 +301,7 @@ function ReciprocalPlayerScorecardPage() {
   const requestedPairingId = searchParams.get("pairing") ?? "";
   const requestedShareToken = searchParams.get("shareToken") ?? "";
   const requestedRound = searchParams.get("round") ?? "";
+  const requestedRoundId = searchParams.get("roundId") ?? "";
   const [resolvedShareTournamentId, setResolvedShareTournamentId] = useState("");
   const [qrResolvedScorecard, setQrResolvedScorecard] = useState<PlayerScorecard | { error: string } | null>(null);
   const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
@@ -358,7 +362,11 @@ function ReciprocalPlayerScorecardPage() {
         }
 
         const requestedRoundNumber = Number(requestedRound);
-        if (requestedShareToken && (!Number.isInteger(requestedRoundNumber) || requestedRoundNumber < 1)) {
+        if (
+          requestedShareToken &&
+          !requestedRoundId &&
+          (!Number.isInteger(requestedRoundNumber) || requestedRoundNumber < 1)
+        ) {
           finishResolution({ error: "This QR code is missing its tournament round. Please request a new QR code." });
           return;
         }
@@ -366,6 +374,23 @@ function ReciprocalPlayerScorecardPage() {
         const localTournament = loadTournamentsFromStorage().find((item) => item.id === effectiveTournamentId);
         const localTournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(effectiveTournamentId);
         const storedEnvelope = loadTournamentStorageEnvelope(effectiveTournamentId);
+        const localResolvedRound = storedEnvelope?.tournament.rounds.length
+          ? resolveScorecardRound({
+              tournamentId: effectiveTournamentId,
+              configuredRounds: storedEnvelope.tournament.rounds.map((round) => ({
+                id: round.id,
+                tournamentId: effectiveTournamentId,
+                roundNumber: round.roundNumber,
+              })),
+              explicitScorecardRoundId: requestedRoundId || null,
+              legacyRoundIdentity: requestedRoundId ? null : requestedRound || null,
+              operationalCurrentRoundId: requestedRoundId || requestedRound
+                ? null
+                : typeof storedEnvelope.tournament.settings.operationalCurrentRoundId === "string"
+                  ? storedEnvelope.tournament.settings.operationalCurrentRoundId
+                  : null,
+            })
+          : null;
         const isLegacySharedLinkWithoutToken = Boolean(requestedTournamentId && !requestedShareToken);
         const hasLocalLegacyTournamentState = Boolean(localTournament && localTournamentState && storedEnvelope);
         if (
@@ -383,9 +408,10 @@ function ReciprocalPlayerScorecardPage() {
             : await withTimeout(
                 loadSharedTournamentScorecardState(
                   effectiveTournamentId,
-                  requestedRoundNumber || 1,
-                  18,
-                  requestedShareToken
+                   Number.isInteger(requestedRoundNumber) && requestedRoundNumber > 0 ? requestedRoundNumber : 0,
+                   18,
+                   requestedShareToken,
+                   requestedRoundId
                 ).catch((error) => {
                   console.warn("[TournamentService] Unable to load shared tournament scorecard state.", error);
                   return null;
@@ -396,6 +422,14 @@ function ReciprocalPlayerScorecardPage() {
         setIsTournamentFinalized(Boolean(getTournamentFinalizationRecord(storedEnvelope)) || Boolean(sharedState?.isFinalized));
         if (!tournament) {
           finishResolution({ error: "We could not find that tournament. Please request a new mobile scoring link." });
+          return;
+        }
+        const scorecardRoundId = sharedState?.scorecardRoundId ?? localResolvedRound?.scorecardRoundId;
+        const scorecardRoundNumber = sharedState
+          ? Number(sharedState.roundSetup.roundNumber)
+          : localResolvedRound?.roundNumber;
+        if (!scorecardRoundId || !scorecardRoundNumber) {
+          finishResolution({ error: "This scoring link does not identify a configured round. Ask the coach for a new link." });
           return;
         }
 
@@ -568,7 +602,9 @@ function ReciprocalPlayerScorecardPage() {
           tournamentName: tournament.name,
           playerName: selectedPlayer.playerName,
           team: selectedPlayer.teamName,
-          round: tournamentState.scorecards?.roundSetup?.roundNumber || "1",
+          round: String(scorecardRoundNumber),
+          scorecardRoundId,
+          roundNumber: scorecardRoundNumber,
           holes: buildRoundHoles(
             Math.max(1, Math.min(18, Number(pairing.startingHole) || 1)),
             holeCount,
@@ -595,7 +631,7 @@ function ReciprocalPlayerScorecardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [requestedTournamentId, requestedPairingId, requestedRound, requestedShareToken, routePlayerId]);
+  }, [requestedTournamentId, requestedPairingId, requestedRound, requestedRoundId, requestedShareToken, routePlayerId]);
 
   // Extract resolved player IDs for reliable hydration
   const resolvedPlayerIds = useMemo(() => {
@@ -619,7 +655,8 @@ function ReciprocalPlayerScorecardPage() {
         : qrResolvedScorecard.assignedMarkerPlayerId
           ? [qrResolvedScorecard.assignedMarkerPlayerId]
           : [],
-      roundId: `round-${String(Number(qrResolvedScorecard.round) || 1)}`,
+      scorecardRoundId: qrResolvedScorecard.scorecardRoundId,
+      roundNumber: qrResolvedScorecard.roundNumber,
     };
   }, [qrResolvedScorecard]);
 
@@ -690,7 +727,11 @@ function ReciprocalPlayerScorecardPage() {
       return;
     }
     let cancelled = false;
-    const roundNumber = Number(scorecard.round) || 1;
+    const roundNumber = scorecard.roundNumber ?? Number(scorecard.round);
+    if (!Number.isInteger(roundNumber) || roundNumber < 1) {
+      setDynamicStatistics(null);
+      return;
+    }
     const emptyValues = Array.from({ length: scorecard.holes.length }, () => ({} as DynamicHoleValues));
     let cachedValues = emptyValues;
     if (dynamicStatisticsStorageKey) {
@@ -782,9 +823,10 @@ function ReciprocalPlayerScorecardPage() {
     const sharedState = await withTimeout(
       loadSharedTournamentScorecardState(
         sharedScoreTournamentId,
-        Number(scorecard.round),
+        resolvedPlayerIds?.roundNumber ?? Number(scorecard.round),
         scorecard.holes.length,
-        requestedShareToken
+        requestedShareToken,
+        resolvedPlayerIds?.scorecardRoundId ?? ""
       ).catch((error) => {
         console.warn("[TournamentService] Unable to verify tournament finalization before score save.", error);
         return null;
@@ -835,7 +877,12 @@ function ReciprocalPlayerScorecardPage() {
         setScoreControlsReady(true);
       }
 
-      const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", "")) || 1;
+      const roundNumber = Number(resolvedPlayerIds.roundNumber);
+      if (!Number.isInteger(roundNumber) || Number(roundNumber) < 1) {
+        setScoreLoadError("This scorecard does not identify a configured round.");
+        setScoreControlsReady(false);
+        return;
+      }
       const holeCount = scorecard.holes.length;
       let loadedSelfScores: number[] | null = hasAnyHoleScore(scorecard.initialPlayerScores)
         ? normalizeHoleScores(scorecard.initialPlayerScores, holeCount)
@@ -867,7 +914,7 @@ function ReciprocalPlayerScorecardPage() {
 
         const selfScore = envelope.tournament.scores.find(
           (s) => resolvedPlayerIds.selectedPlayerIds.includes(String(s.playerId)) &&
-                 s.roundId === resolvedPlayerIds.roundId &&
+                 s.roundId === resolvedPlayerIds.scorecardRoundId &&
                  s.enteredBy === "self"
         );
         if (hasAnyHoleScore(selfScore?.holeScores) || hasAnyHoleScore(selfScorecardRow?.scores)) {
@@ -881,7 +928,7 @@ function ReciprocalPlayerScorecardPage() {
 
         const markerScore = envelope.tournament.scores.find(
           (s) => resolvedPlayerIds.markedPlayerIds.includes(String(s.playerId)) &&
-                 s.roundId === resolvedPlayerIds.roundId &&
+                 s.roundId === resolvedPlayerIds.scorecardRoundId &&
                  s.enteredBy === "marker"
         );
         if (hasAnyHoleScore(markerScore?.holeScores) || hasAnyHoleScore(markerScorecardRow?.scores)) {
@@ -1205,7 +1252,7 @@ function ReciprocalPlayerScorecardPage() {
       try {
         const entries = await loadTournamentHoleStatistics({
           tournamentId: sharedScoreTournamentId,
-          roundNumber: Number(scorecard.round) || 1,
+          roundNumber: Number(resolvedPlayerIds.roundNumber),
           shareToken: requestedShareToken || undefined,
         });
         const selfEntries = entries.filter(
@@ -1602,7 +1649,7 @@ function ReciprocalPlayerScorecardPage() {
       return scoreSaveQueueRef.current;
     }
 
-    const roundNumber = Number(resolvedPlayerIds.roundId.replace("round-", ""));
+    const roundNumber = Number(resolvedPlayerIds.roundNumber);
     const enteredByPlayerId = resolvedPlayerIds.selectedPlayerId;
     const normalizedScores = normalizeHoleScores(nextScores, scorecard.holes.length);
     const localPlayerId = getLocalStoragePlayerId(
@@ -1626,7 +1673,7 @@ function ReciprocalPlayerScorecardPage() {
           mergeTournamentScoreSubmission(
             requestedTournamentId,
             localPlayerId,
-            resolvedPlayerIds.roundId,
+            resolvedPlayerIds.scorecardRoundId ?? "",
             normalizedScores,
             kind
           );
@@ -1708,9 +1755,12 @@ function ReciprocalPlayerScorecardPage() {
       setSaveError("");
 
       if (sharedScoreTournamentId) {
-        const roundNumber = String(Number(scorecard.round) || 1);
-        const roundId = `round-${roundNumber}`;
-        const parsedRoundNumber = Number(roundNumber);
+        const roundId = resolvedPlayerIds?.scorecardRoundId ?? "";
+        const parsedRoundNumber = Number(resolvedPlayerIds?.roundNumber);
+        if (!roundId || !Number.isInteger(parsedRoundNumber) || Number(parsedRoundNumber) < 1) {
+          setSaveError("This scorecard does not identify a configured round.");
+          return;
+        }
         const selectedStats = holeStats[targetHoleIndex] ?? emptyHoleStats();
         const targetHoleStats: HoleStatisticsInput = {
           fairwayHit: targetHole.par === 3 ? null : selectedStats.fairwayHit,
@@ -1867,7 +1917,7 @@ function ReciprocalPlayerScorecardPage() {
 
       const comparison = await loadReviewComparisonModel({
         tournamentId: sharedScoreTournamentId,
-        roundNumber: Number(scorecard.round) || 1,
+          roundNumber: Number(resolvedPlayerIds.roundNumber),
         shareToken: requestedShareToken || undefined,
         markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
         markerEnteredByPlayerIds: resolvedPlayerIds.assignedMarkerPlayerIds,
@@ -1909,7 +1959,7 @@ function ReciprocalPlayerScorecardPage() {
 
     const persistedEntries = await loadComparisonScores({
       tournamentId: sharedScoreTournamentId,
-      roundNumber: Number(scorecard.round),
+      roundNumber: resolvedPlayerIds?.roundNumber ?? Number(scorecard.round),
       shareToken: requestedShareToken || undefined,
     });
     const scorerAlreadySubmitted = persistedEntries.some(
@@ -1936,7 +1986,7 @@ function ReciprocalPlayerScorecardPage() {
       return;
     }
 
-    const roundNumber = Number(scorecard.round);
+    const roundNumber = resolvedPlayerIds?.roundNumber ?? Number(scorecard.round);
     if (
       !Number.isInteger(roundNumber) ||
       roundNumber < 1 ||
@@ -3094,7 +3144,8 @@ export default function PlayerScorecardPage() {
     return (
       <DesignatedQualifyingScorecard
         playerId={playerId}
-        roundNumber={Number(searchParams.get("round")) || 1}
+        roundNumber={Number(searchParams.get("round"))}
+        tournamentRoundId={searchParams.get("roundId") ?? ""}
         shareToken={searchParams.get("shareToken") ?? ""}
       />
     );

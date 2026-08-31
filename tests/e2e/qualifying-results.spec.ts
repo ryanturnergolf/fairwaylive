@@ -41,10 +41,10 @@ const days: QualifyingDay[] = [
   { id: "d2", qualifyingSessionId: "session", dayNumber: 2, playDate: "2026-08-02", holesTotal: 36, courseName: "South", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null },
 ];
 const rounds: QualifyingRoundMapping[] = [
-  { id: "r1", tournamentId: "tournament", roundNumber: 1, name: "Day 1 Segment 1", holeCount: 18, qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 1, createdAt: null, updatedAt: null },
-  { id: "r2", tournamentId: "tournament", roundNumber: 2, name: "Day 1 Segment 2", holeCount: 9, qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 2, createdAt: null, updatedAt: null },
-  { id: "r3", tournamentId: "tournament", roundNumber: 3, name: "Day 2 Segment 1", holeCount: 18, qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 1, createdAt: null, updatedAt: null },
-  { id: "r4", tournamentId: "tournament", roundNumber: 4, name: "Day 2 Segment 2", holeCount: 18, qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 2, createdAt: null, updatedAt: null },
+  { id: "r1", tournamentId: "tournament", roundNumber: 1, name: "Day 1 Segment 1", holeCount: 18, immutablePar: 72, qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 1, createdAt: null, updatedAt: null },
+  { id: "r2", tournamentId: "tournament", roundNumber: 2, name: "Day 1 Segment 2", holeCount: 9, immutablePar: 36, qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 2, createdAt: null, updatedAt: null },
+  { id: "r3", tournamentId: "tournament", roundNumber: 3, name: "Day 2 Segment 1", holeCount: 18, immutablePar: 72, qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 1, createdAt: null, updatedAt: null },
+  { id: "r4", tournamentId: "tournament", roundNumber: 4, name: "Day 2 Segment 2", holeCount: 18, immutablePar: 72, qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 2, createdAt: null, updatedAt: null },
 ];
 const playerIds = ["alex", "jordan", "sam", "casey"];
 const playerNames: Record<string, string> = {
@@ -229,10 +229,10 @@ test("9-hole and 18-hole reciprocal segments preserve deterministic engine mappi
   const nine = buildQualifyingResults({
     session: { ...session, selectedPlayers: session.selectedPlayers.slice(0, 1) },
     days: [{ ...days[0], holesTotal: 9 }],
-    rounds: [{ ...rounds[0], holeCount: 9 }],
+    rounds: [{ ...rounds[0], holeCount: 9, immutablePar: 36 }],
     players: [{ playerId: "alex", playerName: "Alex Morgan", roundNumber: 1, status: "active" }],
     scorecards: [{ playerId: "alex", roundNumber: 1, holeCount: 9 }],
-    scoreEntries: [scoreRow("alex", "alex", { ...rounds[0], holeCount: 9 }, 4), scoreRow("alex", "marker", { ...rounds[0], holeCount: 9 }, 4)],
+    scoreEntries: [scoreRow("alex", "alex", { ...rounds[0], holeCount: 9, immutablePar: 36 }, 4), scoreRow("alex", "marker", { ...rounds[0], holeCount: 9, immutablePar: 36 }, 4)],
     holeEntries: holeEntries.filter((entry) => entry.player_id === "alex" && entry.round_number === 1).slice(0, 9),
     reviewStatuses: [reviews[0]],
   });

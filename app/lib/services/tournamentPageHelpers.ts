@@ -501,12 +501,14 @@ export const buildMobileScorecardPath = ({
   activeQrPairing,
   activeQrScoringPlayerId,
   roundNumber,
+  scorecardRoundId,
 }: {
   tournamentId?: string;
   shareToken?: string;
   activeQrPairing: LegacyPairingGroup | null;
   activeQrScoringPlayerId: string;
   roundNumber?: string | number;
+  scorecardRoundId?: string;
 }) => {
   if ((!tournamentId && !shareToken) || !activeQrPairing || !activeQrScoringPlayerId) {
     return "";
@@ -518,6 +520,10 @@ export const buildMobileScorecardPath = ({
 
   if (roundNumber !== undefined && String(roundNumber).trim()) {
     params.set("round", String(roundNumber));
+  }
+
+  if (scorecardRoundId?.trim()) {
+    params.set("roundId", scorecardRoundId.trim());
   }
 
   if (shareToken) {

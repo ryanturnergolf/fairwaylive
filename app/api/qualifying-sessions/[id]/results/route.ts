@@ -11,6 +11,7 @@ import type {
 import type { ScoreHoleEntryRow } from "../../../../lib/repositories/statisticsRepository";
 import {
   buildQualifyingResults,
+  sumImmutableQualifyingRoundPar,
   type QualifyingEnginePlayer,
   type QualifyingEngineScorecard,
 } from "../../../../lib/services/qualifyingResultsService";
@@ -77,9 +78,10 @@ export async function GET(
       { data: holeEntries, error: holeError },
       { data: reviews, error: reviewError },
       { data: scorerAssignments, error: scorerAssignmentError },
+      { data: tournamentCourse, error: tournamentCourseError },
     ] = await Promise.all([
       supabase.from("qualifying_days")
-        .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,created_at,updated_at")
+        .select("id,qualifying_session_id,day_number,play_date,holes_total,course_name,tee_name,starting_hole,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,created_at,updated_at")
         .eq("qualifying_session_id", id).order("day_number"),
       supabase.from("tournament_rounds")
         .select("id,tournament_id,round_number,name,hole_count,qualifying_session_id,qualifying_day,qualifying_segment,starting_hole,ending_hole,hole_sequence,created_at,updated_at")
@@ -88,7 +90,7 @@ export async function GET(
         .select("player_id,player_name,display_order")
         .eq("qualifying_session_id", id).order("display_order"),
       supabase.from("tournament_players")
-        .select("player_id,player_name,round_number,group_number,status")
+        .select("player_id,player_name,round_number,group_number,marker_player_id,status")
         .eq("tournament_id", tournamentId).order("round_number"),
       supabase.from("tournament_scorecards")
         .select("player_id,round_number,hole_count")
@@ -105,9 +107,13 @@ export async function GET(
       supabase.from("qualifying_scorer_assignments")
         .select("tournament_round_id,group_number,scorer_player_id")
         .eq("qualifying_session_id", id),
+      supabase.from("tournaments")
+        .select("course_hole_snapshot")
+        .eq("id", tournamentId)
+        .maybeSingle(),
     ]);
     const queryError = dayError || roundError || participantError || playerError ||
-      scorecardError || scoreError || holeError || reviewError || scorerAssignmentError;
+      scorecardError || scoreError || holeError || reviewError || scorerAssignmentError || tournamentCourseError;
     if (queryError) throw queryError;
     const { data: finalizingCoach, error: coachError } = sessionRow.finalized_by
       ? await supabase
@@ -148,10 +154,24 @@ export async function GET(
       courseName: String(day.course_name),
       teeName: String(day.tee_name),
       startingHole: Number(day.starting_hole),
+      courseSetup: Array.isArray(day.course_hole_snapshot) ? {
+        courseId: String(day.course_id ?? ""),
+        courseName: String(day.course_name),
+        teeSetId: day.tee_set_id ? String(day.tee_set_id) : null,
+        savedSetupId: day.saved_course_setup_id ? String(day.saved_course_setup_id) : null,
+        setupName: String(day.course_setup_name ?? day.tee_name),
+        holes: day.course_hole_snapshot,
+      } : null,
       createdAt: day.created_at,
       updatedAt: day.updated_at,
     }));
-    const mappedRounds = (rounds ?? []).map((round): QualifyingRoundMapping => ({
+    const mappedRounds = (rounds ?? []).map((round): QualifyingRoundMapping => {
+      const holeSequence = Array.isArray(round.hole_sequence) ? round.hole_sequence.map(Number) : Array.from({ length: Number(round.hole_count) }, (_, index) => ((Number(round.starting_hole ?? 1) - 1 + index) % 18) + 1);
+      const daySnapshot = mappedDays.find((day) => day.dayNumber === Number(round.qualifying_day))?.courseSetup?.holes;
+      const eventSnapshot = Array.isArray(tournamentCourse?.course_hole_snapshot)
+        ? tournamentCourse.course_hole_snapshot
+        : [];
+      return ({
       id: String(round.id),
       tournamentId: String(round.tournament_id),
       roundNumber: Number(round.round_number),
@@ -159,19 +179,25 @@ export async function GET(
       holeCount: round.hole_count,
       startingHole: Number(round.starting_hole ?? 1),
       endingHole: Number(round.ending_hole ?? (((Number(round.starting_hole ?? 1) + Number(round.hole_count) - 2) % 18) + 1)),
-      holeSequence: Array.isArray(round.hole_sequence) ? round.hole_sequence.map(Number) : Array.from({ length: Number(round.hole_count) }, (_, index) => ((Number(round.starting_hole ?? 1) - 1 + index) % 18) + 1),
+      holeSequence,
+      immutablePar: sumImmutableQualifyingRoundPar({
+        holeSequence,
+        courseHoles: daySnapshot?.length ? daySnapshot : eventSnapshot,
+      }),
       qualifyingSessionId: String(round.qualifying_session_id),
       qualifyingDay: Number(round.qualifying_day),
       qualifyingSegment: Number(round.qualifying_segment),
       createdAt: round.created_at,
       updatedAt: round.updated_at,
-    }));
+      });
+    });
     const mappedPlayers = (players ?? []).map((player): QualifyingEnginePlayer => ({
       playerId: String(player.player_id),
       playerName: String(player.player_name),
       roundNumber: Number(player.round_number),
       status: String(player.status),
       groupNumber: Number(player.group_number),
+      assignedMarkerPlayerId: player.marker_player_id ? String(player.marker_player_id) : null,
     }));
     const mappedScorecards = (scorecards ?? []).map((scorecard): QualifyingEngineScorecard => ({
       playerId: String(scorecard.player_id),

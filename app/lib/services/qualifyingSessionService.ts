@@ -11,6 +11,7 @@ import {
   listQualifyingParticipants,
   listQualifyingRoundMappings,
   listQualifyingScorerAssignments,
+  setQualifyingOperationalRound,
 } from "../repositories/qualifyingRepository";
 import { getSupabaseAuthAccessToken } from "../supabaseClient";
 import { resolveQualifyingParticipantGroupConfiguration } from "./qualifyingParticipantGroupService";
@@ -127,3 +128,8 @@ export const saveQualifyingScorerAssignments = async (
   if (!response.ok) throw new Error(body?.error || "Unable to save scorer assignments.");
   return body;
 };
+
+export const changeQualifyingOperationalRound = async (
+  sessionId: string,
+  qualifyingRoundId: string
+) => setQualifyingOperationalRound(sessionId, qualifyingRoundId);

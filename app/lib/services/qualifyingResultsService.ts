@@ -20,6 +20,7 @@ export type QualifyingEnginePlayer = {
   roundNumber: number;
   status: string;
   groupNumber?: number;
+  assignedMarkerPlayerId?: string | null;
 };
 
 export type QualifyingEngineScorecard = {
@@ -87,6 +88,19 @@ const summarizeStatistics = (
 const isSubmitted = (entry: ScoreEntryRow | undefined) =>
   Boolean(entry && ["submitted", "verified", "official"].includes(entry.entry_status));
 
+export const sumImmutableQualifyingRoundPar = ({
+  holeSequence,
+  courseHoles,
+}: {
+  holeSequence: readonly number[];
+  courseHoles: ReadonlyArray<{ holeNumber: number; par: number }>;
+}) => {
+  const parByHole = new Map(courseHoles.map((hole) => [Number(hole.holeNumber), Number(hole.par)]));
+  const pars = holeSequence.map((holeNumber) => parByHole.get(Number(holeNumber)));
+  if (pars.some((par) => !Number.isInteger(par) || Number(par) < 1)) return null;
+  return pars.reduce<number>((total, par) => total + Number(par), 0);
+};
+
 const getCompetitionPositions = (players: QualifyingPlayerResult[]) => {
   const ranked = players
     .filter((player) => player.completionStatus === "complete" && player.score !== null)
@@ -139,7 +153,9 @@ const buildSegment = ({
     entry.round_number === round.roundNumber && String(entry.player_id) === player.playerId
   );
   const self = playerScores.find((entry) => String(entry.entered_by_player_id) === player.playerId);
-  const marker = playerScores.find((entry) => String(entry.entered_by_player_id) !== player.playerId);
+  const marker = player.assignedMarkerPlayerId
+    ? playerScores.find((entry) => String(entry.entered_by_player_id) === player.assignedMarkerPlayerId)
+    : playerScores.find((entry) => String(entry.entered_by_player_id) !== player.playerId);
   const official = buildOfficialScoreResolutionMap(
     holeEntries.filter((entry) => entry.round_number === round.roundNumber)
   );
@@ -173,7 +189,7 @@ const buildSegment = ({
         ? "complete"
         : "incomplete";
   const score = scoreComplete ? resolvedSelf.reduce((sum, value) => sum + value, 0) : null;
-  const par = round.holeCount * 4;
+  const par = round.immutablePar ?? null;
 
   return {
     roundNumber: round.roundNumber,
@@ -182,7 +198,7 @@ const buildSegment = ({
     holeCount: round.holeCount,
     score,
     par,
-    toPar: score === null ? null : score - par,
+    toPar: score === null || par === null ? null : score - par,
     completionStatus,
     reviewComplete,
     submitted,
@@ -206,14 +222,16 @@ const aggregatePlayers = (
           : "incomplete";
     const complete = completionStatus === "complete";
     const score = complete ? segments.reduce((sum, segment) => sum + Number(segment.score), 0) : null;
-    const par = segments.reduce((sum, segment) => sum + segment.par, 0);
+    const par = segments.every((segment) => segment.par !== null)
+      ? segments.reduce<number>((sum, segment) => sum + Number(segment.par), 0)
+      : null;
     return {
       playerId: player.playerId,
       playerName: player.playerName,
       position: null,
       score,
       par,
-      toPar: score === null ? null : score - par,
+      toPar: score === null || par === null ? null : score - par,
       completionStatus,
       segments,
       statistics: segments.reduce(

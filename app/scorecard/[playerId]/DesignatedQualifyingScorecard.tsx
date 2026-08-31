@@ -12,7 +12,7 @@ import {
 import { createOperationId } from "../../lib/services/operationIdService";
 
 type Model = {
-  tournamentId: string;
+  tournamentId: string; tournamentRoundId: string;
   qualifyingName: string; finalized: boolean; roundNumber: number; roundName: string; holeCount: number; startingHole?: number; holeSequence?: number[];
   playerId: string; playerName: string; scorerPlayerId: string; accessRole: "scorer" | "verifier";
   groupPlayers: Array<{ player_id: string; player_name: string }>;
@@ -23,8 +23,8 @@ type Model = {
 };
 
 export default function DesignatedQualifyingScorecard({
-  playerId, roundNumber, shareToken,
-}: { playerId: string; roundNumber: number; shareToken: string }) {
+  playerId, roundNumber, tournamentRoundId, shareToken,
+}: { playerId: string; roundNumber: number; tournamentRoundId: string; shareToken: string }) {
   const [model, setModel] = useState<Model | null>(null);
   const [hole, setHole] = useState(1);
   const [scores, setScores] = useState<Record<string, string>>({});
@@ -38,6 +38,7 @@ export default function DesignatedQualifyingScorecard({
   const [dynamicValues, setDynamicValues] = useState<Record<string, StatisticValue | null>>({});
   const load = useCallback(async () => {
     const query = new URLSearchParams({ shareToken, playerId, round: String(roundNumber) });
+    if (tournamentRoundId) query.set("roundId", tournamentRoundId);
     const response = await fetch(`/api/qualifying-designated-scorecard?${query}`);
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "Unable to load scorecard.");
@@ -63,7 +64,7 @@ export default function DesignatedQualifyingScorecard({
       );
       return entry?.strokes ? String(entry.strokes) : "";
     }));
-  }, [playerId, roundNumber, shareToken]);
+  }, [playerId, roundNumber, shareToken, tournamentRoundId]);
   useEffect(() => { void load().catch((cause) => setError(cause.message)); }, [load]);
   useEffect(() => {
     if (!model) return;
@@ -100,7 +101,7 @@ export default function DesignatedQualifyingScorecard({
       const response = await fetch("/api/qualifying-designated-scorecard", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          shareToken, playerId, roundNumber, action: "save_hole", holeNumber: hole,
+          shareToken, playerId, roundNumber, tournamentRoundId: model.tournamentRoundId, action: "save_hole", holeNumber: hole,
           scores: model.accessRole === "scorer" ? Object.fromEntries(
             model.groupPlayers.map((player) => [player.player_id, Number(scores[player.player_id])])
           ) : {},
@@ -137,7 +138,7 @@ export default function DesignatedQualifyingScorecard({
     setBusy(true);
     const response = await fetch("/api/qualifying-designated-scorecard", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shareToken, playerId, roundNumber, action: "verify" }),
+      body: JSON.stringify({ shareToken, playerId, roundNumber, tournamentRoundId: model?.tournamentRoundId, action: "verify" }),
     });
     setBusy(false);
     if (response.ok) await load(); else setError("Unable to verify round.");
@@ -147,7 +148,7 @@ export default function DesignatedQualifyingScorecard({
     const response = await fetch("/api/qualifying-designated-scorecard", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        shareToken, playerId, roundNumber, action: "dispute",
+        shareToken, playerId, roundNumber, tournamentRoundId: model?.tournamentRoundId, action: "dispute",
         proposedScores: proposedScores.map(Number),
       }),
     });

@@ -59,7 +59,7 @@ const ResultsTable = ({ players }: { players: QualifyingPlayerResult[] }) => (
             <div key={segment.roundNumber} className="rounded border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-xs">
               <p className="font-black">Day {segment.dayNumber} · Segment {segment.segmentNumber}</p>
               <p className="mt-1">
-                {segment.holeCount} holes · {segment.score ?? "—"} / par {segment.par} · {formatToPar(segment.toPar)}
+                {segment.holeCount} holes · {segment.score ?? "—"} / par {segment.par ?? "—"} · {formatToPar(segment.toPar)}
               </p>
               <p className="mt-1 capitalize">
                 {segment.completionStatus} · Review {segment.reviewComplete ? "complete" : "open"} · {segment.submitted ? "Submitted" : "Not submitted"}

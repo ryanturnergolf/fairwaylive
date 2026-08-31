@@ -107,6 +107,7 @@ export type QualifyingRoundMapping = {
   startingHole?: number;
   endingHole?: number;
   holeSequence?: number[];
+  immutablePar?: number | null;
   qualifyingSessionId: string;
   qualifyingDay: number;
   qualifyingSegment: number;
@@ -138,6 +139,7 @@ export type QualifyingSessionFoundation = {
   days: QualifyingDay[];
   rounds: QualifyingRoundMapping[];
   scorerAssignments: QualifyingScorerAssignment[];
+  configuredRounds?: ConfiguredQualifyingRound[];
 };
 
 export type CreateQualifyingSessionInput = {
@@ -202,7 +204,7 @@ export type QualifyingSegmentResult = {
   segmentNumber: number;
   holeCount: number;
   score: number | null;
-  par: number;
+  par: number | null;
   toPar: number | null;
   completionStatus: QualifyingResultStatus;
   reviewComplete: boolean;
@@ -215,7 +217,7 @@ export type QualifyingPlayerResult = {
   playerName: string;
   position: string | null;
   score: number | null;
-  par: number;
+  par: number | null;
   toPar: number | null;
   completionStatus: QualifyingResultStatus;
   segments: QualifyingSegmentResult[];

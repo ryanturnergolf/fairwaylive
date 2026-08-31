@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "../../lib/supabaseClient";
 import { hashShareToken } from "../../lib/shareTokens";
 
-const contextFor = async (shareToken: string, playerId: string, roundNumber: number) => {
+const contextFor = async (shareToken: string, playerId: string, roundNumber: number, tournamentRoundId = "") => {
   const tokenHash = await hashShareToken(shareToken);
   const client = getSupabaseServerClient({ shareTokenHash: tokenHash });
   if (!client || !shareToken || !playerId || !roundNumber) throw new Error("Invalid scoring link.");
@@ -29,7 +29,10 @@ const contextFor = async (shareToken: string, playerId: string, roundNumber: num
     .eq("round_number", roundNumber).eq("player_id", playerId).maybeSingle();
   if (!player) throw new Error("Player is not assigned to this round.");
   const { data: round } = await client.from("tournament_rounds")
-    .select("id,hole_count,name").eq("tournament_id", token.tournament_id).eq("round_number", roundNumber).maybeSingle();
+    .select("id,hole_count,name,starting_hole,hole_sequence").eq("tournament_id", token.tournament_id).eq("round_number", roundNumber).maybeSingle();
+  if (!round || (tournamentRoundId && round.id !== tournamentRoundId)) {
+    throw new Error("The requested scoring round is not configured for this event.");
+  }
   const assignment = { scorer_player_id: exchangeContext.scorerPlayerId };
   const { data: groupPlayers } = await client.from("tournament_players")
     .select("player_id,player_name").eq("tournament_id", token.tournament_id).eq("round_number", roundNumber)
@@ -43,7 +46,8 @@ export async function GET(request: Request) {
     const shareToken = url.searchParams.get("shareToken") ?? "";
     const playerId = url.searchParams.get("playerId") ?? "";
     const roundNumber = Number(url.searchParams.get("round"));
-    const context = await contextFor(shareToken, playerId, roundNumber);
+    const tournamentRoundId = url.searchParams.get("roundId") ?? "";
+    const context = await contextFor(shareToken, playerId, roundNumber, tournamentRoundId);
     const { data: entries } = await context.client.from("score_entries")
       .select("player_id,entered_by_player_id,hole_scores,total,entry_status")
       .eq("tournament_id", context.token.tournament_id).eq("round_number", roundNumber);
@@ -59,10 +63,16 @@ export async function GET(request: Request) {
       qualifyingName: context.session.name,
       finalized: context.session.status === "finalized",
       roundNumber,
+      tournamentRoundId: context.round.id,
       roundName: context.round?.name ?? `Round ${roundNumber}`,
       holeCount: context.round?.hole_count ?? 18,
-      startingHole: context.player?.starting_hole ?? 1,
-      holeSequence: Array.from({ length: context.round?.hole_count ?? 18 }, (_, index) => ((Number(context.player?.starting_hole ?? 1) - 1 + index) % 18) + 1),
+      startingHole: context.round.starting_hole ?? context.player?.starting_hole ?? 1,
+      holeSequence: Array.isArray(context.round.hole_sequence)
+        ? context.round.hole_sequence.map(Number)
+        : Array.from(
+            { length: context.round.hole_count ?? 18 },
+            (_, index) => ((Number(context.round.starting_hole ?? context.player?.starting_hole ?? 1) - 1 + index) % 18) + 1
+          ),
       courseHoles: context.courseHoles,
       playerId,
       playerName: context.player.player_name,
@@ -81,14 +91,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json() as {
-      shareToken: string; playerId: string; roundNumber: number;
+      shareToken: string; playerId: string; roundNumber: number; tournamentRoundId?: string;
       action: "save_hole" | "verify" | "dispute";
       holeNumber?: number;
       scores?: Record<string, number>;
       fairwayHit?: boolean | null; greenInRegulation?: boolean | null; putts?: number | null;
       proposedScores?: number[];
     };
-    const context = await contextFor(body.shareToken, body.playerId, body.roundNumber);
+    const context = await contextFor(body.shareToken, body.playerId, body.roundNumber, body.tournamentRoundId);
     if (context.session.status === "finalized") throw new Error("This qualifying session is read-only.");
     const isScorer = context.assignment.scorer_player_id === body.playerId;
     if (body.action === "save_hole") {
