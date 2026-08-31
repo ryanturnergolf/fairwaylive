@@ -16,6 +16,8 @@ import type {
 } from "../../../lib/services/dynamicStatisticsReviewService";
 import { buildCourseHoleSequence } from "../../../lib/services/courseService";
 import type { EventCourseHoleSnapshot } from "../../../lib/courseModel";
+import MultiRoundTournamentLeaderboard from "../../../components/leaderboards/MultiRoundTournamentLeaderboard";
+import type { MultiRoundTournamentLeaderboardProjection } from "../../../lib/services/multiRoundLeaderboardService";
 
 export type ScorecardRow = {
   id: number;
@@ -42,6 +44,8 @@ type LiveScoringLeaderboardProps = {
   scorecardsGenerated: boolean;
   scorecardRows: ScorecardRow[];
   leaderboardScorecardRows?: ScorecardRow[];
+  multiRoundProjection?: MultiRoundTournamentLeaderboardProjection | null;
+  tournamentId?: string;
   onPrintTournamentScorecards: () => void;
   onGenerateScorecards: () => void;
   onRoundSetupChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -86,6 +90,8 @@ export default function LiveScoringLeaderboard({
   scorecardsGenerated,
   scorecardRows,
   leaderboardScorecardRows = scorecardRows,
+  multiRoundProjection = null,
+  tournamentId = "",
   onPrintTournamentScorecards,
   onGenerateScorecards,
   onRoundSetupChange,
@@ -374,7 +380,13 @@ export default function LiveScoringLeaderboard({
       {scorecardsGenerated ? (
         leaderboardScorecardRows.length > 0 ? (
           <div className="space-y-6">
-            <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
+            {multiRoundProjection ? (
+              <MultiRoundTournamentLeaderboard
+                projection={multiRoundProjection}
+                eventId={tournamentId}
+                hideTeams={isQualifyingTournament}
+              />
+            ) : <><div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-6 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
@@ -455,7 +467,7 @@ export default function LiveScoringLeaderboard({
                   </tbody>
                 </table>
               </div>
-            </div> : null}
+            </div> : null}</>}
 
             <div className="overflow-hidden rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
               <div className="overflow-x-auto">

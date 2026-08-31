@@ -190,12 +190,21 @@ const buildSegment = ({
         : "incomplete";
   const score = scoreComplete ? resolvedSelf.reduce((sum, value) => sum + value, 0) : null;
   const par = round.immutablePar ?? null;
+  const holeNumbers = round.holeSequence?.length
+    ? round.holeSequence.slice(0, round.holeCount)
+    : Array.from({ length: round.holeCount }, (_, index) => ((Number(round.startingHole ?? 1) - 1 + index) % 18) + 1);
+  const playedHoles = resolvedSelf.slice(0, round.holeCount).filter((value) => value > 0).length;
 
   return {
+    tournamentRoundId: round.id,
     roundNumber: round.roundNumber,
     dayNumber: round.qualifyingDay,
     segmentNumber: round.qualifyingSegment,
     holeCount: round.holeCount,
+    holeNumbers,
+    holePars: holeNumbers.map((_, index) => round.immutableHolePars?.[index] ?? null),
+    holeScores: holeNumbers.map((_, index) => Number(resolvedSelf[index]) > 0 ? Number(resolvedSelf[index]) : null),
+    through: playedHoles === 0 ? "Not started" : playedHoles === round.holeCount ? "F" : `${playedHoles}/${round.holeCount}`,
     score,
     par,
     toPar: score === null || par === null ? null : score - par,

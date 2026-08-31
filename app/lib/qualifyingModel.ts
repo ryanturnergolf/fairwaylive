@@ -108,6 +108,7 @@ export type QualifyingRoundMapping = {
   endingHole?: number;
   holeSequence?: number[];
   immutablePar?: number | null;
+  immutableHolePars?: Array<number | null>;
   qualifyingSessionId: string;
   qualifyingDay: number;
   qualifyingSegment: number;
@@ -199,10 +200,15 @@ export type QualifyingStatisticsSummary = {
 };
 
 export type QualifyingSegmentResult = {
+  tournamentRoundId: string;
   roundNumber: number;
   dayNumber: number;
   segmentNumber: number;
   holeCount: number;
+  holeNumbers: number[];
+  holePars: Array<number | null>;
+  holeScores: Array<number | null>;
+  through: string;
   score: number | null;
   par: number | null;
   toPar: number | null;

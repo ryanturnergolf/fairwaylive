@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { resolveShareToken } from "../lib/services/shareTokenService";
 import {
   loadShareTokenLeaderboard,
   type ShareTokenLeaderboardReadModel,
 } from "../lib/services/shareTokenLeaderboardService";
+import MultiRoundTournamentLeaderboard from "../components/leaderboards/MultiRoundTournamentLeaderboard";
 
 const invalidLinkMessage =
   "This secure scoring link is invalid or expired. Please request a new QR code.";
@@ -82,13 +83,12 @@ function ShareTokenLeaderboardContent() {
   const [model, setModel] = useState<ShareTokenLeaderboardReadModel | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const requestSequence = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setIsLoading(true);
+  const load = useCallback(async (initial = false) => {
+      const requestId = ++requestSequence.current;
+      if (initial) setIsLoading(true);
       setError("");
-      setModel(null);
       try {
         const resolution = await resolveShareToken(shareToken);
         if (!resolution) {
@@ -102,20 +102,21 @@ function ShareTokenLeaderboardContent() {
         if (!nextModel) {
           throw new Error("This tournament leaderboard is unavailable for the requested round.");
         }
-        if (!cancelled) setModel(nextModel);
+        if (requestId === requestSequence.current) setModel(nextModel);
       } catch (loadError) {
-        if (!cancelled) {
+        if (requestId === requestSequence.current) {
           setError(loadError instanceof Error ? loadError.message : invalidLinkMessage);
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (requestId === requestSequence.current) setIsLoading(false);
       }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
   }, [roundNumber, shareToken]);
+
+  useEffect(() => {
+    void load(true);
+    const intervalId = window.setInterval(() => void load(false), 10_000);
+    return () => { window.clearInterval(intervalId); requestSequence.current += 1; };
+  }, [load]);
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] px-4 py-5 text-[#0B3D2E]">
@@ -162,10 +163,17 @@ function ShareTokenLeaderboardContent() {
             </section>
 
             <div className="mt-5 space-y-5">
-              {!model.isQualifying && model.teamLeaderboard.length > 0 ? (
+              {model.multiRoundProjection ? (
+                <MultiRoundTournamentLeaderboard
+                  projection={model.multiRoundProjection}
+                  eventId={model.tournamentId}
+                  publicSurface
+                  hideTeams={model.isQualifying}
+                />
+              ) : <>{!model.isQualifying && model.teamLeaderboard.length > 0 ? (
                 <StandingsTable title="Team Leaderboard" rows={model.teamLeaderboard} isTeam />
               ) : null}
-              <StandingsTable title="Individual Leaderboard" rows={model.individualLeaderboard} />
+              <StandingsTable title="Individual Leaderboard" rows={model.individualLeaderboard} /></>}
             </div>
           </>
         ) : null}

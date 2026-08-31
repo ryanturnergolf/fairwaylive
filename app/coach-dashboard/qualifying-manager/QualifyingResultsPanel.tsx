@@ -13,6 +13,7 @@ import {
   getQualifyingTournamentWorkspaceHref,
   loadQualifyingResults,
 } from "../../lib/services/qualifyingSessionService";
+import MultiRoundQualifyingLeaderboard from "../../components/leaderboards/MultiRoundQualifyingLeaderboard";
 
 const formatToPar = (value: number | null) => {
   if (value === null) return "—";
@@ -79,12 +80,14 @@ export default function QualifyingResultsPanel({
   sessionStatus = "active",
   historyMode = false,
   onFinalized,
+  operationalCurrentRoundId = null,
 }: {
   sessionId: string;
   tournamentId: string;
   sessionStatus?: QualifyingSessionStatus;
   historyMode?: boolean;
   onFinalized?: () => void;
+  operationalCurrentRoundId?: string | null;
 }) {
   const [results, setResults] = useState<QualifyingResultsReadModel | null>(null);
   const [activeTab, setActiveTab] = useState("combined");
@@ -128,6 +131,10 @@ export default function QualifyingResultsPanel({
 
   const isFinalized = sessionStatus === "finalized" || results?.sessionStatus === "finalized";
   const effectiveTournamentId = tournamentId || results?.tournamentId || "";
+
+  const configuredRoundIds = new Set(
+    results?.combined.flatMap((player) => player.segments.map((segment) => segment.tournamentRoundId)) ?? [],
+  );
 
   return (
     <section className="mt-4 rounded-lg border border-[#D9D0C0] bg-white p-4">
@@ -215,13 +222,19 @@ export default function QualifyingResultsPanel({
             ))}
           </div>
           <div className="mt-3">
-            <ResultsTable
+            {activeTab === "combined" && configuredRoundIds.size > 1 ? (
+              <MultiRoundQualifyingLeaderboard
+                eventId={sessionId}
+                players={results.combined}
+                operationalCurrentRoundId={operationalCurrentRoundId}
+              />
+            ) : <ResultsTable
               players={
                 activeTab === "combined"
                   ? results.combined
                   : results.days.find((day) => `day-${day.dayNumber}` === activeTab)?.players ?? []
               }
-            />
+            />}
           </div>
           {!historyMode && !isFinalized && results.readiness.ready ? (
             <button

@@ -97,6 +97,7 @@ import QualifyingAccessContext from "./components/QualifyingAccessContext";
 import type { QualifyingTournamentAccessContext } from "../../lib/services/qualifyingAccessService";
 import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
 import { buildCourseHoleSequence } from "../../lib/services/courseService";
+import { buildMultiRoundTournamentLeaderboard } from "../../lib/services/multiRoundLeaderboardService";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 const officialResultsTab = "Official Results";
@@ -284,6 +285,34 @@ export default function TournamentPage() {
       : null;
     return Array.isArray(settings?.courseSetup?.holes) ? settings.courseSetup.holes : [];
   }, [tournamentMeta.settings]);
+  const multiRoundLeaderboardProjection = useMemo(() => {
+    if (!isClientMounted || !tournamentId) return null;
+    const envelope = loadTournamentStorageEnvelope(tournamentId);
+    if (!envelope) return null;
+    if (envelope.tournament.rounds.length <= 1) return null;
+    const settings = envelope.tournament.settings;
+    const roundSetups = settings.roundSetups ?? {};
+    const courseHoles = Array.isArray((settings as { courseSetup?: { holes?: EventCourseHoleSnapshot[] } }).courseSetup?.holes)
+      ? (settings as { courseSetup: { holes: EventCourseHoleSnapshot[] } }).courseSetup.holes
+      : eventCourseHoles;
+    const parsByHole = new Map(courseHoles.map((hole) => [hole.holeNumber, hole.par]));
+    const roundConfigurationById = Object.fromEntries(envelope.tournament.rounds.map((round) => {
+      const setup = roundSetups[String(round.roundNumber)];
+      const startingHole = Math.max(1, Number(setup?.startingHole) || 1);
+      const holeCount = Math.max(1, Math.min(18, Number(setup?.numberOfHoles) || 18));
+      const holeNumbers = buildCourseHoleSequence(startingHole, holeCount);
+      return [round.id, {
+        holeNumbers,
+        pars: holeNumbers.map((holeNumber) => parsByHole.get(holeNumber) ?? null),
+        countingScores: Math.max(1, Number(setup?.countingScores) || 4),
+      }];
+    }));
+    return buildMultiRoundTournamentLeaderboard({
+      tournament: envelope.tournament,
+      roundConfigurationById,
+      operationalCurrentRoundId: String(settings.operationalCurrentRoundId ?? operationalCurrentRoundId),
+    });
+  }, [eventCourseHoles, isClientMounted, operationalCurrentRoundId, scorecardRows, sharedScoreEntries, tournamentId]);
   const handleQualifyingContextResolved = useCallback((context: QualifyingTournamentAccessContext | null) => {
     setIsQualifyingTournament(Boolean(
       context &&
@@ -1749,6 +1778,8 @@ export default function TournamentPage() {
                        scorecardsGenerated={scorecardsGenerated}
                        scorecardRows={scorecardRows}
                        leaderboardScorecardRows={leaderboardScorecardRows}
+                       multiRoundProjection={multiRoundLeaderboardProjection}
+                       tournamentId={sharedTournamentId || tournamentId}
                       onPrintTournamentScorecards={onPrintTournamentScorecards}
                       onGenerateScorecards={generateScorecards}
                       onRoundSetupChange={handleRoundSetupChange}

@@ -171,6 +171,8 @@ export async function GET(
       const eventSnapshot = Array.isArray(tournamentCourse?.course_hole_snapshot)
         ? tournamentCourse.course_hole_snapshot
         : [];
+      const immutableHoles = daySnapshot?.length ? daySnapshot : eventSnapshot;
+      const parByHole = new Map(immutableHoles.map((hole) => [Number(hole.holeNumber), Number(hole.par)]));
       return ({
       id: String(round.id),
       tournamentId: String(round.tournament_id),
@@ -182,8 +184,9 @@ export async function GET(
       holeSequence,
       immutablePar: sumImmutableQualifyingRoundPar({
         holeSequence,
-        courseHoles: daySnapshot?.length ? daySnapshot : eventSnapshot,
+        courseHoles: immutableHoles,
       }),
+      immutableHolePars: holeSequence.map((holeNumber) => parByHole.get(holeNumber) ?? null),
       qualifyingSessionId: String(round.qualifying_session_id),
       qualifyingDay: Number(round.qualifying_day),
       qualifyingSegment: Number(round.qualifying_segment),

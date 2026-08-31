@@ -257,6 +257,9 @@ export default function QualifyingSessionsPage() {
                           sessionId={session.id}
                           tournamentId={session.tournamentId}
                           sessionStatus={session.status}
+                          operationalCurrentRoundId={foundation.configuredRounds?.find(
+                            (round) => round.qualifyingRoundId === session.operationalCurrentQualifyingRoundId
+                          )?.tournamentRoundId ?? null}
                           onFinalized={() => {
                             setSessions((current) =>
                               current.map((foundation) =>
