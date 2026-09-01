@@ -240,6 +240,60 @@ test("9-hole and 18-hole reciprocal segments preserve deterministic engine mappi
   expect(rounds[0].holeCount).toBe(18);
 });
 
+test("three-round Qualifying hydrates completed, partial, and unstarted rounds independently", () => {
+  const threeRounds: QualifyingRoundMapping[] = [1, 2, 3].map((roundNumber) => ({
+    id: `tournament-round-${roundNumber}`,
+    tournamentId: "tournament",
+    roundNumber,
+    name: `Round ${roundNumber}`,
+    holeCount: 9,
+    startingHole: 1,
+    endingHole: 9,
+    holeSequence: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    immutablePar: 36,
+    immutableHolePars: [4, 4, 4, 4, 4, 4, 4, 4, 4],
+    qualifyingSessionId: "session",
+    qualifyingDay: roundNumber,
+    qualifyingSegment: 1,
+    createdAt: null,
+    updatedAt: null,
+  }));
+  const twoPlayerSession = { ...session, selectedPlayers: session.selectedPlayers.slice(0, 2) };
+  const threeRoundPlayers: QualifyingEnginePlayer[] = threeRounds.flatMap((round) => [
+    { playerId: "alex", playerName: "Alex Morgan", roundNumber: round.roundNumber, status: "active", assignedMarkerPlayerId: "jordan" },
+    { playerId: "jordan", playerName: "Jordan Lee", roundNumber: round.roundNumber, status: "active", assignedMarkerPlayerId: "alex" },
+  ]);
+  const completeRows = [
+    scoreRow("alex", "alex", threeRounds[0], 4),
+    scoreRow("alex", "jordan", threeRounds[0], 4),
+    scoreRow("jordan", "jordan", threeRounds[0], 5),
+    scoreRow("jordan", "alex", threeRounds[0], 5),
+  ];
+  const partial = [5, 5, 5, 5, 0, 0, 0, 0, 0];
+  const partialRows = [
+    { ...scoreRow("alex", "alex", threeRounds[1], 5, false), hole_scores: partial, total: 20 },
+    { ...scoreRow("alex", "jordan", threeRounds[1], 5, false), hole_scores: partial, total: 20 },
+  ];
+  const projected = buildQualifyingResults({
+    session: twoPlayerSession,
+    days: threeRounds.map((round) => ({ id: `day-${round.roundNumber}`, qualifyingSessionId: "session", dayNumber: round.roundNumber, playDate: null, holesTotal: 9, courseName: "Test Course", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null })),
+    rounds: threeRounds,
+    players: threeRoundPlayers,
+    scorecards: threeRoundPlayers.map((player) => ({ playerId: player.playerId, roundNumber: player.roundNumber, holeCount: 9 })),
+    scoreEntries: [...completeRows, ...partialRows],
+    holeEntries: [],
+    reviewStatuses: [
+      { ...reviews[0], player_id: "alex", round_number: 1 },
+      { ...reviews[0], id: "review-jordan-1", player_id: "jordan", round_number: 1 },
+    ],
+  });
+
+  const alex = projected.combined.find((player) => player.playerId === "alex")!;
+  expect(alex.segments[0]).toMatchObject({ tournamentRoundId: "tournament-round-1", score: 36, toPar: 0, through: "F", holeScores: Array(9).fill(4) });
+  expect(alex.segments[1]).toMatchObject({ tournamentRoundId: "tournament-round-2", score: null, through: "4/9", holeScores: [5, 5, 5, 5, null, null, null, null, null] });
+  expect(alex.segments[2]).toMatchObject({ tournamentRoundId: "tournament-round-3", score: null, through: "Not started", holeScores: Array(9).fill(null) });
+});
+
 test("coach operations page exposes read-only daily and combined results", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
@@ -290,6 +344,31 @@ test("coach operations page exposes read-only daily and combined results", async
     "href",
     "/tournament/tournament"
   );
+});
+
+test("active Qualifying results poll scoring changes without resetting leaderboard state", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
+      access_token: "header.payload.signature", refresh_token: "refresh", token_type: "bearer",
+      expires_at: 4102444800, user: { id: "coach", is_anonymous: false },
+    }));
+  });
+  await page.route("**/api/qualifying-sessions", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [{ session, days, rounds: [], scorerAssignments: [] }] }),
+  }));
+  const empty = buildQualifyingResults({ session, days, rounds, players, scorecards, scoreEntries: [], holeEntries: [], reviewStatuses: [] });
+  const scored = buildQualifyingResults({ session, days, rounds, players, scorecards, scoreEntries, holeEntries, reviewStatuses: reviews });
+  let requests = 0;
+  await page.route("**/api/qualifying-sessions/session/results", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(requests++ === 0 ? empty : scored),
+  }));
+  await page.route("**/api/qualifying-access-codes**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ codeHint: "ABC234", active: true }) }));
+
+  await page.goto("/coach-dashboard/qualifying-manager");
+  await page.getByRole("button", { name: "Results", exact: true }).click();
+  await expect(page.getByText("Not started", { exact: true }).first()).toBeVisible();
+  await expect.poll(() => requests, { timeout: 15_000 }).toBeGreaterThan(1);
+  await expect(page.getByText("54", { exact: true }).first()).toBeVisible();
 });
 
 test("designated scorer sessions remain blocked by the certified Q5 access boundary", async ({ page }) => {

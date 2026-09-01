@@ -457,7 +457,7 @@ export const getTournamentRound = async (
 ): Promise<TournamentRoundReadRow | null> => {
   const supabase = await getReadClient(options);
   const { data, error } = await supabase.from("tournament_rounds")
-    .select("tournament_id,round_number,hole_count,qualifying_session_id,starting_hole,ending_hole,hole_sequence")
+    .select("id,tournament_id,round_number,hole_count,qualifying_session_id,starting_hole,ending_hole,hole_sequence")
     .eq("tournament_id", tournamentId)
     .eq("round_number", roundNumber)
     .maybeSingle();

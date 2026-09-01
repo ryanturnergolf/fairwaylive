@@ -101,18 +101,23 @@ test("valid reciprocal qualifying resolves isolated players and routes to certif
       ],
     }),
   }));
-  await page.route("**/api/qualifying-access/exchange", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      playerId: "alex",
-      roundNumber: 2,
-      groupNumber: 1,
-      markerPlayerId: "jordan",
-      startingHole: 1,
-      shareToken: "qualified-token",
-    }),
-  }));
+  await page.route("**/api/qualifying-access/exchange", async (route) => {
+    const { playerId } = route.request().postDataJSON() as { playerId: string };
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        playerId,
+        roundNumber: 2,
+        tournamentRoundId: "tournament-round-2",
+        qualifyingRoundId: "qualifying-round-2",
+        groupNumber: 1,
+        markerPlayerId: playerId === "alex" ? "jordan" : "alex",
+        startingHole: 1,
+        shareToken: `${playerId}-qualified-token`,
+      }),
+    });
+  });
   await page.goto("/qualifying-login");
   await page.getByLabel("Qualifying code").fill("ABC-234");
   await page.getByRole("button", { name: "Continue" }).click();
@@ -120,7 +125,27 @@ test("valid reciprocal qualifying resolves isolated players and routes to certif
   await expect(page.getByRole("button", { name: "Alex Morgan" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Jordan Lee" })).toBeVisible();
   await page.getByRole("button", { name: "Alex Morgan" }).click();
-  await expect(page).toHaveURL(/\/scorecard\/alex\?pairing=1&round=2&shareToken=qualified-token/);
+  await expect(page).toHaveURL(/\/scorecard\/alex\?pairing=1&round=2&roundId=tournament-round-2&shareToken=alex-qualified-token/);
+
+  await page.goto("/qualifying-login");
+  await page.getByLabel("Qualifying code").fill("ABC-234");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Jordan Lee" }).click();
+  await expect(page).toHaveURL(/\/scorecard\/jordan\?pairing=1&round=2&roundId=tournament-round-2&shareToken=jordan-qualified-token/);
+});
+
+test("round-bound Qualifying access retains the durable Tournament round UUID at the scorecard read boundary", () => {
+  const repository = readFileSync(
+    join(process.cwd(), "app/lib/repositories/tournamentRepository.ts"),
+    "utf8"
+  );
+  const roundRead = repository.slice(
+    repository.indexOf("export const getTournamentRound"),
+    repository.indexOf("export const getTournamentRounds")
+  );
+
+  expect(roundRead).toContain('.select("id,tournament_id,round_number');
+  expect(roundRead).toContain('.eq("round_number", roundNumber)');
 });
 
 test("invalid codes stay generic and designated scorer sessions are blocked", async ({ page }) => {

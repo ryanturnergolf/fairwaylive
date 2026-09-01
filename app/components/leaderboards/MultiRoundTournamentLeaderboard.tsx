@@ -57,12 +57,12 @@ export default function MultiRoundTournamentLeaderboard({ projection, eventId, p
     const roundId = teamRounds[team.id] ?? globalRoundId;
     const selected = team.rounds[globalRoundId];
     return <div key={team.id} className="overflow-hidden rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5]">
-      <div className="grid grid-cols-[36px_minmax(0,1fr)_48px] items-center gap-2 px-3 py-2 sm:grid-cols-[42px_minmax(0,1fr)_70px_120px_48px]">
+      <div className="grid grid-cols-[48px_36px_minmax(0,1fr)] items-center gap-2 px-3 py-2 sm:grid-cols-[48px_42px_minmax(0,1fr)_70px_120px]">
+        <FavoriteStar selected={teamFavorites.favorites.has(team.id)} label={team.teamName} onToggle={() => teamFavorites.toggle(team.id)} />
         <span className="font-black">{team.position}</span>
         <button type="button" aria-expanded={expanded} onClick={() => setExpandedTeams((current) => { const next = new Set(current); if (next.has(team.id)) next.delete(team.id); else next.add(team.id); return next; })} className="min-h-12 truncate text-left font-black text-[#0B3D2E]">{expanded ? "▾" : "▸"} {team.teamName}</button>
         <span className="hidden text-center font-black sm:block">{team.overallToPar !== "—" ? team.overallToPar : team.overallTotal ?? "—"}</span>
         <ScoreSummary className="col-span-3 row-start-2 border-t border-[#E8DCC8] pt-2 sm:col-auto sm:row-auto sm:border-0 sm:pt-0" total={selected?.total ?? null} toPar={selected?.toPar ?? "—"} through={selected?.through ?? "Not started"} />
-        <FavoriteStar className="col-start-3 row-start-1 sm:col-auto sm:row-auto" selected={teamFavorites.favorites.has(team.id)} label={team.teamName} onToggle={() => teamFavorites.toggle(team.id)} />
       </div>
       {expanded ? <div className="border-t border-[#E8DCC8] bg-white p-4">
         <RoundSelector rounds={projection.rounds} selectedRoundId={roundId} onSelect={(id) => setTeamRounds((current) => ({ ...current, [team.id]: id }))} label={`${team.teamName} expanded round`} />
@@ -75,12 +75,12 @@ export default function MultiRoundTournamentLeaderboard({ projection, eventId, p
     const roundId = playerRounds[player.id] ?? globalRoundId;
     const selected = player.rounds[globalRoundId];
     return <div key={player.id} className="overflow-hidden rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5]">
-      <div className="grid grid-cols-[36px_minmax(0,1fr)_48px] items-center gap-2 px-3 py-2 sm:grid-cols-[42px_minmax(0,1fr)_70px_120px_48px]">
+      <div className="grid grid-cols-[48px_36px_minmax(0,1fr)] items-center gap-2 px-3 py-2 sm:grid-cols-[48px_42px_minmax(0,1fr)_70px_120px]">
+        <FavoriteStar selected={playerFavorites.favorites.has(player.id)} label={player.playerName} onToggle={() => playerFavorites.toggle(player.id)} />
         <span className="font-black">{player.position}</span>
         <button type="button" aria-expanded={expanded} onClick={() => setExpandedPlayers((current) => { const next = new Set(current); if (next.has(player.id)) next.delete(player.id); else next.add(player.id); return next; })} className="min-h-12 min-w-0 text-left"><span className="block truncate font-black text-[#0B3D2E]">{expanded ? "▾" : "▸"} {player.playerName}</span><span className="block truncate text-[10px] text-[#6F7C74]">{player.teamName}</span></button>
         <span className="hidden text-center font-black sm:block">{player.overallToPar !== "—" ? player.overallToPar : player.overallTotal ?? "—"}</span>
         <ScoreSummary className="col-span-3 row-start-2 border-t border-[#E8DCC8] pt-2 sm:col-auto sm:row-auto sm:border-0 sm:pt-0" total={selected?.total ?? null} toPar={selected?.toPar ?? "—"} through={selected?.through ?? "Not started"} />
-        <FavoriteStar className="col-start-3 row-start-1 sm:col-auto sm:row-auto" selected={playerFavorites.favorites.has(player.id)} label={player.playerName} onToggle={() => playerFavorites.toggle(player.id)} />
       </div>
       {expanded ? <PlayerExpansion player={player} roundId={roundId} projection={projection} onRoundChange={(id) => setPlayerRounds((current) => ({ ...current, [player.id]: id }))} /> : null}
     </div>;

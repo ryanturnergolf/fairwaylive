@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   QualifyingPlayerResult,
   QualifyingResultsReadModel,
@@ -94,22 +94,33 @@ export default function QualifyingResultsPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState("");
+  const requestSequence = useRef(0);
 
-  const refresh = async () => {
+  const refresh = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    const requestId = ++requestSequence.current;
     setError("");
-    setIsLoading(true);
+    if (!background) setIsLoading(true);
     try {
-      setResults(await loadQualifyingResults(sessionId));
+      const nextResults = await loadQualifyingResults(sessionId);
+      if (requestId === requestSequence.current) setResults(nextResults);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load qualifying results.");
+      if (requestId === requestSequence.current && !background) {
+        setError(loadError instanceof Error ? loadError.message : "Unable to load qualifying results.");
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestSequence.current && !background) setIsLoading(false);
     }
-  };
+  }, [sessionId]);
 
   useEffect(() => {
     if (historyMode) void refresh();
-  }, [historyMode]);
+  }, [historyMode, refresh]);
+
+  useEffect(() => {
+    if (!results || historyMode || sessionStatus === "finalized" || results.sessionStatus === "finalized") return;
+    const interval = window.setInterval(() => void refresh({ background: true }), 10_000);
+    return () => window.clearInterval(interval);
+  }, [historyMode, refresh, results, sessionStatus]);
 
   const handleFinalize = async () => {
     setError("");

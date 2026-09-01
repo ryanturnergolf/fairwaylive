@@ -132,6 +132,10 @@ test("shared controls are accessible, touch-friendly, and independently keyed", 
   expect(favorite).toContain("aria-pressed");
   expect(leaderboard).toContain("teamRounds");
   expect(leaderboard).toContain("playerRounds");
+  expect(leaderboard.indexOf("<FavoriteStar selected={teamFavorites")).toBeLessThan(leaderboard.indexOf("{team.position}"));
+  expect(leaderboard.indexOf("<FavoriteStar selected={playerFavorites")).toBeLessThan(leaderboard.indexOf("{player.position}"));
+  const qualifying = source("app/components/leaderboards/MultiRoundQualifyingLeaderboard.tsx");
+  expect(qualifying.indexOf("<FavoriteStar selected={favorites")).toBeLessThan(qualifying.indexOf('player.position ??'));
 });
 
 test("polling keeps child selection and expansion state while stale responses are rejected", () => {
@@ -187,6 +191,9 @@ test("public mobile leaderboard selects R10, expands independently, and persists
   await expect(page.getByRole("heading", { name: "★ Favorites" })).toHaveCount(2);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("button", { name: "Remove AJ Gerber from favorites" })).toBeVisible();
+  const teamFavorite = page.getByRole("button", { name: "Remove Bluffton from favorites" });
+  const teamRow = teamFavorite.locator("xpath=..");
+  await expect(teamRow.locator(":scope > *").first()).toHaveAttribute("aria-pressed", "true");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
 });

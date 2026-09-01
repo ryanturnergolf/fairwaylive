@@ -33,12 +33,12 @@ export default function MultiRoundQualifyingLeaderboard({ eventId, players, oper
     const selected = player.segments.find((segment) => segment.tournamentRoundId === globalRoundId);
     const expandedSegment = player.segments.find((segment) => segment.tournamentRoundId === roundId);
     return <div key={player.playerId} className="overflow-hidden rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5]">
-      <div className="grid grid-cols-[36px_minmax(0,1fr)_48px] items-center gap-2 px-3 py-2 sm:grid-cols-[42px_minmax(0,1fr)_72px_120px_48px]">
+      <div className="grid grid-cols-[48px_36px_minmax(0,1fr)] items-center gap-2 px-3 py-2 sm:grid-cols-[48px_42px_minmax(0,1fr)_72px_120px]">
+        <FavoriteStar selected={favorites.has(player.playerId)} label={player.playerName} onToggle={() => toggleFavorite(player.playerId)} />
         <span className="font-black">{player.position ?? "—"}</span>
         <button type="button" aria-expanded={isExpanded} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(player.playerId)) next.delete(player.playerId); else next.add(player.playerId); return next; })} className="min-h-12 truncate text-left font-black text-[#0B3D2E]">{isExpanded ? "▾" : "▸"} {player.playerName}</button>
         <span className="hidden text-center font-black sm:block">{formatToPar(player.toPar)}</span>
         <div className="col-span-3 row-start-2 grid grid-cols-3 gap-1 border-t border-[#E8DCC8] pt-2 text-center text-[10px] sm:col-auto sm:row-auto sm:border-0 sm:pt-0"><span><b className="block">{selected?.score ?? "—"}</b>Score</span><span><b className="block">{formatToPar(selected?.toPar ?? null)}</b>To Par</span><span><b className="block">{selected?.through ?? "Not started"}</b>Thru</span></div>
-        <FavoriteStar className="col-start-3 row-start-1 sm:col-auto sm:row-auto" selected={favorites.has(player.playerId)} label={player.playerName} onToggle={() => toggleFavorite(player.playerId)} />
       </div>
       {isExpanded ? <div className="border-t border-[#E8DCC8] bg-white p-4"><RoundSelector rounds={rounds} selectedRoundId={roundId} onSelect={(id) => setExpandedRounds((current) => ({ ...current, [player.playerId]: id }))} label={`${player.playerName} Qualifying scorecard round`} /><div className="mt-3"><GolfScorecardGrid holes={(expandedSegment?.holeNumbers ?? []).map((holeNumber, index) => ({ holeNumber, par: expandedSegment?.holePars[index] ?? null, score: expandedSegment?.holeScores[index] ?? null }))} label={`${player.playerName} Qualifying scorecard`} /></div></div> : null}
     </div>;
