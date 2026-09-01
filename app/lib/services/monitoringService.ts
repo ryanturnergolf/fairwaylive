@@ -10,8 +10,8 @@ export const isMonitoringEnabled = (environment: Environment = process.env) =>
   environment.MONITORING_ENABLED?.trim().toLowerCase() === "true";
 
 export const getReleaseIdentity = (environment: Environment = process.env) =>
-  environment.APP_RELEASE?.trim() ||
   environment.VERCEL_GIT_COMMIT_SHA?.trim() ||
+  environment.APP_RELEASE?.trim() ||
   environment.GITHUB_SHA?.trim() ||
   environment.NEXT_PUBLIC_APP_RELEASE?.trim() ||
   "unknown";

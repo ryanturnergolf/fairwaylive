@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { POST as postClientError } from "../../app/api/monitoring/errors/route";
 import { sanitizeOperationalError } from "../../app/lib/monitoringModel";
-import { reportOperationalError } from "../../app/lib/services/monitoringService";
+import {
+  getReleaseIdentity,
+  reportOperationalError,
+} from "../../app/lib/services/monitoringService";
 import {
   assertProductionEnvironment,
   getProductionEnvironmentReadiness,
@@ -18,6 +21,19 @@ test("health endpoint reports availability, release, and configuration without s
   expect(body).not.toHaveProperty("NEXT_PUBLIC_SUPABASE_URL");
   expect(body).not.toHaveProperty("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   expect(body).not.toHaveProperty("missing");
+});
+
+test("release identity prefers Vercel Git SHA while preserving manual and safe fallbacks", () => {
+  expect(getReleaseIdentity({
+    VERCEL_GIT_COMMIT_SHA: "new-sha",
+    APP_RELEASE: "old-sha",
+  })).toBe("new-sha");
+  expect(getReleaseIdentity({ APP_RELEASE: "manual-sha" })).toBe("manual-sha");
+  expect(getReleaseIdentity({})).toBe("unknown");
+  expect(getReleaseIdentity({
+    VERCEL_GIT_COMMIT_SHA: "same-sha",
+    APP_RELEASE: "same-sha",
+  })).toBe("same-sha");
 });
 
 test("missing required production configuration fails clearly but remains non-blocking outside production", () => {
