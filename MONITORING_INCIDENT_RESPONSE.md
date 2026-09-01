@@ -1,12 +1,20 @@
 # Clubhouse HQ Production Monitoring And Incident Response Runbook
 
-Last updated: 2026-08-02
+Last updated: 2026-09-01
 
 ## Purpose And Current Boundary
 
 This runbook defines the monitoring, alerting, incident response, tournament-day triage, communication, and rehearsal required before Clubhouse HQ opens a controlled beta. The application now provides a vendor-neutral error-reporting boundary and production health endpoint. A production log collector, alert routing, synthetic checks, paging, retention policy, and incident drill still require operator configuration.
 
-The temporary production deployment is `https://fairwaylive-gold.vercel.app`, release `9cfa8fd19fb68b1dcd6082210ab139a603a61125`. `/api/health` reports `ok` and the expected release. Both monitoring flags remain intentionally `false`; Vercel build/runtime logs are not yet a configured centralized monitoring system, and no alert-delivery or incident drill is complete.
+The production deployment is `https://fairwaylive-gold.vercel.app`, release `343d3e74c6ff85fb73676437d5b105cd83ebc1a4`, Vercel deployment `dpl_HAjK3511dYCdbgUa62Jko846Nqvo`. `/api/health` reports `ok`, configuration `ready`, and the expected release. Both monitoring flags remain intentionally `false`; Vercel/runtime and read-only database checks established a manual post-deployment baseline but are not yet a configured centralized alert-delivery system, and no incident-response drill is complete.
+
+### Multi-round post-deployment baseline — 2026-09-01
+
+At `2026-09-01T00:28:39.414Z`, production Supabase project `gfpkhptrnddvwzorhgkm` was healthy on PostgreSQL 17.6 with ledger 48/latest `20260830000000`, 13/60 connections, zero active client queries, blocked sessions, or long transactions. Round gaps, duplicate ordinals, invalid Tournament/Qualifying operational references, cross-parent mappings, scoring round/player violations, duplicate hole identities, reciprocal direction mismatches, invalid Review rounds, and missing/duplicate Qualifying round mappings were all zero.
+
+The scoring baseline was 362 scorecards, 595 score entries, 5,558 hole entries, two Qualifying scorer assignments, 73 Review rows, and 1,642 statistic values. Qualifying held 62 sessions, 216 participants, 64 days, and 24 configured rounds. No unexplained HTTP 500, error-level Vercel entry, missing-column/RPC failure, or database-health concern occurred during the active monitoring window. No genuine real multi-round event was active; draft Tournament `af4e2569-d1f1-4e08-8356-29b1cd554c2d` is the candidate to reassess before activation.
+
+The one Team-code HTTP 500 from the earlier Gate E diagnostic was caused by malformed PowerShell JSON and failed in `request.json()` before service/RPC/database execution. It is rollout/operator evidence, not a product incident.
 
 Next.js server and API exceptions pass through native instrumentation into structured, redacted server output. Opt-in browser instrumentation reports unhandled client errors through a narrow same-origin endpoint into the same output. The hosting provider must retain and centralize that output, associate it with a deployed release, and route alerts to assigned responders before beta. No third-party monitoring SDK or service is assumed.
 

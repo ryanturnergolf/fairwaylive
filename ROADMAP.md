@@ -6,7 +6,7 @@ A lightweight tournament management and live scoring platform for golf coaches a
 
 - Qualifying Q8 — Designated Group Scorer: policy-aware readiness, verification, official convergence, and finalization implemented and certified for the real one-round Q8 session.
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 This roadmap favors small milestones. Do not start a large rewrite. Protect QR/mobile scoring, marker-only live scoring, and localStorage fallback during every step.
 
@@ -28,7 +28,7 @@ Status: **IN PROGRESS**
 - Phase 9C — Mobile Scoring Experience UX Polish: **COMPLETE**.
 - Phase 10A — End-to-End Tournament UX Audit and Final Polish: **COMPLETE**.
 - Controlled Beta Phase 1 — Backup & Recovery Operational Readiness: **BETWEEN-EVENTS RECOVERY DRILL PASSED; ACTIVE-EVENT RPO, RECURRING CADENCE, OFF-DEVICE ESCROW, AND NAMED OWNERS REMAIN OPEN**.
-- Controlled Beta Phase 2 — Release & Rollback Operational Readiness documentation: **COMPLETE; HOSTING CONFIRMATION AND RELEASE DRILL PENDING**.
+- Controlled Beta Phase 2 — Release & Rollback Operational Readiness: **MULTI-ROUND PRODUCTION RELEASE EXECUTED AND VERIFIED; NAMED PRIMARY/BACKUP OWNERS REMAIN OPEN**.
 - Controlled Beta Phase 3 — Production Monitoring & Incident Response documentation: **COMPLETE; TOOLING CONFIGURATION AND INCIDENT DRILL PENDING**.
 - Controlled Beta Phase 4 — Continuous Integration: **IMPLEMENTED; HOSTED CONFIGURATION AND VERIFICATION COMPLETE**.
 - Added the authoritative `BACKUP_RECOVERY.md` runbook covering backup scope/cadence, RPO/RTO, targeted and full restore procedures, snapshot/cache reconciliation, tournament-day response, and post-restore validation.
@@ -44,9 +44,9 @@ Status: **IN PROGRESS**
 - Controlled Beta Phase 7 — Developer/QA Seed Tool Gating: **IMPLEMENTED; PRODUCTION DISABLED BY DEFAULT**.
 - Controlled Beta Phase 8 — Coach Onboarding & First-Tournament Guidance: **IMPLEMENTED; BETA COACH FEEDBACK PENDING**.
 - Controlled Beta Phase 9 — Beta Support & Known Limitations: **IMPLEMENTED; NAMED SUPPORT OWNERS AND CONTACT CONFIGURATION PENDING**.
-- Controlled Beta temporary Vercel production deployment: **DEPLOYED; SUPABASE AUTH URLS VERIFIED; MONITORING AND OPERATIONAL DRILLS PENDING**.
+- Controlled Beta Vercel production deployment: **MULTI-ROUND RELEASE DEPLOYED AND VERIFIED; SUPABASE AUTH URLS VERIFIED; CENTRALIZED ALERTING AND INCIDENT DRILL PENDING**.
 - The production Supabase Free plan has no user-restorable PITR. The 2026-08-28 isolated logical-backup restore drill passed the 24-hour between-events RPO/four-hour RTO contract; opening beta remains gated on active-event protection, recurring backup rehearsal, off-device key escrow, and named recovery owners.
-- The production host and stable temporary URL are confirmed as `ez-golf-scoring/fairwaylive` at `https://fairwaylive-gold.vercel.app`; release readiness still requires named release owners, approved canary data, and a successful release/rollback drill.
+- The production host and stable URL are confirmed as `ez-golf-scoring/fairwaylive` at `https://fairwaylive-gold.vercel.app`. The multi-round release completed its backup, migration, deployment, read-only acceptance, disposable write-canary, cleanup, and monitoring gates; named primary/backup release owners remain open.
 - Monitoring readiness requires configured centralized telemetry and alert routing, named responders, privacy-safe canary checks, and a successful incident-response drill.
 - Phase 5 adds native Next.js client/server exception capture, redacted structured output, release identity, production configuration validation, and `/api/health` without changing scoring or persistence. The selected production host/log collector must still retain the stream and deliver tested alerts.
 - Phase 6 validates production URL safety, hosted Supabase origin, monitoring alignment, and release identity while explicitly preserving preview, CI, development, test, and Playwright contexts. Production values remain an operator-owned release prerequisite and are never emitted.
@@ -55,10 +55,13 @@ Status: **IN PROGRESS**
 - Phase 9 adds the authoritative beta support guide, limitations register, issue-intake template, and a read-only Coach Help entry point. Production must assign primary/backup support owners and optionally configure the public support contact before invitations.
 - Hosted CI receives `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` through GitHub Actions secrets and has completed configuration, build, and Playwright verification. CI remains separate from production Supabase deployment and smoke verification.
 - Historical deployment baseline: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` established the temporary Vercel production deployment and its production smoke baseline. It is retained as a historical release record, not the current repository commit.
-- Current repository baseline: commit `767ec301e73970848a01353df456a33b1ab7b64a`; 351 committed Playwright tests across 52 tracked specifications. `tests/e2e/qualifying-data-foundation.spec.ts` is tracked and included in that inventory.
+- Current repository/deployed baseline: commit `343d3e74c6ff85fb73676437d5b105cd83ebc1a4`; 389 committed Playwright tests across 55 tracked specifications. `tests/e2e/qualifying-data-foundation.spec.ts` is tracked and included in that inventory.
 - The completed UX phases were presentation-only and did not change scoring, Review, official resolution, finalization, analytics, persistence, synchronization, repositories, services, APIs, migrations, Supabase data, or database architecture.
 - Controlled Beta Operational Recovery Drill: **BETWEEN-EVENTS PATH PASSED**. Backup `20260828T030142Z-between-events` restored to isolated project `frskkyrtgponplmhgrgn` with exact application-table counts, preserved reciprocal score identities, authenticated application validation, controlled write/cleanup, and production-equivalent cross-schema trigger/function privileges. The active-tournament path remains open because a 15-minute RPO is not yet demonstrated and PITR is unavailable.
-- Next operational readiness work is to complete off-device key escrow, assign recovery owners, establish and rehearse the recurring logical-backup cadence, and resolve or explicitly accept the active-tournament RPO limitation. Release/rollback and incident-response drills also remain open.
+- Multi-Round Phases 1-3: **COMPLETE / DEPLOYED / VERIFIED**. Phase 1 migration `20260829000000_add_durable_multi_round_authority.sql` and Phase 2 migration `20260830000000_add_round_aware_scoring_resolution.sql` are applied exactly once in production; Phase 3 required no migration. The ledger is 48 through `20260830000000`.
+- The controlled rollout preserved all 100 pre-existing round UUIDs while backfilling 73 missing configured slots, passed the 389/389 suite, deployed release `343d3e74c6ff85fb73676437d5b105cd83ebc1a4`, and passed two-round Tournament/Qualifying write isolation plus exact cleanup. R10 passed local/recovery coverage and was intentionally excluded from production writes.
+- Post-deployment baseline `2026-09-01T00:28:39.414Z` was healthy with zero round, scoring, reciprocal, Review, mapping, lock, or transaction anomalies. No genuine real multi-round event was active; the draft Tournament candidate to watch is `af4e2569-d1f1-4e08-8356-29b1cd554c2d`.
+- **Next milestone:** complete the remaining Controlled Beta Phase 1 operational recovery prerequisites: off-device key escrow, named recovery owners, rehearsed recurring logical-backup cadence, and an explicit resolution of the active-tournament 15-minute RPO limitation. The incident-response drill follows that readiness boundary.
 - Keep pilot-found stabilization fixes separate from new feature development.
 - Do not treat controlled-pilot certification as unrestricted production readiness.
 

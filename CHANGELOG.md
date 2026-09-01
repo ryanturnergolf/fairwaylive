@@ -1,5 +1,20 @@
 # Clubhouse HQ Changelog
 
+## 2026-09-01
+
+### Multi-Round Production Rollout
+
+- Completed, deployed, and verified Multi-Round Phases 1-3 at release `343d3e74c6ff85fb73676437d5b105cd83ebc1a4` in Vercel deployment `dpl_HAjK3511dYCdbgUa62Jko846Nqvo`.
+- Applied `20260829000000_add_durable_multi_round_authority.sql` and `20260830000000_add_round_aware_scoring_resolution.sql` exactly once to production project `gfpkhptrnddvwzorhgkm`; the production ledger is 48 migrations through `20260830000000`. Phase 3 required no migration.
+- Backfilled 73 missing durable Tournament round slots, increasing round rows from 100 to 173 while preserving all 100 pre-existing round UUIDs.
+- Verified the production build and Playwright 389/389 before deployment.
+- Passed deployment Gates A-F: encrypted backup, migration preflight/dry run, both production migrations, application deployment/read-only acceptance, and a limited disposable production write canary.
+- Proved exact two-round isolation in production: Tournament R1/R2 persisted `4`/`6`; Qualifying R1/R2 persisted `3`/`5`; no implicit Round 1 collapse occurred.
+- Proved immutable Qualifying par from snapshot holes as `3 + 5 + 5 = 13`, distinct from the invalid `holeCount * 4 = 12` assumption. R10 remained intentionally limited to local/recovery regression coverage.
+- Removed every disposable canary row through an exact UUID allowlist. All 36 public-table counts returned to baseline, residual rows were zero, and the pre-existing round identity hash remained `3e223b1b56b27921bc1afb7b53173a25`.
+- Established a healthy post-deployment baseline at `2026-09-01T00:28:39.414Z`: zero round gaps, duplicate ordinals, invalid operational references, cross-parent mappings, score identity defects, reciprocal direction mismatches, blocked sessions, or long transactions.
+- Approved the release for normal production use. No genuine real multi-round event was active; monitoring is ready for the first real event.
+
 ## 2026-08-28
 
 ### Controlled Beta Operational Recovery Drill

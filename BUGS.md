@@ -1,6 +1,6 @@
 # Clubhouse HQ Bugs And Risks
 
-Last updated: 2026-07-31
+Last updated: 2026-09-01
 
 ## UX Audit Verification
 
@@ -12,23 +12,23 @@ The end-to-end presentation audit found and corrected dashboard loading/empty-st
 
 ## Controlled Beta Operational Risks
 
-### Backup capability and recovery drill require confirmation
+### Active-event recovery protection remains incomplete
 
-Status: runbook complete; pre-beta operational gate remains open.
+Status: between-events drill passed; active-event operational gate remains open.
 
-`BACKUP_RECOVERY.md` defines recovery authority, cadence, RPO/RTO, incident communication, targeted/full restore, snapshot reconciliation, validation, and the required drill. The connected Supabase plan's managed backup/PITR and isolated-restore capabilities have not been confirmed in this documentation milestone, recovery roles are not yet assigned by name, and the drill has not yet been executed. Controlled beta must not rely on optional PITR until those capabilities are verified.
+The production Supabase Free plan has no user-restorable PITR. The encrypted logical-backup path and isolated between-events recovery drill passed, including application/authentication validation and cleanup. Named recovery owners, off-device key escrow, recurring cadence, and proof or explicit acceptance of the active-event 15-minute RPO remain open. Controlled beta must not claim active-event recovery readiness from the between-events result.
 
-### Production hosting rollback and release drill require confirmation
+### Production release ownership remains incomplete
 
-Status: runbook complete; pre-beta operational gate remains open.
+Status: multi-round rollout passed; named ownership gate remains open.
 
-`RELEASE_ROLLBACK.md` defines release ownership, verification gates, migration/application order, smoke testing, freeze policy, application rollback, database forward fixes, communications, and rehearsal. The production hosting project and supported rollback mechanism have not been recorded, release roles and canary data are not yet assigned, and the drill has not yet been executed. Controlled beta must not assume an application rollback is available until the actual hosting workflow is verified.
+Vercel project `ez-golf-scoring/fairwaylive`, the stable production URL, rollback-compatible prior release, controlled migration sequence, application deployment, write canary, cleanup, and observation baseline are verified for release `343d3e74c6ff85fb73676437d5b105cd83ebc1a4`. Applied migrations remain forward-fix/recovery authority rather than application-rollback targets. Named primary/backup release roles are still required.
 
 ### Centralized monitoring and incident drill require configuration
 
 Status: runbook complete; pre-beta operational gate remains open.
 
-`MONITORING_INCIDENT_RESPONSE.md` defines health signals, P1–P4 alerts, response targets, investigation, tournament-day triage, mitigation, verification, dashboards, redaction, communication, and postmortems. Centralized telemetry and paging are not documented as deployed, monitoring/responding roles are not yet assigned, canary checks and retention are not approved, and the incident drill has not been executed. Console warnings alone do not satisfy controlled-beta monitoring readiness.
+`MONITORING_INCIDENT_RESPONSE.md` defines health signals, P1–P4 alerts, response targets, investigation, tournament-day triage, mitigation, verification, dashboards, redaction, communication, and postmortems. The multi-round rollout established a healthy manual application/database/runtime baseline and a privacy-safe exact-identity canary. Centralized telemetry retention, paging/alert delivery, named responders, and the incident drill remain incomplete; manual Vercel/database checks do not close those gates.
 
 ## Open Bugs
 

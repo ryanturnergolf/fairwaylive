@@ -1,6 +1,6 @@
 # Clubhouse HQ Backup And Recovery Runbook
 
-Last updated: 2026-07-31
+Last updated: 2026-09-01
 
 ## Purpose And Scope
 
@@ -301,6 +301,21 @@ Measured timings:
 | Controlled synthetic write | 1.052 seconds |
 
 The isolated application passed `/api/health`, synthetic coach authentication, Coach Dashboard, Qualifying Manager, restored Tournament and Qualifying workspaces, player/group/scoring/statistics reads, and one controlled Tournament creation returning HTTP 201. No request was made to production Supabase during application validation. Synthetic data was removed and the restored tournament count returned to 168.
+
+### Verified pre-multi-round migration recovery point — 2026-08-31
+
+Before the controlled multi-round production migrations, operators created and verified encrypted backup `20260831T032007Z-pre-multi-round-migration` from production project `gfpkhptrnddvwzorhgkm`:
+
+- artifact: `clubhouse-hq-production-20260831T032007Z-pre-multi-round-migration-20260813000000-9cfa8fd1.tar.age`,
+- SHA-256: `5C0630FDACFB383D525266B953587C3365182E748986081BF1611FBBE61E638E`,
+- encryption and decryption: passed,
+- PostgreSQL archive readability: passed,
+- Auth durable identity archive: verified,
+- cross-schema application sidecar: verified,
+- manifest/checksums: verified,
+- plaintext cleanup: completed.
+
+This recovery point supported the Phase 1/2 production rollout. It does not replace the required recurring cadence, off-device key escrow, named recovery ownership, or evidence that active scoring can meet the 15-minute RPO.
 
 ### Cross-schema application-object sidecar
 

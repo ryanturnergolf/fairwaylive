@@ -1,6 +1,6 @@
 # Clubhouse HQ Production Release And Rollback Runbook
 
-Last updated: 2026-08-02
+Last updated: 2026-09-01
 
 ## Purpose And Scope
 
@@ -13,9 +13,30 @@ Application releases and database migrations are separate operational actions. T
 - Hosting provider/project: Vercel `ez-golf-scoring/fairwaylive`
 - Stable production URL: `https://fairwaylive-gold.vercel.app`
 - First controlled-beta deployment record: release `9cfa8fd19fb68b1dcd6082210ab139a603a61125`, deployed 2026-08-02
+- Current verified release: `343d3e74c6ff85fb73676437d5b105cd83ebc1a4`, Vercel deployment `dpl_HAjK3511dYCdbgUa62Jko846Nqvo`
+- Production Supabase ledger: 48 migrations through `20260830000000`
+- Previous rollback-compatible application release: `9cfa8fd19fb68b1dcd6082210ab139a603a61125`
 - Rollback mechanism: redeploy the exact previous Ready Vercel deployment; database migrations remain forward-fix/recovery only
 
-The temporary host and application rollback mechanism are confirmed. The Supabase Site URL and redirect allowlist were configured for the Vercel origin, read back, and followed by successful production sign-out, fresh Coach Sign In, and dashboard smoke tests. Production acceptance remains conditional on named release roles, a pre-release recovery point, approved canary data, the release/rollback drill, and the observation period. Do not treat the existence of a Ready Vercel deployment as completion of those gates.
+The host and application rollback mechanism are confirmed. The multi-round rollout completed an encrypted pre-migration recovery point, migration dry run, controlled Phase 1/2 migration sequence, application deployment, read-only acceptance, limited production write canary, exact cleanup, and post-deployment observation baseline. Applied database migrations remain in place during an ordinary application rollback. Named release-role primaries/backups remain required for future event-day operations.
+
+### Verified multi-round release record — 2026-09-01
+
+- Phase 1 checkpoint: `4b2564b6b48631122674ad8ada37edbeb0a20b32`
+- Phase 2 checkpoint: `7589010b9abdc88ea2b94c154b8bf5268747b6d1`
+- Phase 3/deployed release: `343d3e74c6ff85fb73676437d5b105cd83ebc1a4`
+- Build: passed
+- Playwright: 389/389 passed
+- Phase 1 migration: `20260829000000_add_durable_multi_round_authority.sql`, applied exactly once
+- Phase 2 migration: `20260830000000_add_round_aware_scoring_resolution.sql`, applied exactly once
+- Phase 3 migration: none
+- Gates A-F: passed
+- Write canary: `CHQ-PROD-CANARY-20260901-001614-5eef44a7`; two-round Tournament and Qualifying round isolation passed; immutable snapshot par passed
+- Cleanup: exact counts/hashes restored; zero residual synthetic rows
+- Observation baseline: healthy; no new unexplained 500 or error-level runtime entries
+- Go/no-go: approved for normal production use
+
+The malformed Team-code JSON sent by the initial Gate E PowerShell diagnostic failed before service/database execution and was not a product defect. No hotfix or rollback was required.
 
 ## Release Roles
 

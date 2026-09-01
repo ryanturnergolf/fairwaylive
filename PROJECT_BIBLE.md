@@ -1,16 +1,28 @@
 # Clubhouse HQ Project Bible
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 ## Current Repository And Beta Baseline
 
 Status: **CONTROLLED BETA PREPARATION IN PROGRESS**
 
-The current committed verification inventory is 351 Playwright tests across 52 tracked specifications. The Qualifying data-foundation regression specification is tracked as of commit `767ec301e73970848a01353df456a33b1ab7b64a`; it is no longer a local-only exception. Hosted CI configuration and verification are operational, and the temporary Vercel production deployment remains available at `https://fairwaylive-gold.vercel.app`.
+The current committed verification inventory is 389 Playwright tests across 55 tracked specifications. The Qualifying data-foundation regression specification is tracked as of commit `767ec301e73970848a01353df456a33b1ab7b64a`; it is no longer a local-only exception. Hosted CI configuration and verification are operational, and the Vercel controlled-beta production deployment remains available at `https://fairwaylive-gold.vercel.app`.
 
-Implementation completed after the earlier controlled-pilot and UX baselines includes durable roster management UI, Dynamic Statistics configuration/mobile/Review integration, the analytics engine and query API, Player Performance Profiles, Team Performance and Team Statistics surfaces, Course Management with immutable event snapshots, flexible multi-round Qualifying, Qualifying statistics selection, and reciprocal scoring stabilization. Reciprocal identity coverage now distinguishes scorer from score subject with asymmetric real-flow regressions so equal scores cannot conceal an identity error.
+Implementation completed after the earlier controlled-pilot and UX baselines includes durable roster management UI, Dynamic Statistics configuration/mobile/Review integration, the analytics engine and query API, Player Performance Profiles, Team Performance and Team Statistics surfaces, Course Management with immutable event snapshots, flexible multi-round Qualifying, Qualifying statistics selection, reciprocal scoring stabilization, and the deployed multi-round Tournament/Qualifying scoring and leaderboard architecture. Reciprocal identity coverage distinguishes scorer from score subject with asymmetric real-flow regressions so equal scores cannot conceal an identity error.
 
-Historical test counts and release commits below remain valid for their dated milestones; they are not the current repository baseline. Controlled Beta Preparation remains open. The verified between-events recovery drill is complete, but the active-tournament 15-minute RPO, off-device key escrow, recurring backup cadence, named recovery ownership, monitoring/alert configuration, and the remaining operational drills are not complete.
+Historical test counts and release commits below remain valid for their dated milestones; they are not the current repository baseline. Controlled Beta Preparation remains open. The multi-round production rollout, limited write canary, cleanup, and initial post-deployment monitoring baseline are verified. The active-tournament 15-minute RPO, off-device key escrow, recurring backup cadence, named recovery ownership, centralized alert delivery, and the incident-response drill remain open.
+
+## Multi-Round Production Rollout
+
+Status: **PHASES 1-3 COMPLETE / DEPLOYED / VERIFIED**
+
+The deployed release is `343d3e74c6ff85fb73676437d5b105cd83ebc1a4` in Vercel deployment `dpl_HAjK3511dYCdbgUa62Jko846Nqvo`. Production Supabase project `gfpkhptrnddvwzorhgkm` has 48 migrations through `20260830000000`. Phase 1 migration `20260829000000_add_durable_multi_round_authority.sql` and Phase 2 migration `20260830000000_add_round_aware_scoring_resolution.sql` were each applied exactly once; Phase 3 required no migration.
+
+Phase 1 established durable Tournament round UUIDs, configured 1-10-round authority, operational-current-round references, safe round-count changes, Qualifying's ten-round limit, and parent-aware constraints. Its production backfill increased durable Tournament rounds from 100 to 173, eliminated 73 missing configured slots, and preserved all 100 pre-existing round UUIDs. Phase 2 made mobile/QR scoring, reciprocal scoring, Review, Verify Score, Qualifying resume/designated access, R10, and immutable-par projection round-aware while retaining controlled legacy compatibility. Phase 3 added dynamic R1-R10 Tournament and Qualifying leaderboard navigation, expandable scorecards, independent selectors, future-round state, favorites, mobile containment, and polling-state preservation.
+
+Pre-deployment verification passed the production build and Playwright 389/389. Gate F then proved deployed production writes with a disposable two-round Tournament (`4` in R1 and `6` in R2) and two-round Qualifying session (`3` in R1 and `5` in R2), with distinct durable identities and no Round 1 collapse. Immutable Qualifying par resolved from the event snapshot as `3 + 5 + 5 = 13`, not the invalid `holeCount * 4 = 12`. R10 was intentionally excluded from the production write canary and remains covered by local/recovery regression evidence.
+
+Dependency-aware cleanup removed every synthetic row. All 36 public-table counts returned to the immediate pre-canary baseline, residual canary rows were zero, and the pre-existing round identity hash remained `3e223b1b56b27921bc1afb7b53173a25`. The `2026-09-01T00:28:39.414Z` monitoring baseline found zero round gaps, duplicate ordinals, invalid operational references, cross-parent mappings, scoring identity violations, reciprocal direction violations, blocked sessions, or long transactions. No genuine real multi-round event was active; production is approved for normal use and ready for monitoring of the first real event.
 
 ## Product Vision
 
@@ -98,11 +110,11 @@ The production project is on the Supabase Free plan with no user-restorable PITR
 
 ## Controlled Beta Release And Rollback
 
-Status: **RUNBOOK COMPLETE; HOSTING CONFIRMATION AND DRILL REQUIRED**
+Status: **MULTI-ROUND RELEASE EXECUTED AND VERIFIED; NAMED OWNERSHIP REMAINS OPEN**
 
 The production release and rollback contract is documented in `RELEASE_ROLLBACK.md`. Every release records the candidate and previous known-good commits, linked Supabase project and migration ledger, recovery point, build and Playwright results, deployment outcome, smoke verification, and go/no-go decision. Normal releases use backward-compatible forward migrations followed by application deployment; applied migrations are never edited or casually rolled back.
 
-Tournament-day freeze rules protect active scoring. Application rollback redeploys the exact compatible known-good commit, while database defects use a reviewed corrective forward migration or the recovery process in `BACKUP_RECOVERY.md`. Controlled beta remains gated on confirming the production host and rollback mechanism, naming release owners, selecting canary data, and passing the release/rollback drill.
+Tournament-day freeze rules protect active scoring. Application rollback redeploys the exact compatible known-good commit, while database defects use a reviewed corrective forward migration or the recovery process in `BACKUP_RECOVERY.md`. The Vercel host, rollback mechanism, pre-migration recovery point, controlled migration sequence, application deployment, read-only acceptance, disposable write canary, cleanup, and observation baseline were verified for the multi-round release. Named primary/backup release roles remain an operational prerequisite.
 
 ## Controlled Beta Monitoring And Incident Response
 
@@ -112,7 +124,7 @@ The monitoring and incident-response contract is documented in `MONITORING_INCID
 
 The application now uses native Next.js server/client instrumentation, a narrow same-origin client-error endpoint, a shared sensitive-data redaction boundary, structured release-aware server output, production environment validation, and an uncached `/api/health` endpoint. Monitoring is explicitly disabled when its environment flags are absent. No vendor SDK, service-role credential, database write, or schema change is involved.
 
-The foundation does not itself retain logs, deliver alerts, measure handled API outcomes/latency, or prove Supabase/scoring health. Controlled beta remains gated on configuring the production host or log collector, naming responders, verifying alert delivery and retention, establishing safe workflow canaries, and passing the pre-beta incident drill.
+The foundation does not itself retain logs, deliver alerts, or measure all handled API outcomes/latency. The multi-round rollout established a manual production monitoring baseline through `/api/health`, Vercel runtime logs, read-only Supabase health/integrity queries, and an exact-identity write canary. Centralized retention/alert delivery, named responders, and the pre-beta incident drill remain open.
 
 Production environment validation distinguishes actual production from preview, CI, development, test, and the managed Playwright server. Actual production requires public HTTPS application and hosted Supabase origins, rejects loopback/reserved/credential-bearing URLs, requires aligned monitoring flags and release identity when monitoring is active, and emits operator-safe errors containing variable names and rules but never configured values. `/api/health` reflects this same readiness contract without claiming Supabase connectivity.
 
@@ -128,7 +140,7 @@ The browser bundle requires the client-safe `NEXT_PUBLIC_SUPABASE_URL` and `NEXT
 
 CI keeps two URL roles separate: Playwright uses `http://127.0.0.1:3100` to reach its managed production server, while `NEXT_PUBLIC_APP_URL` uses a reserved `.example` origin to verify externally shareable QR links. Production supplies its real public deployment origin; application code never hardcodes that domain.
 
-Hosted CI has the required client-safe configuration and has repeatedly verified configuration preflight, production builds, and the committed Playwright suite. The current committed inventory is 351 tests, including the tracked Qualifying data-foundation specification. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot. The 18-hole rapid-save persistence regression waits for each hole's controls to become editable and uses a test-scoped execution budget because it intentionally verifies serialized atomic writes under injected latency; global timeouts and application behavior remain unchanged.
+Hosted CI has the required client-safe configuration and has repeatedly verified configuration preflight, production builds, and the committed Playwright suite. The current committed inventory is 389 tests across 55 tracked specifications, including the tracked Qualifying data-foundation specification and focused multi-round Phase 1-3 coverage. Mobile Review synchronization waits for either valid web-first entry state—automatically rendered Review or an enabled Review action—so slower hosted hydration does not race an instantaneous locator snapshot. The 18-hole rapid-save persistence regression waits for each hole's controls to become editable and uses a test-scoped execution budget because it intentionally verifies serialized atomic writes under injected latency; global timeouts and application behavior remain unchanged.
 
 CI is a required verification signal for release approval, but it does not replace the real-Supabase deployment checks, production smoke tests, recovery evidence, or operational drills defined by the controlled-beta runbooks.
 
@@ -142,11 +154,11 @@ The Coach Dashboard provides a concise, non-blocking first-event guide for new o
 
 ## Controlled Beta Temporary Production Deployment
 
-Status: **DEPLOYED; OPERATIONAL DRILLS REMAIN**
+Status: **MULTI-ROUND RELEASE DEPLOYED AND VERIFIED; REMAINING OPERATIONAL READINESS WORK OPEN**
 
-The existing Vercel project `ez-golf-scoring/fairwaylive` hosts the temporary controlled-beta production URL `https://fairwaylive-gold.vercel.app`. Release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` was rebuilt from its Git-backed production deployment with the real public application origin, the existing hosted Supabase client configuration, aligned disabled monitoring flags, explicit release identity, and production QA seed tools disabled. No service-role credential was configured.
+The existing Vercel project `ez-golf-scoring/fairwaylive` hosts the controlled-beta production URL `https://fairwaylive-gold.vercel.app`. Current release `343d3e74c6ff85fb73676437d5b105cd83ebc1a4` is deployed as `dpl_HAjK3511dYCdbgUa62Jko846Nqvo` with the real public origin, hosted Supabase client configuration, explicit release identity, and production QA seed tools disabled. Historical release `9cfa8fd19fb68b1dcd6082210ab139a603a61125` remains the rollback-compatible previous application release; applied database migrations are not normally reversed for an application rollback.
 
-Public HTTPS, Coach Sign In, authenticated dashboard loading, existing Tournament inventory, a ready live-scoring workspace, public-origin QR generation, signed-out scorecard loading, finalized read-only presentation, `/api/health`, and production QA-tool denial were verified. The Supabase Site URL is `https://fairwaylive-gold.vercel.app`, the redirect allowlist includes `https://fairwaylive-gold.vercel.app/**`, and both settings were read back from project `gfpkhptrnddvwzorhgkm`; production sign-out, fresh password sign-in, and dashboard loading then passed. No disposable Tournament was created because production does not yet provide a reviewed cleanup path. Monitoring remains intentionally disabled until a collector and alert routing are configured and drilled.
+Public HTTPS, authentication, dashboard loading, existing Tournament inventory, QR/share origins, signed-out scorecard access, finalized read-only presentation, `/api/health`, and QA-tool denial remain verified. The controlled rollout additionally proved a reviewed exact-UUID cleanup path through a disposable production canary, then restored all business counts and identity hashes. Supabase Site URL and redirect allowlist remain configured for the Vercel origin. Automated centralized monitoring remains disabled until collector retention and alert routing are configured and drilled.
 
 ## Durable Roster Foundation
 
