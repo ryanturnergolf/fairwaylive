@@ -248,13 +248,16 @@ export default function TournamentPage() {
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
   const [isQualifyingTournament, setIsQualifyingTournament] = useState(false);
+  const [qualifyingScoringMode, setQualifyingScoringMode] = useState<"reciprocal" | "designated_scorer">("reciprocal");
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
   const [tournamentReadiness, setTournamentReadiness] = useState<TournamentReadiness | null>(null);
   const [isReadinessRefreshing, setIsReadinessRefreshing] = useState(false);
   const [finalizationRecord, setFinalizationRecord] = useState<TournamentFinalizationRecord | null>(null);
   const [sharedScoreEntries, setSharedScoreEntries] = useState<ScoreEntryRow[]>([]);
+  const [multiRoundScoreEntries, setMultiRoundScoreEntries] = useState<ScoreEntryRow[]>([]);
   const [scoreHoleEntries, setScoreHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
+  const [multiRoundHoleEntries, setMultiRoundHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
   const [reviewResolutionMessage, setReviewResolutionMessage] = useState("");
   const [reviewOverrideValues, setReviewOverrideValues] = useState<Record<string, string>>({});
   const [reviewOverrideReasons, setReviewOverrideReasons] = useState<Record<string, string>>({});
@@ -311,14 +314,18 @@ export default function TournamentPage() {
       tournament: envelope.tournament,
       roundConfigurationById,
       operationalCurrentRoundId: String(settings.operationalCurrentRoundId ?? operationalCurrentRoundId),
+      durableScoreEntries: multiRoundScoreEntries,
+      officialEntries: multiRoundHoleEntries,
+      scoringMode: qualifyingScoringMode,
     });
-  }, [eventCourseHoles, isClientMounted, operationalCurrentRoundId, scorecardRows, sharedScoreEntries, tournamentId]);
+  }, [eventCourseHoles, isClientMounted, multiRoundHoleEntries, multiRoundScoreEntries, operationalCurrentRoundId, qualifyingScoringMode, scorecardRows, sharedScoreEntries, tournamentId]);
   const handleQualifyingContextResolved = useCallback((context: QualifyingTournamentAccessContext | null) => {
     setIsQualifyingTournament(Boolean(
       context &&
       context.backingTournamentId === tournamentId &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tournamentId)
     ));
+    if (context?.scoringMode) setQualifyingScoringMode(context.scoringMode);
   }, [tournamentId]);
   useEffect(() => {
     if (
@@ -502,19 +509,29 @@ export default function TournamentPage() {
   const refreshReviewResolutionData = useCallback(async () => {
     if (!sharedTournamentId) {
       setSharedScoreEntries([]);
+      setMultiRoundScoreEntries([]);
       setScoreHoleEntries([]);
+      setMultiRoundHoleEntries([]);
       setDynamicReviewFoundation(null);
       return;
     }
 
     const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
-    const [scores, holes, dynamicFoundation] = await Promise.all([
+    const [scores, allScores, holes, allHoles, dynamicFoundation] = await Promise.all([
       loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
         console.warn("[ScoreService] Unable to load review score entries.", error);
         return [];
       }),
+      loadComparisonScores({ tournamentId: sharedTournamentId }).catch((error) => {
+        console.warn("[ScoreService] Unable to load multi-round score entries.", error);
+        return [];
+      }),
       loadTournamentHoleStatistics({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
         console.warn("[StatisticsService] Unable to load review hole entries.", error);
+        return [];
+      }),
+      loadTournamentHoleStatistics({ tournamentId: sharedTournamentId }).catch((error) => {
+        console.warn("[StatisticsService] Unable to load multi-round official entries.", error);
         return [];
       }),
       loadDynamicStatisticReviewFoundation(sharedTournamentId).catch((error) => {
@@ -524,7 +541,9 @@ export default function TournamentPage() {
     ]);
 
     setSharedScoreEntries(scores);
+    setMultiRoundScoreEntries(allScores);
     setScoreHoleEntries(holes);
+    setMultiRoundHoleEntries(allHoles);
     setDynamicReviewFoundation(dynamicFoundation);
   }, [normalizedRoundSetup.roundNumber, sharedTournamentId]);
 

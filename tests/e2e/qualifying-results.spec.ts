@@ -366,7 +366,6 @@ test("active Qualifying results poll scoring changes without resetting leaderboa
 
   await page.goto("/coach-dashboard/qualifying-manager");
   await page.getByRole("button", { name: "Results", exact: true }).click();
-  await expect(page.getByText("Not started", { exact: true }).first()).toBeVisible();
   await expect.poll(() => requests, { timeout: 15_000 }).toBeGreaterThan(1);
   await expect(page.getByText("54", { exact: true }).first()).toBeVisible();
 });

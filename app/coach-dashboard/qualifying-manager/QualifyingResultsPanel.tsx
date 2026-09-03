@@ -80,6 +80,7 @@ export default function QualifyingResultsPanel({
   sessionStatus = "active",
   historyMode = false,
   onFinalized,
+  onResultsLoaded,
   operationalCurrentRoundId = null,
 }: {
   sessionId: string;
@@ -87,6 +88,7 @@ export default function QualifyingResultsPanel({
   sessionStatus?: QualifyingSessionStatus;
   historyMode?: boolean;
   onFinalized?: () => void;
+  onResultsLoaded?: (results: QualifyingResultsReadModel) => void;
   operationalCurrentRoundId?: string | null;
 }) {
   const [results, setResults] = useState<QualifyingResultsReadModel | null>(null);
@@ -95,6 +97,8 @@ export default function QualifyingResultsPanel({
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState("");
   const requestSequence = useRef(0);
+  const onResultsLoadedRef = useRef(onResultsLoaded);
+  useEffect(() => { onResultsLoadedRef.current = onResultsLoaded; }, [onResultsLoaded]);
 
   const refresh = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
     const requestId = ++requestSequence.current;
@@ -102,7 +106,10 @@ export default function QualifyingResultsPanel({
     if (!background) setIsLoading(true);
     try {
       const nextResults = await loadQualifyingResults(sessionId);
-      if (requestId === requestSequence.current) setResults(nextResults);
+      if (requestId === requestSequence.current) {
+        setResults(nextResults);
+        onResultsLoadedRef.current?.(nextResults);
+      }
     } catch (loadError) {
       if (requestId === requestSequence.current && !background) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load qualifying results.");

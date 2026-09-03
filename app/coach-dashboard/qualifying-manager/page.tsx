@@ -9,8 +9,9 @@ import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisi
 import {
   getQualifyingTournamentWorkspaceHref,
   listQualifyingSessionFoundations,
-  changeQualifyingOperationalRound,
+  loadQualifyingResults,
 } from "../../lib/services/qualifyingSessionService";
+import { advanceQualifyingOperationalRound, buildQualifyingRoundProgressionState, loadQualifyingRoundProgressionState, type QualifyingRoundProgressionState } from "../../lib/services/qualifyingRoundProgressionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
 import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
@@ -23,12 +24,24 @@ export default function QualifyingSessionsPage() {
   const [activatingId, setActivatingId] = useState("");
   const [provisionedTournamentIds, setProvisionedTournamentIds] = useState<Record<string, string>>({});
   const [operationalRoundMessage, setOperationalRoundMessage] = useState<Record<string, string>>({});
+  const [roundProgression, setRoundProgression] = useState<Record<string, QualifyingRoundProgressionState | null>>({});
+  const [advancingId, setAdvancingId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     void listQualifyingSessionFoundations()
       .then((loaded) => {
-        if (!cancelled) setSessions(loaded);
+        if (!cancelled) {
+          setSessions(loaded);
+          void Promise.all(loaded.filter((foundation) => foundation.session.status === "active").map(async (foundation) => {
+            try {
+              const progression = await loadQualifyingRoundProgressionState(foundation);
+              if (!cancelled) setRoundProgression((current) => ({ ...current, [foundation.session.id]: progression }));
+            } catch {
+              if (!cancelled) setRoundProgression((current) => ({ ...current, [foundation.session.id]: null }));
+            }
+          }));
+        }
       })
       .catch((loadError) => {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load qualifying sessions.");
@@ -101,25 +114,47 @@ export default function QualifyingSessionsPage() {
     }
   };
 
-  const handleOperationalRoundChange = async (qualifyingSessionId: string, qualifyingRoundId: string) => {
+  const handleCompleteRound = async (foundation: QualifyingSessionFoundation, progression: QualifyingRoundProgressionState) => {
+    const next = progression.nextRound;
+    if (!next || !progression.ready) return;
+    const message = next.qualifyingDay !== progression.dayNumber
+      ? `Complete ${progression.displayLabel}? This will make ${next.displayLabel} / Day ${next.qualifyingDay} available when players use the same Qualifying scoring code.`
+      : `Complete ${progression.displayLabel}? ${next.displayLabel} is already available to players today and will become the current scoring round.`;
+    if (!window.confirm(message)) return;
+    setAdvancingId(foundation.session.id);
     try {
-      const updated = await changeQualifyingOperationalRound(qualifyingSessionId, qualifyingRoundId);
-      setSessions((current) => current.map((foundation) => foundation.session.id === qualifyingSessionId
+      const updated = await advanceQualifyingOperationalRound(foundation.session.id, progression.currentQualifyingRoundId);
+      setSessions((current) => current.map((item) => item.session.id === foundation.session.id
         ? {
-            ...foundation,
+            ...item,
             session: {
-              ...foundation.session,
-              operationalCurrentQualifyingRoundId: updated.operational_current_qualifying_round_id,
+              ...item.session,
+              operationalCurrentQualifyingRoundId: String(updated.newQualifyingRoundId),
             },
           }
-        : foundation));
-      setOperationalRoundMessage((current) => ({ ...current, [qualifyingSessionId]: "Current scoring round updated." }));
+        : item));
+      setOperationalRoundMessage((current) => ({ ...current, [foundation.session.id]: `${next.displayLabel} is now the current scoring round.` }));
+      const refreshed = { ...foundation, session: { ...foundation.session, operationalCurrentQualifyingRoundId: String(updated.newQualifyingRoundId) } };
+      const results = await loadQualifyingResults(foundation.session.id);
+      setRoundProgression((current) => ({ ...current, [foundation.session.id]: buildQualifyingRoundProgressionState(refreshed, results) }));
     } catch (cause) {
       setOperationalRoundMessage((current) => ({
         ...current,
-        [qualifyingSessionId]: cause instanceof Error ? cause.message : "Unable to update the current scoring round.",
+        [foundation.session.id]: cause instanceof Error ? cause.message : "Unable to complete the current scoring round.",
       }));
+    } finally {
+      setAdvancingId("");
     }
+  };
+
+  const handleOperationalRoundChange = async (qualifyingSessionId: string, qualifyingRoundId: string) => {
+    const foundation = sessions.find((item) => item.session.id === qualifyingSessionId);
+    const progression = roundProgression[qualifyingSessionId];
+    if (!foundation || !progression || progression.nextRound?.qualifyingRoundId !== qualifyingRoundId) {
+      setOperationalRoundMessage((current) => ({ ...current, [qualifyingSessionId]: "Rounds advance in order after the current round is complete." }));
+      return;
+    }
+    await handleCompleteRound(foundation, progression);
   };
 
   return (
@@ -164,6 +199,7 @@ export default function QualifyingSessionsPage() {
             <div className="grid gap-4">
               {sessions.map((foundation) => {
                 const { session, days } = foundation;
+                const progression = roundProgression[session.id];
                 const designatedReady = session.scoringMode !== "designated_scorer" ||
                   foundation.rounds.length * session.groups.length === foundation.scorerAssignments.length;
                 return (
@@ -228,6 +264,7 @@ export default function QualifyingSessionsPage() {
                       <label className="block text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
                         Current Scoring Round
                         <select
+                          disabled
                           value={session.operationalCurrentQualifyingRoundId ?? ""}
                           onChange={(event) => void handleOperationalRoundChange(session.id, event.target.value)}
                           className="mt-2 min-h-12 w-full rounded-lg border border-[#D6E0D8] bg-white px-3 text-sm font-black text-[#0B3D2E]"
@@ -240,6 +277,21 @@ export default function QualifyingSessionsPage() {
                           ))}
                         </select>
                       </label>
+                      {progression ? (
+                        <div className="mt-3 border-t border-[#D6E0D8] pt-3">
+                          <p className="text-sm font-black">{progression.displayLabel} · Day {progression.dayNumber} · Segment {progression.segmentNumber}</p>
+                          <p className="mt-1 text-sm font-semibold text-[#51635C]">{progression.completeScorecards} of {progression.requiredScorecards} scorecards complete</p>
+                          {progression.isFinalRound ? (
+                            <p className="mt-3 text-sm font-bold">Use the existing Qualifying finalization action when the final round is ready.</p>
+                          ) : (
+                            <button type="button" disabled={!progression.ready || advancingId === session.id}
+                              onClick={() => void handleCompleteRound(foundation, progression)}
+                              className="mt-3 min-h-12 w-full rounded-lg bg-[#0B3D2E] px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+                              {advancingId === session.id ? "Completing…" : `Complete ${progression.displayLabel}`}
+                            </button>
+                          )}
+                        </div>
+                      ) : <p className="mt-3 text-sm font-semibold text-[#51635C]">Loading current-round readiness…</p>}
                       {operationalRoundMessage[session.id] ? (
                         <p role="status" className="mt-2 text-sm font-semibold text-[#51635C]">
                           {operationalRoundMessage[session.id]}
@@ -260,6 +312,10 @@ export default function QualifyingSessionsPage() {
                           operationalCurrentRoundId={foundation.configuredRounds?.find(
                             (round) => round.qualifyingRoundId === session.operationalCurrentQualifyingRoundId
                           )?.tournamentRoundId ?? null}
+                          onResultsLoaded={(results) => setRoundProgression((current) => ({
+                            ...current,
+                            [session.id]: buildQualifyingRoundProgressionState(foundation, results),
+                          }))}
                           onFinalized={() => {
                             setSessions((current) =>
                               current.map((foundation) =>

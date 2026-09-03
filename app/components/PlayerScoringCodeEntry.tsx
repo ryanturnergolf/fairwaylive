@@ -9,6 +9,11 @@ import {
   resolveUniversalPlayerScorecardPath,
   type UniversalPlayerAccessResolution,
 } from "../lib/services/universalPlayerAccessService";
+import {
+  exchangeQualifyingPlayerAccess,
+  loadQualifyingPlayerAccessibleRounds,
+  type QualifyingAccessibleRound,
+} from "../lib/services/qualifyingAccessService";
 
 type PlayerScoringCodeEntryProps = {
   compact?: boolean;
@@ -20,6 +25,8 @@ export default function PlayerScoringCodeEntry({ compact = false }: PlayerScorin
   const [code, setCode] = useState("");
   const [access, setAccess] = useState<UniversalPlayerAccessResolution | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "opening" | "invalid_code">("idle");
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [accessibleRounds, setAccessibleRounds] = useState<QualifyingAccessibleRound[]>([]);
 
   const focusCode = () => requestAnimationFrame(() => inputRef.current?.focus());
 
@@ -50,12 +57,31 @@ export default function PlayerScoringCodeEntry({ compact = false }: PlayerScorin
     setAccess(null);
     setCode("");
     setStatus("idle");
+    setSelectedPlayerId("");
+    setAccessibleRounds([]);
     focusCode();
   };
 
   const selectPlayer = async (playerId: string) => {
     if (!access || status === "opening") return;
     setStatus("opening");
+    if (access.eventType === "qualifying") {
+      const roundAccess = await loadQualifyingPlayerAccessibleRounds(code, playerId);
+      if (roundAccess?.rounds.length && roundAccess.rounds.length > 1) {
+        setSelectedPlayerId(playerId);
+        setAccessibleRounds(roundAccess.rounds);
+        setStatus("idle");
+        return;
+      }
+      const explicitRoundId = roundAccess?.rounds[0]?.qualifyingRoundId;
+      const destination = await exchangeQualifyingPlayerAccess(code, playerId, explicitRoundId);
+      if (destination) {
+        sessionStorage.setItem("clubhouse-hq:qualifying-code", code);
+        sessionStorage.setItem("clubhouse-hq:qualifying-player", playerId);
+        router.push(destination);
+        return;
+      }
+    }
     const destination = await resolveUniversalPlayerScorecardPath({ code, playerId, access });
     if (!destination) {
       setAccess(null);
@@ -63,6 +89,19 @@ export default function PlayerScoringCodeEntry({ compact = false }: PlayerScorin
       focusCode();
       return;
     }
+    router.push(destination);
+  };
+
+  const selectRound = async (round: QualifyingAccessibleRound) => {
+    if (!selectedPlayerId || status === "opening") return;
+    setStatus("opening");
+    const destination = await exchangeQualifyingPlayerAccess(code, selectedPlayerId, round.qualifyingRoundId);
+    if (!destination) {
+      setStatus("invalid_code");
+      return;
+    }
+    sessionStorage.setItem("clubhouse-hq:qualifying-code", code);
+    sessionStorage.setItem("clubhouse-hq:qualifying-player", selectedPlayerId);
     router.push(destination);
   };
 
@@ -78,6 +117,31 @@ export default function PlayerScoringCodeEntry({ compact = false }: PlayerScorin
     : "Select your player";
 
   if (access) {
+    if (accessibleRounds.length > 1) {
+      return (
+        <div aria-live="polite">
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">{eventName}</p>
+          <h2 className={`mt-2 font-black tracking-[-0.03em] ${compact ? "text-2xl" : "text-3xl"}`}>Choose a Round</h2>
+          <p className="mt-3 text-[#51635C]">Choose any round available on the current Qualifying day.</p>
+          <div className="mt-6 space-y-3">
+            {accessibleRounds.map((round) => (
+              <button key={round.qualifyingRoundId} type="button" disabled={status === "opening"}
+                onClick={() => void selectRound(round)}
+                className="min-h-16 w-full rounded-2xl border-2 border-[#D8C9AE] bg-[#FCFAF5] px-5 py-4 text-left shadow-sm">
+                <span className="block text-lg font-black">{round.displayLabel}</span>
+                <span className="mt-1 block text-sm font-semibold text-[#51635C]">
+                  {round.status === "verified" || round.status === "submitted"
+                    ? `Completed${round.score === null ? "" : ` — ${round.score}${round.toPar === null ? "" : ` (${round.toPar === 0 ? "E" : round.toPar > 0 ? `+${round.toPar}` : round.toPar})`}`}`
+                    : round.status === "in_progress" ? "Resume round" : "Not started"}
+                </span>
+                <span className="mt-2 block font-black">{round.status === "not_started" ? `Begin ${round.displayLabel}` : `View ${round.displayLabel}`}</span>
+              </button>
+            ))}
+          </div>
+          <button className="mt-6 min-h-12 w-full rounded-full border-2 border-[#0B3D2E] px-6 py-3 font-black" type="button" onClick={changeCode}>Change Code</button>
+        </div>
+      );
+    }
     return (
       <div aria-live="polite">
         <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">{eventName}</p>

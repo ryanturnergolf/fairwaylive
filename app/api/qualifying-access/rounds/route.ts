@@ -8,24 +8,20 @@ const key = (scope: string, value: string) =>
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { code?: string; playerId?: string; qualifyingRoundId?: string };
+    const body = await request.json() as { code?: string; playerId?: string };
     const code = normalizeQualifyingCode(body.code ?? "");
     const address = request.headers.get("x-real-ip") ||
       request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
     const client = getSupabaseServerClient();
     if (!client) throw new Error();
-    const explicitRoundId = body.qualifyingRoundId?.trim();
-    const { data, error } = await client.rpc(
-      explicitRoundId ? "exchange_qualifying_player_round_access" : "exchange_qualifying_player_access",
-      {
+    const { data, error } = await client.rpc("list_qualifying_player_accessible_rounds", {
       input_code_hash: key("code", code),
       input_ip_hash: key("ip", address),
       input_player_id: body.playerId ?? "",
-      ...(explicitRoundId ? { input_qualifying_round_id: explicitRoundId } : {}),
     });
-    if (error || !data) return NextResponse.json({ error: "Unable to open qualifying." }, { status: 404 });
+    if (error || !data) return NextResponse.json({ error: "Unable to load qualifying rounds." }, { status: 404 });
     return NextResponse.json(data);
   } catch {
-    return NextResponse.json({ error: "Unable to open qualifying." }, { status: 404 });
+    return NextResponse.json({ error: "Unable to load qualifying rounds." }, { status: 404 });
   }
 }

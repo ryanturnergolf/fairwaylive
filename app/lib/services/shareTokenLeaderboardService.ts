@@ -10,10 +10,12 @@ import { loadSharedTournamentScorecardState } from "./tournamentService";
 import type { LegacyScorecardRow } from "../tournamentModel";
 import { buildCourseRoundProjection } from "./courseService";
 import { getQualifyingBackingTournamentStatus } from "../repositories/tournamentRepository";
+import { getQualifyingBackingScoringMode } from "../repositories/tournamentRepository";
 import { getTournamentStateSnapshot } from "../repositories/tournamentRepository";
 import { isTournamentStorageEnvelope } from "../tournamentModel";
 import { buildMultiRoundTournamentLeaderboard, type MultiRoundTournamentLeaderboardProjection } from "./multiRoundLeaderboardService";
 import { buildCourseHoleSequence } from "./courseService";
+import { loadTournamentHoleStatistics } from "./statisticsService";
 
 export type ShareTokenLeaderboardReadModel = {
   tournamentId: string;
@@ -46,9 +48,11 @@ export const loadShareTokenLeaderboard = async ({
     return null;
   }
 
-  const [scoreEntries, isQualifying, snapshot] = await Promise.all([
-    loadComparisonScores({ tournamentId, roundNumber, shareToken }).catch(() => []),
+  const [scoreEntries, isQualifying, scoringMode, officialEntries, snapshot] = await Promise.all([
+    loadComparisonScores({ tournamentId, shareToken }).catch(() => []),
     getQualifyingBackingTournamentStatus(tournamentId, { shareToken }).catch(() => false),
+    getQualifyingBackingScoringMode(tournamentId, { shareToken }).catch(() => null),
+    loadTournamentHoleStatistics({ tournamentId, shareToken }).catch(() => []),
     getTournamentStateSnapshot(tournamentId, { shareToken }).catch(() => null),
   ]);
   const entriesByPlayerId = new Map<string, typeof scoreEntries>();
@@ -103,6 +107,9 @@ export const loadShareTokenLeaderboard = async ({
       tournament: snapshotEnvelope.tournament,
       roundConfigurationById,
       operationalCurrentRoundId: settings.operationalCurrentRoundId,
+      durableScoreEntries: scoreEntries,
+      officialEntries,
+      scoringMode: scoringMode ?? "reciprocal",
     });
   })() : null;
 

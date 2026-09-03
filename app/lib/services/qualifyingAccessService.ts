@@ -20,6 +20,28 @@ export type QualifyingTournamentAccessContext = {
   code: string;
   active: boolean;
   codeHint: string;
+  scoringMode: "reciprocal" | "designated_scorer";
+};
+
+export type QualifyingAccessibleRound = {
+  qualifyingRoundId: string;
+  tournamentRoundId: string;
+  roundNumber: number;
+  dayNumber: number;
+  segmentNumber: number;
+  displayLabel: string;
+  status: "not_started" | "in_progress" | "submitted" | "verified";
+  score: number | null;
+  toPar: number | null;
+};
+
+export type QualifyingAccessibleRounds = {
+  qualifyingSessionId: string;
+  qualifyingName: string;
+  scoringMode: "reciprocal" | "designated_scorer";
+  dayNumber: number;
+  rounds: QualifyingAccessibleRound[];
+  hasFutureRounds: boolean;
 };
 
 export const normalizeQualifyingCode = (value: string) =>
@@ -99,11 +121,25 @@ export const resolveQualifyingCode = async (code: string) => {
   return (await response.json()) as QualifyingAccessResolution;
 };
 
-export const exchangeQualifyingPlayerAccess = async (code: string, playerId: string) => {
-  const response = await fetch("/api/qualifying-access/exchange", {
+export const loadQualifyingPlayerAccessibleRounds = async (code: string, playerId: string) => {
+  const response = await fetch("/api/qualifying-access/rounds", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code: normalizeQualifyingCode(code), playerId }),
+  });
+  if (!response.ok) return null;
+  return await response.json() as QualifyingAccessibleRounds;
+};
+
+export const exchangeQualifyingPlayerAccess = async (
+  code: string,
+  playerId: string,
+  qualifyingRoundId?: string
+) => {
+  const response = await fetch("/api/qualifying-access/exchange", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: normalizeQualifyingCode(code), playerId, qualifyingRoundId }),
   });
   if (!response.ok) return "";
   const result = await response.json() as {
@@ -133,8 +169,13 @@ export const exchangeQualifyingPlayerAccess = async (code: string, playerId: str
       ],
     },
   });
-  if (result.scoringMode !== "designated_scorer") return path;
   const destination = new URL(path, window.location.origin);
+  if (result.qualifyingRoundId) {
+    destination.searchParams.set("qualifyingRoundId", result.qualifyingRoundId);
+  }
+  if (result.scoringMode !== "designated_scorer") {
+    return `${destination.pathname}${destination.search}`;
+  }
   destination.searchParams.set("qualifyingPolicy", "designated_scorer");
   destination.searchParams.set("accessRole", result.accessRole ?? "verifier");
   return `${destination.pathname}${destination.search}`;

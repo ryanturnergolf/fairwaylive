@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const sessionId = searchParams.get("qualifyingSessionId") ?? "";
     const backingTournamentId = searchParams.get("backingTournamentId") ?? "";
     const sessionQuery = client.from("qualifying_sessions")
-      .select("id,name,status,tournament_id");
+      .select("id,name,status,tournament_id,scoring_mode");
     const { data: session, error } = backingTournamentId
       ? await sessionQuery.eq("tournament_id", backingTournamentId).maybeSingle()
       : await sessionQuery.eq("id", sessionId).maybeSingle();
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
           code: data ? generateQualifyingCode(session.id, data.generation) : "",
           active: Boolean(data?.active),
           codeHint: data?.code_hint ?? "",
+          scoringMode: session.scoring_mode,
         },
       });
     }

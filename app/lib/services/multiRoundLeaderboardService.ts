@@ -2,6 +2,9 @@ import type { Tournament } from "../tournamentModel";
 import { formatScoreToPar } from "./tournamentDerivedState";
 import { orderConfiguredRounds, roundDisplayLabel } from "./roundDomainService";
 import type { GolfScorecardHole } from "../../components/leaderboards/GolfScorecardGrid";
+import type { ScoreEntryRow } from "../repositories/scoreRepository";
+import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
+import { selectQualifyingCompetitionScore } from "./qualifyingCompetitionScoreService";
 
 export type RoundLeaderboardSummary = {
   roundId: string;
@@ -60,7 +63,26 @@ const rank = <T,>(rows: T[], score: (row: T) => number | null) => {
   }));
 };
 
-const scoreForPlayerRound = (tournament: Tournament, playerId: string, roundId: string) => {
+const scoreForPlayerRound = (
+  tournament: Tournament,
+  playerId: string,
+  roundId: string,
+  roundNumber: number,
+  durableScoreEntries: ScoreEntryRow[],
+  officialEntries: ScoreHoleEntryRow[],
+  scoringMode: "reciprocal" | "designated_scorer"
+) => {
+  const durableRows = durableScoreEntries.filter(
+    (score) => String(score.player_id) === playerId && Number(score.round_number) === roundNumber
+  );
+  const selected = selectQualifyingCompetitionScore({
+    playerId,
+    scoringMode,
+    scoreEntries: durableRows,
+    officialEntries: officialEntries.filter((entry) => Number(entry.round_number) === roundNumber),
+    holeCount: Math.max(...durableRows.map((entry) => entry.hole_scores.length), 0),
+  });
+  if (selected) return { holeScores: selected.holeScores };
   const rows = tournament.scores.filter((score) => score.playerId === playerId && score.roundId === roundId);
   return rows.find((score) => score.enteredBy === "marker") ?? rows.find((score) => score.enteredBy === "self") ?? null;
 };
@@ -97,10 +119,16 @@ export const buildMultiRoundTournamentLeaderboard = ({
   tournament,
   roundConfigurationById = {},
   operationalCurrentRoundId,
+  durableScoreEntries = [],
+  officialEntries = [],
+  scoringMode = "reciprocal",
 }: {
   tournament: Tournament;
   roundConfigurationById?: Record<string, RoundConfiguration>;
   operationalCurrentRoundId?: string | null;
+  durableScoreEntries?: ScoreEntryRow[];
+  officialEntries?: ScoreHoleEntryRow[];
+  scoringMode?: "reciprocal" | "designated_scorer";
 }): MultiRoundTournamentLeaderboardProjection => {
   const rounds = orderConfiguredRounds(tournament.rounds).map((round) => ({
     id: round.id,
@@ -110,7 +138,15 @@ export const buildMultiRoundTournamentLeaderboard = ({
   const teamById = new Map(tournament.teams.map((team) => [team.id, team]));
   const players = tournament.players.map((player): MultiRoundPlayerLeaderboardRow => {
     const summaries = Object.fromEntries(rounds.map((round) => {
-      const score = scoreForPlayerRound(tournament, player.id, round.id);
+      const score = scoreForPlayerRound(
+        tournament,
+        player.id,
+        round.id,
+        round.roundNumber,
+        durableScoreEntries,
+        officialEntries,
+        scoringMode
+      );
       return [round.id, buildRoundSummary(round.id, round.roundNumber, score?.holeScores ?? [], roundConfigurationById[round.id])];
     }));
     const started = Object.values(summaries).filter((summary) => summary.total !== null);

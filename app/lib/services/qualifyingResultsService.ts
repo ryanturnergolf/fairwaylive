@@ -12,6 +12,7 @@ import type {
 import type { ScoreEntryRow, ScoreReviewStatusRow } from "../repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
 import { applyOfficialScoreResolutions, buildOfficialScoreResolutionMap } from "./officialScoreResolutionService";
+import { selectQualifyingCompetitionScore } from "./qualifyingCompetitionScoreService";
 import { resolveQualifyingPolicyReadiness } from "./qualifyingScoringPolicyService";
 
 export type QualifyingEnginePlayer = {
@@ -159,13 +160,16 @@ const buildSegment = ({
   const official = buildOfficialScoreResolutionMap(
     holeEntries.filter((entry) => entry.round_number === round.roundNumber)
   );
-  const primary = scoringMode === "designated_scorer" ? (marker ?? self) : self;
-  const resolvedSelf = applyOfficialScoreResolutions(
-    primary?.hole_scores ?? [],
-    player.playerId,
-    round.holeCount,
-    official
-  );
+  const selected = selectQualifyingCompetitionScore({
+    playerId: player.playerId,
+    scoringMode,
+    scoreEntries: playerScores,
+    officialEntries: holeEntries.filter((entry) => entry.round_number === round.roundNumber),
+    holeCount: round.holeCount,
+    assignedScorerPlayerId: scoringMode === "designated_scorer" ? marker?.entered_by_player_id : player.assignedMarkerPlayerId,
+  });
+  const primary = selected?.entry;
+  const resolvedSelf = selected?.holeScores ?? [];
   const review = reviewStatuses.find((row) =>
     row.round_number === round.roundNumber && String(row.player_id) === player.playerId
   );

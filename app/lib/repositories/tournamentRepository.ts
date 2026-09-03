@@ -141,6 +141,18 @@ export const getQualifyingBackingTournamentStatus = async (
   return data === true;
 };
 
+export const getQualifyingBackingScoringMode = async (
+  tournamentId: string,
+  options: ShareTokenReadOptions = {}
+): Promise<"reciprocal" | "designated_scorer" | null> => {
+  const client = await getReadClient(options);
+  const { data, error } = await client.rpc("get_qualifying_backing_scoring_mode", {
+    target_tournament_id: tournamentId,
+  });
+  if (error) throw error;
+  return data === "reciprocal" || data === "designated_scorer" ? data : null;
+};
+
 const tournamentColumns =
   "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
 

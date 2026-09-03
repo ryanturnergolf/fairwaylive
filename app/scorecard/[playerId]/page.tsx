@@ -46,6 +46,7 @@ import {
 } from "../../lib/services/mobileDynamicStatisticsService";
 import { createOperationId } from "../../lib/services/operationIdService";
 import { resolveScorecardRound } from "../../lib/services/scorecardRoundResolutionService";
+import { exchangeQualifyingPlayerAccess, loadQualifyingPlayerAccessibleRounds, type QualifyingAccessibleRound } from "../../lib/services/qualifyingAccessService";
 
 type Hole = {
   holeNumber: number;
@@ -302,6 +303,7 @@ function ReciprocalPlayerScorecardPage() {
   const requestedShareToken = searchParams.get("shareToken") ?? "";
   const requestedRound = searchParams.get("round") ?? "";
   const requestedRoundId = searchParams.get("roundId") ?? "";
+  const requestedQualifyingRoundId = searchParams.get("qualifyingRoundId") ?? "";
   const [resolvedShareTournamentId, setResolvedShareTournamentId] = useState("");
   const [qrResolvedScorecard, setQrResolvedScorecard] = useState<PlayerScorecard | { error: string } | null>(null);
   const [hasResolvedQrScorecard, setHasResolvedQrScorecard] = useState(false);
@@ -702,6 +704,31 @@ function ReciprocalPlayerScorecardPage() {
   const [postSubmissionView, setPostSubmissionView] = useState<"confirmation" | "scorecard">(
     searchParams.get("postRound") === "scorecard" ? "scorecard" : "confirmation"
   );
+  const [nextQualifyingRound, setNextQualifyingRound] = useState<QualifyingAccessibleRound | null>(null);
+  const [hasFutureQualifyingRound, setHasFutureQualifyingRound] = useState(false);
+  const [isOpeningNextRound, setIsOpeningNextRound] = useState(false);
+
+  useEffect(() => {
+    if (!requestedQualifyingRoundId || typeof window === "undefined") return;
+    const code = sessionStorage.getItem("clubhouse-hq:qualifying-code") ?? "";
+    const playerId = sessionStorage.getItem("clubhouse-hq:qualifying-player") ?? "";
+    if (!code || !playerId) return;
+    void loadQualifyingPlayerAccessibleRounds(code, playerId).then((access) => {
+      const currentIndex = access?.rounds.findIndex((round) => round.qualifyingRoundId === requestedQualifyingRoundId) ?? -1;
+      setNextQualifyingRound(currentIndex >= 0 ? access?.rounds[currentIndex + 1] ?? null : null);
+      setHasFutureQualifyingRound(Boolean(access?.hasFutureRounds));
+    });
+  }, [requestedQualifyingRoundId]);
+
+  const openNextQualifyingRound = async () => {
+    if (!nextQualifyingRound || typeof window === "undefined") return;
+    const code = sessionStorage.getItem("clubhouse-hq:qualifying-code") ?? "";
+    const playerId = sessionStorage.getItem("clubhouse-hq:qualifying-player") ?? "";
+    setIsOpeningNextRound(true);
+    const destination = await exchangeQualifyingPlayerAccess(code, playerId, nextQualifyingRound.qualifyingRoundId);
+    if (destination) window.location.assign(destination);
+    else setIsOpeningNextRound(false);
+  };
   const [submittedStatistics, setSubmittedStatistics] = useState<ReviewComparisonModel["statistics"] | null>(null);
   const [isSubmittedStatisticsLoading, setIsSubmittedStatisticsLoading] = useState(false);
   const [submittedStatisticsError, setSubmittedStatisticsError] = useState("");
@@ -2210,6 +2237,16 @@ function ReciprocalPlayerScorecardPage() {
                 </div>
               </div>
               <div className="mt-5 flex flex-col gap-3">
+                {nextQualifyingRound ? (
+                  <button type="button" disabled={isOpeningNextRound} onClick={() => void openNextQualifyingRound()}
+                    className="min-h-12 rounded-full bg-[#B8892D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
+                    {isOpeningNextRound ? "Opening…" : `Begin ${nextQualifyingRound.displayLabel}`}
+                  </button>
+                ) : hasFutureQualifyingRound ? (
+                  <p className="rounded-2xl border border-[#D8C9AE] bg-[#FCFAF5] p-4 text-sm font-semibold text-[#51635C]">
+                    The next round will become available when your coach advances the Qualifying session. Use the same scoring code when it opens.
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => updatePostSubmissionView("scorecard")}
