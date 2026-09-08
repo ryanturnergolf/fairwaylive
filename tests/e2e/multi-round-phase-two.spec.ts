@@ -216,7 +216,10 @@ test("mobile, Review, statistics, and designated APIs retain explicit round scop
     "utf8"
   );
   expect(qualifyingWorkspace).toContain("operationalCurrentQualifyingRoundId");
-  expect(qualifyingWorkspace).toContain("handleOperationalRoundChange");
+  expect(qualifyingWorkspace).toContain('aria-label="Current scoring round"');
+  expect(qualifyingWorkspace).toContain("handleCompleteRound");
+  expect(qualifyingWorkspace).toContain("advanceQualifyingOperationalRound");
+  expect(qualifyingWorkspace).not.toContain("handleOperationalRoundChange");
 });
 
 test("Phase 2 migration returns stable access identity and uses operational authority", () => {

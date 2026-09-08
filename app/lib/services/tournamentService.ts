@@ -39,7 +39,7 @@ import type {
   TournamentStorageEnvelope,
 } from "../tournamentModel";
 import { parseConfiguredRoundCount, resolveConfiguredTournamentRound } from "./roundDomainService";
-import { resolveScorecardRound } from "./scorecardRoundResolutionService";
+import { canUseSnapshotScorecardPresentation, resolveScorecardRound } from "./scorecardRoundResolutionService";
 import { legacyUiStateToTournamentModel } from "../tournamentModel";
 import type { EventCourseSetupSelection } from "../courseModel";
 
@@ -1777,7 +1777,12 @@ export const loadSharedTournamentScorecardState = async (
         markerPlayerId: String(row.marker_player_id),
       })),
     }));
-  const snapshotScorecardRows = snapshotEnvelope?.uiState.scorecards.scorecardRows ?? [];
+  const snapshotScorecardRows = canUseSnapshotScorecardPresentation(
+    uiRoundSetup?.roundNumber,
+    roundNumber
+  )
+    ? snapshotEnvelope?.uiState.scorecards.scorecardRows ?? []
+    : [];
   const findSnapshotScorecard = (row: TournamentPlayerRow) => {
     const byStableId = snapshotScorecardRows.filter((scorecard) => String(scorecard.id) === row.player_id);
     if (byStableId.length === 1) {

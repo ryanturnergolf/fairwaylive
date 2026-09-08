@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
 import { activateQualifyingSession } from "../../lib/services/qualifyingActivationService";
 import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
+import { finalizeQualifyingSession } from "../../lib/services/qualifyingFinalizationService";
 import {
   getQualifyingTournamentWorkspaceHref,
   listQualifyingSessionFoundations,
@@ -26,6 +27,7 @@ export default function QualifyingSessionsPage() {
   const [operationalRoundMessage, setOperationalRoundMessage] = useState<Record<string, string>>({});
   const [roundProgression, setRoundProgression] = useState<Record<string, QualifyingRoundProgressionState | null>>({});
   const [advancingId, setAdvancingId] = useState("");
+  const [finalizingId, setFinalizingId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -147,14 +149,24 @@ export default function QualifyingSessionsPage() {
     }
   };
 
-  const handleOperationalRoundChange = async (qualifyingSessionId: string, qualifyingRoundId: string) => {
-    const foundation = sessions.find((item) => item.session.id === qualifyingSessionId);
-    const progression = roundProgression[qualifyingSessionId];
-    if (!foundation || !progression || progression.nextRound?.qualifyingRoundId !== qualifyingRoundId) {
-      setOperationalRoundMessage((current) => ({ ...current, [qualifyingSessionId]: "Rounds advance in order after the current round is complete." }));
-      return;
+  const handleCompleteQualifying = async (foundation: QualifyingSessionFoundation, progression: QualifyingRoundProgressionState) => {
+    if (!progression.isFinalRound || !progression.ready) return;
+    if (!window.confirm(`Complete and finalize ${foundation.session.name}? Scores will become read-only.`)) return;
+    setFinalizingId(foundation.session.id);
+    try {
+      await finalizeQualifyingSession(foundation.session.id);
+      setSessions((current) => current.map((item) => item.session.id === foundation.session.id
+        ? { ...item, session: { ...item.session, status: "finalized" } }
+        : item));
+      setOperationalRoundMessage((current) => ({ ...current, [foundation.session.id]: "Qualifying finalized." }));
+    } catch (cause) {
+      setOperationalRoundMessage((current) => ({
+        ...current,
+        [foundation.session.id]: cause instanceof Error ? cause.message : "Unable to finalize Qualifying.",
+      }));
+    } finally {
+      setFinalizingId("");
     }
-    await handleCompleteRound(foundation, progression);
   };
 
   return (
@@ -261,28 +273,24 @@ export default function QualifyingSessionsPage() {
                   ) : null}
                   {session.status === "active" && (foundation.configuredRounds?.length ?? 0) > 1 ? (
                     <div className="mt-4 rounded-lg border border-[#D6E0D8] bg-white p-4">
-                      <label className="block text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
+                      <div aria-label="Current scoring round" className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
                         Current Scoring Round
-                        <select
-                          disabled
-                          value={session.operationalCurrentQualifyingRoundId ?? ""}
-                          onChange={(event) => void handleOperationalRoundChange(session.id, event.target.value)}
-                          className="mt-2 min-h-12 w-full rounded-lg border border-[#D6E0D8] bg-white px-3 text-sm font-black text-[#0B3D2E]"
-                        >
-                          <option value="" disabled>Select a configured round</option>
-                          {foundation.configuredRounds?.map((round) => (
-                            <option key={round.qualifyingRoundId} value={round.qualifyingRoundId}>
-                              {round.displayLabel} · Day {round.qualifyingDay} · Segment {round.qualifyingSegment}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                        <p className="mt-2 min-h-12 rounded-lg border border-[#D6E0D8] bg-[#F6F1E6] px-3 py-3 text-sm font-black normal-case tracking-normal text-[#0B3D2E]">
+                          {progression
+                            ? `${progression.displayLabel} · Day ${progression.dayNumber} · Segment ${progression.segmentNumber}`
+                            : "Loading current round…"}
+                        </p>
+                      </div>
                       {progression ? (
                         <div className="mt-3 border-t border-[#D6E0D8] pt-3">
                           <p className="text-sm font-black">{progression.displayLabel} · Day {progression.dayNumber} · Segment {progression.segmentNumber}</p>
                           <p className="mt-1 text-sm font-semibold text-[#51635C]">{progression.completeScorecards} of {progression.requiredScorecards} scorecards complete</p>
                           {progression.isFinalRound ? (
-                            <p className="mt-3 text-sm font-bold">Use the existing Qualifying finalization action when the final round is ready.</p>
+                            <button type="button" disabled={!progression.ready || finalizingId === session.id}
+                              onClick={() => void handleCompleteQualifying(foundation, progression)}
+                              className="mt-3 min-h-12 w-full rounded-lg bg-[#B8892D] px-4 py-3 text-sm font-black text-[#0B3D2E] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+                              {finalizingId === session.id ? "Finalizing…" : "Complete Qualifying"}
+                            </button>
                           ) : (
                             <button type="button" disabled={!progression.ready || advancingId === session.id}
                               onClick={() => void handleCompleteRound(foundation, progression)}

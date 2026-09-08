@@ -45,7 +45,7 @@ import {
   type MobileStatisticItem,
 } from "../../lib/services/mobileDynamicStatisticsService";
 import { createOperationId } from "../../lib/services/operationIdService";
-import { resolveScorecardRound } from "../../lib/services/scorecardRoundResolutionService";
+import { canUseSnapshotScorecardPresentation, resolveScorecardRound } from "../../lib/services/scorecardRoundResolutionService";
 import { exchangeQualifyingPlayerAccess, loadQualifyingPlayerAccessibleRounds, type QualifyingAccessibleRound } from "../../lib/services/qualifyingAccessService";
 
 type Hole = {
@@ -931,7 +931,12 @@ function ReciprocalPlayerScorecardPage() {
       let supabaseLoadedCount = 0;
       const envelope = loadTournamentStorageEnvelope(requestedTournamentId);
       if (envelope) {
-        const scorecardRows = envelope.uiState?.scorecards?.scorecardRows || [];
+        const scorecardRows = canUseSnapshotScorecardPresentation(
+          envelope.uiState?.scorecards?.roundSetup?.roundNumber,
+          roundNumber
+        )
+          ? envelope.uiState?.scorecards?.scorecardRows || []
+          : [];
         const selfScorecardRow = scorecardRows.find(
           (row) => resolvedPlayerIds.selectedPlayerIds.includes(String(row.id)) && hasAnyHoleScore(row.scores)
         );

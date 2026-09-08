@@ -82,3 +82,12 @@ export const resolveScorecardRound = ({
 
 export const scorecardRoundRequestKey = (tournamentId: string, scorecardRoundId: string) =>
   `${tournamentId}:${scorecardRoundId}`;
+
+/**
+ * Legacy presentation scorecard rows describe only the snapshot's selected UI
+ * round. They are safe as a fallback only for that exact resolved round.
+ */
+export const canUseSnapshotScorecardPresentation = (
+  snapshotRoundNumber: unknown,
+  resolvedRoundNumber: number
+) => Number(snapshotRoundNumber) === resolvedRoundNumber;

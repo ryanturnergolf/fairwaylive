@@ -6,6 +6,7 @@ import { buildQualifyingRoundProgressionState } from "../../app/lib/services/qua
 import type { Tournament } from "../../app/lib/tournamentModel";
 import type { QualifyingResultsReadModel, QualifyingSessionFoundation } from "../../app/lib/qualifyingModel";
 import { selectQualifyingCompetitionScore } from "../../app/lib/services/qualifyingCompetitionScoreService";
+import { canUseSnapshotScorecardPresentation } from "../../app/lib/services/scorecardRoundResolutionService";
 
 const source = (file: string) => fs.readFileSync(path.join(process.cwd(), file), "utf8");
 const tournament: Tournament = {
@@ -100,4 +101,60 @@ test("coach readiness loads independently of the Results panel", () => {
   expect(page).not.toContain("Open Results to load canonical round readiness");
   expect(migration).toContain("private.qualifying_round_readiness");
   expect(migration).toContain("readiness := private.qualifying_round_readiness");
+});
+
+test("two-day progression never hydrates R1 presentation scores into empty R2", () => {
+  expect(canUseSnapshotScorecardPresentation("1", 1)).toBe(true);
+  expect(canUseSnapshotScorecardPresentation("1", 2)).toBe(false);
+  const tournamentService = source("app/lib/services/tournamentService.ts");
+  const scorecardPage = source("app/scorecard/[playerId]/page.tsx");
+  expect(tournamentService).toContain("canUseSnapshotScorecardPresentation");
+  expect(scorecardPage).toContain("envelope.uiState?.scorecards?.roundSetup?.roundNumber");
+});
+
+test("coach current round is read-only and final round exposes guarded completion", () => {
+  const page = source("app/coach-dashboard/qualifying-manager/page.tsx");
+  expect(page).toContain('aria-label="Current scoring round"');
+  expect(page).not.toContain("handleOperationalRoundChange");
+  expect(page).toContain('"Complete Qualifying"');
+  expect(page).toContain("!progression.ready || finalizingId === session.id");
+});
+
+test("two-day R1 results remain distinct while operational R2 readiness starts at zero", () => {
+  const r2Foundation = structuredClone(foundation);
+  r2Foundation.session.operationalCurrentQualifyingRoundId = "q-r2";
+  const r2Results = {
+    combined: ["aj", "colin"].map((playerId) => ({
+      playerId,
+      segments: [
+        {
+          tournamentRoundId: "t-r1",
+          score: playerId === "aj" ? 36 : 45,
+          through: "F",
+          completionStatus: "complete",
+          submitted: true,
+          reviewComplete: true,
+        },
+        {
+          tournamentRoundId: "t-r2",
+          score: null,
+          through: "Not started",
+          completionStatus: "incomplete",
+          submitted: false,
+          reviewComplete: false,
+        },
+      ],
+    })),
+  } as QualifyingResultsReadModel;
+
+  expect(r2Results.combined.map((player) => player.segments[0].score)).toEqual([36, 45]);
+  expect(r2Results.combined.map((player) => player.segments[1].through)).toEqual(["Not started", "Not started"]);
+  expect(buildQualifyingRoundProgressionState(r2Foundation, r2Results)).toMatchObject({
+    currentQualifyingRoundId: "q-r2",
+    currentTournamentRoundId: "t-r2",
+    completeScorecards: 0,
+    requiredScorecards: 2,
+    ready: false,
+    isFinalRound: true,
+  });
 });
