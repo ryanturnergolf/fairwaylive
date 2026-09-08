@@ -1462,6 +1462,19 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
   await expect(page.getByText("Final Score").locator("..")).toContainText("72");
   await expect(page.getByText("To Par").locator("..")).toContainText("E");
   await expect(page.getByRole("button", { name: "View My Scorecard and Stats" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View Verified Score Comparison" })).toBeVisible();
+
+  const submittedRoundUrl = new URL(page.url());
+  await page.getByRole("button", { name: "View Verified Score Comparison" }).click();
+  await expect(page.getByText("Verify Score", { exact: true })).toBeVisible();
+  await expect(page.getByText("Self Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("This submitted score comparison is read-only.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit Scores" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit Verification" })).toHaveCount(0);
+  expect(new URL(page.url()).search).toBe(submittedRoundUrl.search);
+  await page.getByRole("button", { name: "Back to Submission Confirmation" }).click();
+  await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
 
   const leaderboardLink = page.getByRole("link", { name: "Go to Leaderboard" });
   await expect(leaderboardLink).toHaveAttribute(

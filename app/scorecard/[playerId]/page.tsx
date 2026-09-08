@@ -2259,6 +2259,16 @@ function ReciprocalPlayerScorecardPage() {
                 >
                   View My Scorecard and Stats
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConfirm(false);
+                    setView("review");
+                  }}
+                  className="min-h-12 rounded-full border border-[#0B3D2E] px-5 py-3 text-sm font-black text-[#0B3D2E]"
+                >
+                  View Verified Score Comparison
+                </button>
                 <Link
                   href={leaderboardHref}
                   className="flex min-h-12 items-center justify-center rounded-full border border-[#0B3D2E] px-5 py-3 text-sm font-black text-[#0B3D2E]"
@@ -2728,7 +2738,23 @@ function ReciprocalPlayerScorecardPage() {
           </div>
           )}
 
-          {!showConfirm ? (
+          {submissionComplete ? (
+            <div className="mt-4 flex flex-col gap-3">
+              <p className="rounded-2xl border border-[#77B98E] bg-[#ECF8EF] p-3 text-xs font-semibold text-[#146233]">
+                This submitted score comparison is read-only.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setView("submitted");
+                  updatePostSubmissionView("confirmation");
+                }}
+                className="min-h-12 w-full rounded-full border border-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#0B3D2E]"
+              >
+                Back to Submission Confirmation
+              </button>
+            </div>
+          ) : !showConfirm ? (
             <div className="mt-4 flex flex-col gap-3">
               <button
                 type="button"
