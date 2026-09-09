@@ -68,7 +68,7 @@ const formatOptions = [
 ];
 
 const eventTypeOptions = ["Team Event", "Individual Event", "Both"];
-const steps = ["Basic Information", "Format", "Round Setup", "Integrations", "Review"];
+const steps = ["Basics", "Players", "Schedule", "Groups", "Scoring", "Statistics", "Review"];
 const creationKeyStoragePrefix = "clubhouse-hq-tournament-creation-key:";
 
 const acquireTournamentCreationKey = (scope: string) => {
@@ -280,6 +280,14 @@ export default function DashboardPage() {
       setIsCoachAuthenticated(Boolean(session && !session.user.is_anonymous));
     });
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash === "#create-tournament") {
+      openModal();
+    }
+  // The creation link is an entry route, not reactive dashboard state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -717,6 +725,7 @@ export default function DashboardPage() {
 
   const validateStep = () => {
     const nextErrors: Partial<Record<keyof FormState, string>> = {};
+    let stepError = "";
 
     if (currentStep === 1) {
       if (!formState.name.trim()) {
@@ -742,15 +751,33 @@ export default function DashboardPage() {
       }
     }
 
+    if (currentStep === 2) {
+      const teamSize = Number(formState.teamSize);
+      const countingScores = Number(formState.countingScores);
+      if (!Number.isInteger(teamSize) || teamSize < 1 || teamSize > 12) stepError = "Team size must be between 1 and 12.";
+      else if (!Number.isInteger(countingScores) || countingScores < 1 || countingScores > teamSize) stepError = "Counting scores must be between 1 and the team size.";
+    }
+
+    if (currentStep === 3 && formState.roundSetup.some((round) => (
+      !round.date || !Number.isInteger(Number(round.startingHole)) || Number(round.startingHole) < 1 || Number(round.startingHole) > 18 ||
+      !Number.isInteger(Number(round.holes)) || Number(round.holes) < 1 || Number(round.holes) > 18
+    ))) {
+      stepError = "Each round needs a date, starting hole, and hole count from 1 to 18.";
+    }
+
+    if (currentStep === 4 && !formState.startingHoles.trim()) stepError = "Enter the starting hole or holes for group setup.";
+
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    setCreationError(stepError);
+    return Object.keys(nextErrors).length === 0 && !stepError;
   };
 
   const handleNext = () => {
     if (!validateStep()) {
       return;
     }
-    setCurrentStep((current) => Math.min(current + 1, 5));
+    setCreationError("");
+    setCurrentStep((current) => Math.min(current + 1, steps.length));
   };
 
   const handleBack = () => {
@@ -1531,41 +1558,13 @@ export default function DashboardPage() {
 
             <form className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-7" onSubmit={handleCreateTournament}>
               {creationError ? <p role="alert" className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">{creationError}</p> : null}
-              <div className="mb-5 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Create From Template</p>
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(event) => setSelectedTemplateId(event.target.value)}
-                    className="w-full rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-sm font-semibold normal-case tracking-normal text-[#0B3D2E] outline-none"
-                  >
-                    <option value="">Select a template</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={String(template.id)}>
-                        {template.tournamentName}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleApplyTemplate}
-                    disabled={!selectedTemplateId}
-                    className="rounded-full border border-[#B8892D] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Apply Template
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-6 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-4">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.35em] text-[#51635C]">
-                  <span>Step {currentStep} of 5</span>
-                  <span>{steps[currentStep - 1]}</span>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#E8DCC8]">
-                  <div className="h-full rounded-full bg-[#0B3D2E] transition-all duration-300" style={{ width: `${(currentStep / 5) * 100}%` }} />
-                </div>
-              </div>
+              <ol className="mb-6 grid grid-cols-3 gap-2 md:grid-cols-7" aria-label="Tournament creation progress">
+                {steps.map((label, index) => (
+                  <li key={label} aria-current={index + 1 === currentStep ? "step" : undefined} className={`rounded-lg px-2 py-2 text-center text-xs font-black ${index + 1 === currentStep ? "bg-[#0B3D2E] text-white" : "bg-white text-[#51635C]"}`}>
+                    {index + 1}. {label}
+                  </li>
+                ))}
+              </ol>
 
               {currentStep === 1 ? (
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -1660,22 +1659,9 @@ export default function DashboardPage() {
               {currentStep === 2 ? (
                 <div className="space-y-6">
                   <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Scoring Format</p>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      {formatOptions.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setFormState((current) => ({ ...current, scoringFormat: option }))}
-                          className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold uppercase tracking-[0.25em] transition duration-300 ${formState.scoringFormat === option ? "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]" : "border-[#E8DCC8] bg-[#FCFAF5] text-[#51635C] hover:bg-[#F6F1E6]"}`}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Event Type</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Players</p>
+                    <h4 className="mt-2 text-xl font-black">Choose the player format</h4>
+                    <p className="mt-2 text-sm text-[#51635C]">Use the existing Tournament team and player workspace after creation to add the actual field.</p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-3">
                       {eventTypeOptions.map((option) => (
                         <button
@@ -1714,28 +1700,6 @@ export default function DashboardPage() {
                           value={formState.countingScores}
                           onChange={handleInputChange}
                           className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                        <span>Tee or Shotgun</span>
-                        <select
-                          name="startFormat"
-                          value={formState.startFormat}
-                          onChange={handleInputChange}
-                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                        >
-                          <option value="Tee">Tee</option>
-                          <option value="Shotgun">Shotgun</option>
-                        </select>
-                      </label>
-                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                        <span>Starting Holes</span>
-                        <input
-                          name="startingHoles"
-                          value={formState.startingHoles}
-                          onChange={handleInputChange}
-                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                          placeholder="1 or 1,10"
                         />
                       </label>
                     </div>
@@ -1808,49 +1772,59 @@ export default function DashboardPage() {
               ) : null}
 
               {currentStep === 4 ? (
-                <div className="space-y-5">
-                  <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Clubhouse HQ</p>
-                        <h4 className="mt-2 text-xl font-black tracking-[-0.02em] text-[#0B3D2E]">Live Scoring</h4>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setFormState((current) => ({ ...current, integrations: { ...current.integrations, clubhouseLiveScoring: !current.integrations.clubhouseLiveScoring } }))}
-                        className={`flex h-7 w-14 items-center rounded-full p-1 transition duration-300 ${formState.integrations.clubhouseLiveScoring ? "bg-[#0B3D2E]" : "bg-[#D9D0C0]"}`}
-                      >
-                        <span className={`h-5 w-5 rounded-full bg-white transition duration-300 ${formState.integrations.clubhouseLiveScoring ? "translate-x-7" : "translate-x-0"}`} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Clippd</p>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                        <span>Tournament ID</span>
-                        <input
-                          value={formState.integrations.clippdTournamentId}
-                          onChange={(event) => setFormState((current) => ({ ...current, integrations: { ...current.integrations, clippdTournamentId: event.target.value } }))}
-                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                          placeholder="CLIPPD-001"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
-                        <span>Tournament Key</span>
-                        <input
-                          value={formState.integrations.clippdTournamentKey}
-                          onChange={(event) => setFormState((current) => ({ ...current, integrations: { ...current.integrations, clippdTournamentKey: event.target.value } }))}
-                          className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none"
-                          placeholder="Enter key"
-                        />
-                      </label>
-                    </div>
+                <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Groups</p>
+                  <h4 className="mt-2 text-xl font-black">Prepare pairing defaults</h4>
+                  <p className="mt-2 text-sm text-[#51635C]">Players and groups remain managed by the existing Event Workspace after the Tournament is created.</p>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Tee or Shotgun</span>
+                      <select name="startFormat" value={formState.startFormat} onChange={handleInputChange} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none">
+                        <option value="Tee">Tee</option>
+                        <option value="Shotgun">Shotgun</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-[#51635C]">
+                      <span>Starting Holes</span>
+                      <input name="startingHoles" value={formState.startingHoles} onChange={handleInputChange} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 text-base font-medium normal-case tracking-normal text-[#0B3D2E] outline-none" placeholder="1 or 1,10" />
+                    </label>
                   </div>
                 </div>
               ) : null}
 
               {currentStep === 5 ? (
+                <div className="space-y-5">
+                  <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Scoring</p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {formatOptions.map((option) => (
+                        <button key={option} type="button" onClick={() => setFormState((current) => ({ ...current, scoringFormat: option }))} className={`min-h-12 rounded-2xl border px-4 py-3 text-left text-sm font-semibold uppercase tracking-[0.25em] transition duration-300 ${formState.scoringFormat === option ? "border-[#0B3D2E] bg-[#0B3D2E] text-[#F6F1E6]" : "border-[#E8DCC8] bg-[#FCFAF5] text-[#51635C] hover:bg-[#F6F1E6]"}`}>
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Clubhouse HQ</p><h4 className="mt-2 text-xl font-black">Live Scoring</h4></div>
+                      <button type="button" role="switch" aria-checked={formState.integrations.clubhouseLiveScoring} aria-label="Clubhouse HQ live scoring" onClick={() => setFormState((current) => ({ ...current, integrations: { ...current.integrations, clubhouseLiveScoring: !current.integrations.clubhouseLiveScoring } }))} className={`flex h-12 w-16 items-center rounded-full p-1 transition duration-300 ${formState.integrations.clubhouseLiveScoring ? "bg-[#0B3D2E]" : "bg-[#D9D0C0]"}`}>
+                        <span className={`h-7 w-7 rounded-full bg-white transition duration-300 ${formState.integrations.clubhouseLiveScoring ? "translate-x-7" : "translate-x-0"}`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {currentStep === 6 ? (
+                <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Statistics</p>
+                  <h4 className="mt-2 text-xl font-black">Use the Tournament statistics package</h4>
+                  <p className="mt-2 text-sm leading-6 text-[#51635C]">The existing dynamic-statistics package authority remains unchanged. After creation, assign or update the Tournament package from Statistics Configuration.</p>
+                  <Link href="/coach-dashboard/statistics" className="mt-5 inline-flex min-h-12 items-center rounded-xl border border-[#0B3D2E] px-4 py-3 text-sm font-black">Open Statistics Configuration</Link>
+                </div>
+              ) : null}
+
+              {currentStep === 7 ? (
                 <div className="space-y-5 rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1924,7 +1898,7 @@ export default function DashboardPage() {
                     Back
                   </button>
                 ) : null}
-                {currentStep < 5 ? (
+                {currentStep < steps.length ? (
                   <button
                     type="button"
                     onClick={handleNext}
