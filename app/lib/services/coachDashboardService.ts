@@ -290,14 +290,8 @@ const isActiveTournament = (source: TournamentSource, summary: DirectorTournamen
 const buildQuickActions = (): CoachDashboardAction[] => [
   { label: "Tasks", href: "/coach-dashboard/tasks", detail: "Open unified attention queue", enabled: true },
   { label: "Calendar", href: "/coach-dashboard/calendar", detail: "Open unified program schedule", enabled: true },
-  { label: "Create Tournament", href: "/dashboard", detail: "Open tournament setup", enabled: true },
+  { label: "Events", href: "/coach-dashboard/events", detail: "Manage Tournaments and Qualifying Sessions", enabled: true },
   { label: "Practice Planner", href: "/coach-dashboard/practice-planner", detail: "Organize upcoming practices", enabled: true },
-  {
-    label: "Create Qualifying",
-    href: "/coach-dashboard/qualifying-manager",
-    detail: "Open qualifying sessions and creation",
-    enabled: true,
-  },
   {
     label: "Player Development",
     href: "/coach-dashboard/player-development",
@@ -329,7 +323,7 @@ const buildTasks = (directorSummaries: DirectorTournamentSummary[]) =>
           title: "Ready for finalization",
           detail: summary.tournamentName,
           meta: "Tournament closeout",
-          href: `/dashboard#director`,
+          href: `/tournament/${encodeURIComponent(summary.tournamentId || summary.sharedTournamentId)}?tab=Overview`,
         });
       }
 
@@ -356,7 +350,7 @@ const buildAlerts = (
       title: "Tournament awaiting finalization",
       detail: summary.tournamentName,
       severity: "warning",
-      href: "/dashboard#director",
+      href: `/tournament/${encodeURIComponent(summary.tournamentId || summary.sharedTournamentId)}?tab=Overview`,
     })),
     ...(reviewItems > 0
       ? [{
@@ -364,7 +358,7 @@ const buildAlerts = (
           title: `${reviewItems} review items`,
           detail: "Score review items need attention.",
           severity: "critical" as const,
-          href: "/dashboard#director",
+          href: "/coach-dashboard/events",
         }]
       : []),
     ...(missingStatistics > 0
@@ -391,7 +385,7 @@ const buildAlerts = (
           title: `${unsyncedItems} syncing tournaments`,
           detail: "Shared tournament state is still catching up.",
           severity: "warning" as const,
-          href: "/dashboard#director",
+          href: "/coach-dashboard/events",
         }]
       : []),
   ].slice(0, 8);

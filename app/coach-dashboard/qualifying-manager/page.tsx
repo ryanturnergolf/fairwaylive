@@ -180,7 +180,7 @@ export default function QualifyingSessionsPage() {
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Qualifying Sessions" }]} />
+        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Events", href: "/coach-dashboard/events" }, { label: "Qualifying Sessions" }]} />
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Coach Workflow</p>
@@ -255,7 +255,7 @@ export default function QualifyingSessionsPage() {
                           )}
                           className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
                         >
-                          Open Tournament
+                          Open Event Workspace
                         </Link>
                       ) : null}
                       <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-xs font-black uppercase">

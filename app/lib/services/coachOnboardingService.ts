@@ -37,11 +37,11 @@ export const buildCoachOnboardingReadModel = (
   const experiencedCoach = context.finalizedTournamentCount > 0 || Boolean(readiness?.isSafeToShare);
   const explicitlyActive = preference?.state === "active";
   const dismissed = preference?.state === "dismissed";
-  const tournamentHref = context.tournamentHref || "/dashboard";
+  const tournamentHref = context.tournamentHref || "/coach-dashboard/events";
   const steps: CoachOnboardingStep[] = [
     { id: "roster", label: "Set up your roster", detail: "Add the players who will compete this season.", href: "/coach-dashboard/roster", complete: context.rosterPlayerCount > 0 },
     { id: "statistics", label: "Choose statistics", detail: "Use the defaults or configure the statistics your team tracks.", href: "/coach-dashboard/statistics", complete: context.tournamentCount > 0 },
-    { id: "event", label: "Choose Tournament or Qualifying", detail: "Use Tournament for events and Qualifying for team selection.", href: "/dashboard", complete: context.tournamentCount > 0 },
+    { id: "event", label: "Choose Tournament or Qualifying", detail: "Choose the event type that fits the competition.", href: "/coach-dashboard/events", complete: context.tournamentCount > 0 },
     { id: "setup", label: "Add teams and players", detail: "Confirm the event roster before creating groups.", href: tournamentHref, complete: Boolean(readiness?.checks.playersSynced) },
     { id: "pairings", label: "Create pairings", detail: "Assign every player to a group.", href: tournamentHref, complete: Boolean(readiness?.checks.pairingsGenerated) },
     { id: "scorecards", label: "Generate scorecards", detail: "Create the certified mobile scorecards.", href: tournamentHref, complete: Boolean(readiness?.checks.scorecardsGenerated) },

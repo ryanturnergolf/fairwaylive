@@ -13,8 +13,7 @@ const groups = [
   {
     label: "Competition",
     links: [
-      ["Qualifying", "/coach-dashboard/qualifying-manager"],
-      ["Tournament Director", "/dashboard"],
+      ["Events", "/coach-dashboard/events"],
       ["Live Scores", "/live"],
     ],
   },
@@ -49,7 +48,7 @@ export function CoachHeader() {
         </Link>
         <div className="flex items-center gap-2">
           <nav aria-label="Coach quick links" className="hidden items-center gap-1 xl:flex">
-            <Link href="/coach-dashboard/qualifying-manager" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Qualifying</Link>
+            <Link href="/coach-dashboard/events" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Events</Link>
             <Link href="/coach-dashboard/players" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Players</Link>
             <Link href="/coach-dashboard/team-performance" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Team Performance</Link>
             <Link href="/coach-dashboard/team-statistics" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Team Statistics</Link>

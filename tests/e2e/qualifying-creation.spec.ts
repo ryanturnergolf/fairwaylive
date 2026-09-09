@@ -127,12 +127,13 @@ const foundationResponse = (input: CreateQualifyingSessionInput) => ({
   }],
 });
 
-test("Coach Dashboard exposes Qualifying and Create Qualifying entry points", async ({ page }) => {
+test("Coach Dashboard exposes unified Events and its Create Qualifying action", async ({ page }) => {
   await page.route("**/rest/v1/**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
   );
   await page.goto("/coach-dashboard", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("link", { name: "Qualifying", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Events", exact: true }).first()).toHaveAttribute("href", "/coach-dashboard/events");
+  await page.goto("/coach-dashboard/events", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("link", { name: /Create Qualifying/ })).toBeVisible();
 });
 

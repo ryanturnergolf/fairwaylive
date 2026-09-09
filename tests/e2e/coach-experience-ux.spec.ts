@@ -1,4 +1,34 @@
 import { expect, test, type Page } from "@playwright/test";
+import { routeValidCoachSession } from "./authSessionTestHelper";
+
+const coachId = "88888888-8888-4888-8888-888888888888";
+const encodeJwtPart = (value: Record<string, unknown>) =>
+  Buffer.from(JSON.stringify(value)).toString("base64url");
+const accessToken = `${encodeJwtPart({ alg: "HS256", typ: "JWT" })}.${encodeJwtPart({
+  sub: coachId,
+  role: "authenticated",
+  exp: 4102444800,
+})}.signature`;
+
+const installCoachSession = (page: Page) =>
+  page.addInitScript(({ token, userId }) => {
+    window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
+      access_token: token,
+      refresh_token: "coach-experience-refresh-token",
+      token_type: "bearer",
+      expires_in: 1832244800,
+      expires_at: 4102444800,
+      user: {
+        id: userId,
+        aud: "authenticated",
+        role: "authenticated",
+        email: "coach@example.test",
+        app_metadata: {},
+        user_metadata: {},
+        is_anonymous: false,
+      },
+    }));
+  }, { token: accessToken, userId: coachId });
 
 const installEmptyReads = async (page: Page) => {
   await page.route("**/rest/v1/**", (route) =>
@@ -21,7 +51,9 @@ test("Coach Menu groups every destination by operating area", async ({ page }) =
     await expect(navigation.getByRole("heading", { name: group })).toBeVisible();
   }
   await expect(navigation.getByRole("link", { name: "Rosters" })).toHaveAttribute("href", "/coach-dashboard/roster");
-  await expect(navigation.getByRole("link", { name: "Qualifying" })).toHaveAttribute("href", "/coach-dashboard/qualifying-manager");
+  await expect(navigation.getByRole("link", { name: "Events" })).toHaveAttribute("href", "/coach-dashboard/events");
+  await expect(navigation.getByRole("link", { name: "Tournament Director" })).toHaveCount(0);
+  await expect(navigation.getByRole("link", { name: "Qualifying", exact: true })).toHaveCount(0);
   await expect(navigation.getByRole("link", { name: "Team Performance" })).toHaveAttribute("href", "/coach-dashboard/team-performance");
   await expect(navigation.getByRole("link", { name: "Statistics", exact: true })).toHaveAttribute("href", "/coach-dashboard/statistics");
 });
@@ -39,6 +71,7 @@ test("390 by 844 coach pages do not create horizontal page scrolling", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   for (const route of [
     "/coach-dashboard",
+    "/coach-dashboard/events",
     "/coach-dashboard/roster",
     "/coach-dashboard/players",
     "/coach-dashboard/qualifying-manager",
@@ -51,6 +84,62 @@ test("390 by 844 coach pages do not create horizontal page scrolling", async ({ 
     const menu = page.getByText("Coach Menu", { exact: true });
     await expect(menu).toHaveCSS("min-height", "44px");
   }
+});
+
+test("Events presents Tournaments and Qualifying Sessions in one coach-facing surface", async ({ page }) => {
+  await routeValidCoachSession(page);
+  await installCoachSession(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([{
+      id: "tournament-1",
+      name: "Fall Invitational",
+      course: "Hidden Creek",
+      date: "2026-09-20",
+      city: "",
+      state: "",
+      rounds: "2",
+      scoringFormat: "Stroke Play",
+      status: "Upcoming",
+      settings: {},
+    }]));
+  });
+  await page.unroute("**/api/qualifying-sessions**");
+  await page.route("**/api/qualifying-sessions**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ sessions: [{
+      session: {
+        id: "qualifying-1",
+        tournamentId: "backing-tournament-1",
+        ownerId: "coach-1",
+        name: "Travel Team Qualifying",
+        rosterType: "men",
+        scoringMode: "reciprocal",
+        status: "active",
+        selectedPlayers: [{ id: "player-1", name: "Player One", rosterType: "men", classYear: "Senior" }],
+        groups: [],
+        finalizedAt: null,
+        finalizedBy: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+      days: [{ id: "day-1", qualifyingSessionId: "qualifying-1", dayNumber: 1, playDate: "2026-09-18", holesTotal: 18, courseName: "Hidden Creek", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null }],
+      rounds: [],
+      scorerAssignments: [],
+    }] }),
+  }));
+
+  await page.goto("/coach-dashboard/events");
+  await expect(page.getByRole("heading", { name: "Events", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tournaments" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Qualifying Sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fall Invitational" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Travel Team Qualifying" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Event" })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "Setup / Manage" })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "Results / Live Scoring" })).toHaveCount(2);
+  await expect(page.getByText("Tournament Director", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/QA seed/i)).toHaveCount(0);
 });
 
 test("empty, no-season, no-player, and error states are explicit", async ({ page }) => {
@@ -88,6 +177,7 @@ test("scoped coach pages share the same chrome without changing feature handlers
   const { readFile } = await import("node:fs/promises");
   for (const file of [
     "app/coach-dashboard/page.tsx",
+    "app/coach-dashboard/events/page.tsx",
     "app/coach-dashboard/roster/RosterManager.tsx",
     "app/coach-dashboard/players/PlayersDirectory.tsx",
     "app/coach-dashboard/players/[playerId]/PlayerPerformanceProfile.tsx",

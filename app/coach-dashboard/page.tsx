@@ -38,7 +38,7 @@ const emptyDashboard: CoachDashboardReadModel = {
     recentlyCompletedPractices: [],
     recentPlayerUpdates: [],
   },
-  onboarding: { tournamentCount: 0, finalizedTournamentCount: 0, rosterPlayerCount: 0, readiness: null, tournamentHref: "/dashboard" },
+  onboarding: { tournamentCount: 0, finalizedTournamentCount: 0, rosterPlayerCount: 0, readiness: null, tournamentHref: "/coach-dashboard/events" },
 };
 
 const alertStyles: Record<CoachDashboardAlert["severity"], string> = {
@@ -169,9 +169,7 @@ export default function CoachDashboardPage() {
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/practice-planner">
               Practice Planner
             </Link>
-            <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/qualifying-manager">
-              Qualifying
-            </Link>
+            <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/events">Events</Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/roster">
               Roster
             </Link>
@@ -189,9 +187,6 @@ export default function CoachDashboardPage() {
             </Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/coach-dashboard/player-development">
               Player Development
-            </Link>
-            <Link className="transition duration-200 hover:text-[#B8892D]" href="/dashboard">
-              Director Dashboard
             </Link>
             <Link className="transition duration-200 hover:text-[#B8892D]" href="/dashboard/season-statistics">
               Statistics
