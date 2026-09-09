@@ -1464,11 +1464,25 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
   await expect(page.getByRole("button", { name: "View My Scorecard and Stats" })).toBeVisible();
   await expect(page.getByRole("button", { name: "View Verified Score Comparison" })).toBeVisible();
 
+  const reciprocalMarkerEntry = sharedStore.savedScoreRows.find(
+    (row) => row.player_id === "player-1" && row.entered_by_player_id === "player-2" && row.round_number === 1
+  );
+  expect(reciprocalMarkerEntry).toBeDefined();
+  reciprocalMarkerEntry!.hole_scores = Array.from({ length: 18 }, () => 5);
+  reciprocalMarkerEntry!.total = 90;
+  sharedStore.savedScoreRows.push({
+    ...buildScoreEntry("player-1", "player-2", Array.from({ length: 18 }, () => 6), sharedTournamentId),
+    round_number: 2,
+    total: 108,
+    entry_status: "submitted",
+  });
+
   const submittedRoundUrl = new URL(page.url());
   await page.getByRole("button", { name: "View Verified Score Comparison" }).click();
   await expect(page.getByText("Verify Score", { exact: true })).toBeVisible();
   await expect(page.getByText("Self Total").locator("..")).toContainText("72");
-  await expect(page.getByText("Marker Total").locator("..")).toContainText("72");
+  await expect(page.getByText("Marker Total").locator("..")).toContainText("90");
+  await expect(page.getByText("Marker Total").locator("..")).not.toContainText("108");
   await expect(page.getByText("This submitted score comparison is read-only.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit Scores" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Submit Verification" })).toHaveCount(0);
@@ -1520,8 +1534,11 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
   await expect(page.getByRole("button", { name: "View My Scorecard and Stats" })).toBeVisible();
 
   expect(
-    sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")
+    sharedStore.savedScoreRows.filter((row) => row.round_number === 1 && row.entry_status === "submitted")
   ).toHaveLength(2);
+  expect(
+    sharedStore.savedScoreRows.filter((row) => row.round_number === 2 && row.total === 108)
+  ).toHaveLength(1);
   expect(sharedStore.savedHoleRows).toHaveLength(36);
 });
 

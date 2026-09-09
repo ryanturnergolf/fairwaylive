@@ -2261,13 +2261,11 @@ function ReciprocalPlayerScorecardPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowConfirm(false);
-                    setView("review");
-                  }}
+                  onClick={() => void handleReviewRound()}
+                  disabled={isReviewSynchronizing}
                   className="min-h-12 rounded-full border border-[#0B3D2E] px-5 py-3 text-sm font-black text-[#0B3D2E]"
                 >
-                  View Verified Score Comparison
+                  {isReviewSynchronizing ? "Loading Verified Score Comparison..." : "View Verified Score Comparison"}
                 </button>
                 <Link
                   href={leaderboardHref}
