@@ -138,7 +138,7 @@ test("authenticated hydration prefers the current remote snapshot over stale loc
   await page.route("**/api/tournament-mutations", async (route) => {
     const body = route.request().postDataJSON() as { action?: string };
     routineMutationActions.push(body.action ?? "unknown");
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body.action === "reconcileTournamentTeams" ? [] : { ok: true }) });
   });
 
   await page.goto(`${baseUrl}/tournament/${tournamentId}`, { waitUntil: "domcontentloaded" });

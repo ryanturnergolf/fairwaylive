@@ -58,13 +58,14 @@ test("share checklist projects the existing readiness result without recalculati
   ]);
 });
 
-test("onboarding persistence is Supabase-backed and normal coach routes remain unchanged", async () => {
+test("onboarding persistence is Supabase-backed and uses the unified Events route", async () => {
   const repository = await readFile("app/lib/repositories/coachOnboardingRepository.ts", "utf8");
   const service = await readFile("app/lib/services/coachOnboardingService.ts", "utf8");
   expect(repository).toContain("supabase.auth.updateUser");
   expect(repository).not.toContain("localStorage");
   expect(service).toContain('href: "/coach-dashboard/roster"');
   expect(service).toContain('href: "/coach-dashboard/statistics"');
-  expect(service).toContain('href: "/dashboard"');
+  expect(service).toContain('href: "/coach-dashboard/events"');
+  expect(service).not.toContain('href: "/dashboard"');
   expect(service).toContain("readiness.checks");
 });

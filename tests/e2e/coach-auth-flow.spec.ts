@@ -358,6 +358,17 @@ test("incomplete seed creates authoritative scores and statistics through hole 1
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
       return;
     }
+    if (request.action === "reconcileTournamentTeams") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify((request.rows ?? []).map((row, index) => ({
+          id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          ...row,
+        }))),
+      });
+      return;
+    }
     if (request.action === "upsertTournamentStateSnapshot") {
       snapshotCount += 1;
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });

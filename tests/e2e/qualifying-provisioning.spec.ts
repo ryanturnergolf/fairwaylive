@@ -134,7 +134,7 @@ test("provision action uses the authenticated coordinator and exposes the existi
   await page.goto("/coach-dashboard/qualifying-manager");
   await page.getByRole("button", { name: "Provision Tournament" }).click();
   await expect(page.getByText("provisioned", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open Tournament" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Open Event" })).toHaveAttribute(
     "href",
     "/tournament/22222222-2222-4222-8222-222222222222"
   );

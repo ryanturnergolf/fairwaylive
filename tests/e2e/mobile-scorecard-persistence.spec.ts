@@ -620,6 +620,11 @@ const routeAuthenticatedTournamentSyncApi = async (
       return;
     }
 
+    if (postData.action === "reconcileTournamentTeams") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
+
     if (postData.action === "upsertTournamentStateSnapshot") {
       if (snapshotStatus < 400 && savedSnapshots && postData.input) {
         savedSnapshots.push({
