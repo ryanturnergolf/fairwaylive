@@ -1,8 +1,20 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { routeValidCoachSession } from "./authSessionTestHelper";
 
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
+const coachId = "89898989-8989-4898-8989-898989898989";
+const encode = (value: Record<string, unknown>) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const accessToken = `${encode({ alg: "HS256" })}.${encode({ sub: coachId, role: "authenticated", exp: 4102444800 })}.signature`;
+
+const installCoachSession = async (page: Page) => {
+  await routeValidCoachSession(page);
+  await page.addInitScript(({ token, userId }) => localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
+    access_token: token, refresh_token: "tournament-wizard-refresh", token_type: "bearer", expires_at: 4102444800,
+    user: { id: userId, email: "coach@example.test", role: "authenticated", is_anonymous: false },
+  })), { token: accessToken, userId: coachId });
+};
 
 test.describe("Tournament end-to-end presentation contract", () => {
   test("dashboard remains contained with touch-sized actions on phone and desktop", async ({ page }) => {
@@ -42,11 +54,19 @@ test.describe("Tournament end-to-end presentation contract", () => {
   });
 
   test("Tournament creation follows the shared seven-step event setup pattern", async ({ page }) => {
+    await installCoachSession(page);
+    let creationRequests = 0;
+    await page.route("**/api/tournament-mutations", async (route) => {
+      const body = route.request().postDataJSON();
+      if (body.action === "createTournament") creationRequests += 1;
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Expected test-only creation stop." }) });
+    });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("http://127.0.0.1:3100/dashboard#create-tournament", { waitUntil: "domcontentloaded" });
 
     const dialog = page.getByRole("dialog", { name: "Create Tournament" });
     await expect(dialog).toBeVisible();
+    expect(creationRequests).toBe(0);
     const progress = dialog.getByRole("list", { name: "Tournament creation progress" });
     for (const [index, label] of ["Basics", "Players", "Schedule", "Groups", "Scoring", "Statistics", "Review"].entries()) {
       await expect(progress.getByText(`${index + 1}. ${label}`, { exact: true })).toBeVisible();
@@ -65,26 +85,35 @@ test.describe("Tournament end-to-end presentation contract", () => {
     await dialog.getByRole("button", { name: "Next" }).click();
 
     await expect(progress.getByText("2. Players", { exact: true })).toHaveAttribute("aria-current", "step");
+    expect(creationRequests).toBe(0);
     await expect(dialog.getByText("Choose the player format")).toBeVisible();
     await dialog.getByRole("button", { name: "Next" }).click();
 
     await expect(progress.getByText("3. Schedule", { exact: true })).toHaveAttribute("aria-current", "step");
+    expect(creationRequests).toBe(0);
     await dialog.getByLabel("Date").fill("2026-09-20");
     await dialog.getByRole("button", { name: "Next" }).click();
 
     await expect(progress.getByText("4. Groups", { exact: true })).toHaveAttribute("aria-current", "step");
+    expect(creationRequests).toBe(0);
     await dialog.getByRole("button", { name: "Next" }).click();
     await expect(progress.getByText("5. Scoring", { exact: true })).toHaveAttribute("aria-current", "step");
+    expect(creationRequests).toBe(0);
     await dialog.getByRole("button", { name: "Stroke Play" }).click();
     await dialog.getByRole("button", { name: "Next" }).click();
 
     await expect(progress.getByText("6. Statistics", { exact: true })).toHaveAttribute("aria-current", "step");
+    expect(creationRequests).toBe(0);
     await expect(dialog.getByRole("link", { name: "Open Statistics Configuration" })).toHaveAttribute("href", "/coach-dashboard/statistics");
     await dialog.getByRole("button", { name: "Next" }).click();
 
     await expect(progress.getByText("7. Review", { exact: true })).toHaveAttribute("aria-current", "step");
     await expect(dialog.getByText("Unified Invitational", { exact: true })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Create Tournament" })).toBeVisible();
+    const createTournamentButton = dialog.getByRole("button", { name: "Create Tournament" });
+    await expect(createTournamentButton).toBeVisible();
+    expect(creationRequests).toBe(0);
+    await createTournamentButton.click();
+    await expect.poll(() => creationRequests).toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 

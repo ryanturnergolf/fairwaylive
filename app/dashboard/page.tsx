@@ -1970,15 +1970,21 @@ export default function DashboardPage() {
                 ) : null}
                 {currentStep < steps.length ? (
                   <button
+                    key="tournament-wizard-next"
                     type="button"
-                    onClick={handleNext}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handleNext();
+                    }}
                     className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
                   >
                     Next
                   </button>
                 ) : (
                   <button
-                    type="submit"
+                    key="tournament-wizard-create"
+                    type="button"
+                    onClick={(event) => event.currentTarget.form?.requestSubmit()}
                     disabled={isCreatingTournament}
                     className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                   >
