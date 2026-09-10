@@ -17,6 +17,9 @@ import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
 import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
 
+const workspaceTabs = ["Overview", "Players", "Rounds", "Groups", "Scoring", "Results"] as const;
+type WorkspaceTab = typeof workspaceTabs[number];
+
 export default function QualifyingSessionsPage() {
   const [sessions, setSessions] = useState<QualifyingSessionFoundation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,6 +31,12 @@ export default function QualifyingSessionsPage() {
   const [roundProgression, setRoundProgression] = useState<Record<string, QualifyingRoundProgressionState | null>>({});
   const [advancingId, setAdvancingId] = useState("");
   const [finalizingId, setFinalizingId] = useState("");
+  const [activeWorkspaceTabs, setActiveWorkspaceTabs] = useState<Record<string, WorkspaceTab>>({});
+  const [requestedSessionId, setRequestedSessionId] = useState("");
+
+  useEffect(() => {
+    setRequestedSessionId(new URLSearchParams(window.location.search).get("session") ?? "");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +179,7 @@ export default function QualifyingSessionsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
+    <main className="min-h-screen overflow-x-hidden bg-[#F6F1E6] text-[#0B3D2E]">
       <CoachHeader />
       <header className="hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
@@ -179,14 +188,14 @@ export default function QualifyingSessionsPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
         <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Events", href: "/coach-dashboard/events" }, { label: "Qualifying Sessions" }]} />
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Coach Workflow</p>
-            <h1 className="mt-2 text-4xl font-black tracking-tight">Qualifying Sessions</h1>
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Events</p>
+            <h1 className="mt-2 text-4xl font-black tracking-tight">Qualifying Workspaces</h1>
             <p className="mt-3 max-w-2xl text-[#51635C]">
-              Build and save qualifying setup drafts. Tournament rounds, scorecards, access, and scoring are not created yet.
+              Manage setup, scoring, progression, and results from one event workspace.
             </p>
           </div>
           <Link
@@ -209,17 +218,21 @@ export default function QualifyingSessionsPage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {sessions.map((foundation) => {
+              {sessions.filter(({ session }) => !requestedSessionId || session.id === requestedSessionId).map((foundation) => {
                 const { session, days } = foundation;
                 const progression = roundProgression[session.id];
+                const activeTab = activeWorkspaceTabs[session.id] ?? "Overview";
                 const designatedReady = session.scoringMode !== "designated_scorer" ||
                   foundation.rounds.length * session.groups.length === foundation.scorerAssignments.length;
                 return (
-                <article key={session.id} className="rounded-lg border border-[#E8DCC8] bg-[#FCFAF5] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                <article key={session.id} className="overflow-hidden rounded-[24px] border border-[#E8DCC8] bg-white shadow-[0_20px_60px_rgba(11,61,46,0.08)] sm:rounded-[32px]">
+                  <div className="bg-[#0B3D2E] p-5 text-[#F6F1E6] sm:p-7">
+                    <Link href="/coach-dashboard/events" className="inline-flex min-h-11 items-center text-xs font-black uppercase tracking-[0.22em] text-[#F0C96A]">← Back to Events</Link>
+                  <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-black">{session.name}</h2>
-                      <p className="mt-1 text-sm text-[#51635C]">
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F0C96A]">Qualifying</p>
+                      <h2 className="mt-2 text-3xl font-black tracking-tight">{session.name}</h2>
+                      <p className="mt-2 text-sm font-semibold text-white/75">
                         {session.rosterType === "men" ? "Men's" : "Women's"} · {session.selectedPlayers.length} players · {days.length} {days.length === 1 ? "day" : "days"}
                       </p>
                     </div>
@@ -230,7 +243,7 @@ export default function QualifyingSessionsPage() {
                           disabled={activatingId === session.id || !designatedReady}
                           aria-disabled={!designatedReady}
                           onClick={() => void handleActivate(session.id)}
-                          className="rounded-lg bg-[#0B3D2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"
+                          className="min-h-11 rounded-lg bg-[#F0C96A] px-3 py-2 text-xs font-black text-[#0B3D2E] disabled:opacity-60"
                         >
                           {activatingId === session.id
                             ? "Activating..."
@@ -241,7 +254,7 @@ export default function QualifyingSessionsPage() {
                           type="button"
                           disabled={provisioningId === session.id}
                           onClick={() => void handleProvision(session.id)}
-                          className="rounded-lg bg-[#0B3D2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"
+                          className="min-h-11 rounded-lg bg-[#F0C96A] px-3 py-2 text-xs font-black text-[#0B3D2E] disabled:opacity-60"
                         >
                           {provisioningId === session.id
                             ? "Provisioning..."
@@ -253,17 +266,36 @@ export default function QualifyingSessionsPage() {
                           href={getQualifyingTournamentWorkspaceHref(
                             session.tournamentId || provisionedTournamentIds[session.id]
                           )}
-                          className="rounded-lg border border-[#0B3D2E] px-3 py-2 text-xs font-black"
+                          className="inline-flex min-h-11 items-center rounded-lg border border-white/40 px-3 py-2 text-xs font-black text-white"
                         >
                           Open Event Workspace
                         </Link>
                       ) : null}
-                      <span className="rounded-full border border-[#E8DCC8] bg-white px-3 py-1 text-xs font-black uppercase">
+                      {progression ? <span className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black">{progression.displayLabel} · Day {progression.dayNumber}</span> : null}
+                      <span className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black uppercase">
                         {session.status}
                       </span>
                     </div>
                   </div>
-                  {session.scoringMode === "designated_scorer" && session.status === "provisioned" ? (
+                  </div>
+                  <nav aria-label={`${session.name} workspace sections`} className="flex gap-2 overflow-x-auto border-b border-[#E8DCC8] bg-[#FCFAF5] px-4 py-3 sm:flex-wrap sm:px-6">
+                    {workspaceTabs.map((tab) => <button key={tab} type="button" aria-pressed={activeTab === tab} onClick={() => setActiveWorkspaceTabs((current) => ({ ...current, [session.id]: tab }))} className={`min-h-11 shrink-0 rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.18em] ${activeTab === tab ? "bg-[#0B3D2E] text-white" : "text-[#51635C] hover:bg-[#E8DCC8]"}`}>{tab}</button>)}
+                  </nav>
+                  <div className="p-4 sm:p-6">
+                  {activeTab === "Overview" ? (
+                    <section aria-label="Qualifying overview" className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]">Format</p><p className="mt-2 font-black">{session.scoringMode === "reciprocal" ? "Reciprocal" : "Designated Scorer"}</p></div>
+                      <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]">Players</p><p className="mt-2 font-black">{session.selectedPlayers.length}</p></div>
+                      <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B8892D]">Rounds</p><p className="mt-2 font-black">{foundation.configuredRounds?.length ?? foundation.rounds.length}</p></div>
+                    </section>
+                  ) : null}
+                  {activeTab === "Players" ? (
+                    <section aria-label="Qualifying players" className="grid gap-2 sm:grid-cols-2">
+                      {session.selectedPlayers.map((player, index) => <div key={player.id} className="flex min-h-12 items-center gap-3 rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2"><span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[#D9D0C0] text-xs font-black">{index + 1}</span><span><span className="block font-black">{player.name}</span><span className="block text-xs font-semibold text-[#51635C]">{player.classYear || "Roster player"}</span></span></div>)}
+                    </section>
+                  ) : null}
+                  {activeTab === "Groups" ? <section aria-label="Qualifying groups" className="grid gap-3 sm:grid-cols-2">{session.groups.map((group) => <div key={group.id} className="rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="font-black">{group.name}</p><p className="mt-2 text-sm text-[#51635C]">{group.playerIds.map((id) => session.selectedPlayers.find((player) => player.id === id)?.name).filter(Boolean).join(", ") || "No players assigned"}</p></div>)}</section> : null}
+                  {activeTab === "Groups" && session.scoringMode === "designated_scorer" && session.status === "provisioned" ? (
                     <DesignatedScorerAssignments
                       foundation={foundation}
                       onSaved={(assignments) => setSessions((current) => current.map((item) =>
@@ -271,6 +303,11 @@ export default function QualifyingSessionsPage() {
                       ))}
                     />
                   ) : null}
+                  {activeTab === "Rounds" ? (
+                    <section aria-label="Qualifying rounds">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {(foundation.configuredRounds ?? []).map((round) => <div key={round.qualifyingRoundId} className="rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="font-black">{round.displayLabel}</p><p className="mt-1 text-sm font-semibold text-[#51635C]">Day {round.qualifyingDay} · Segment {round.qualifyingSegment}</p></div>)}
+                      </div>
                   {session.status === "active" && (foundation.configuredRounds?.length ?? 0) > 1 ? (
                     <div className="mt-4 rounded-lg border border-[#D6E0D8] bg-white p-4">
                       <div aria-label="Current scoring round" className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
@@ -307,16 +344,20 @@ export default function QualifyingSessionsPage() {
                       ) : null}
                     </div>
                   ) : null}
+                    </section>
+                  ) : null}
                   {["active", "finalized"].includes(session.status) ? (
                     <>
-                      {session.status === "active" ? (
+                      {activeTab === "Scoring" && session.status === "active" ? (
                         <QualifyingAccessPanel sessionId={session.id} />
                       ) : null}
                       {session.tournamentId ? (
+                        <div className={activeTab === "Results" ? "" : "hidden"} aria-hidden={activeTab !== "Results"}>
                         <QualifyingResultsPanel
                           sessionId={session.id}
                           tournamentId={session.tournamentId}
                           sessionStatus={session.status}
+                          autoLoad
                           operationalCurrentRoundId={foundation.configuredRounds?.find(
                             (round) => round.qualifyingRoundId === session.operationalCurrentQualifyingRoundId
                           )?.tournamentRoundId ?? null}
@@ -337,9 +378,12 @@ export default function QualifyingSessionsPage() {
                             );
                           }}
                         />
+                        </div>
                       ) : null}
                     </>
                   ) : null}
+                  {activeTab === "Results" && !session.tournamentId ? <p className="rounded-xl border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">Results become available after the event is provisioned.</p> : null}
+                  </div>
                 </article>
               )})}
             </div>

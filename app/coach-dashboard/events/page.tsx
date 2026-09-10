@@ -95,12 +95,13 @@ function TournamentEventCard({ tournament }: { tournament: StoredTournament }) {
 function QualifyingEventCard({ foundation }: { foundation: QualifyingSessionFoundation }) {
   const { session, days } = foundation;
   const workspace = session.tournamentId ? `/tournament/${encodeURIComponent(session.tournamentId)}` : "";
+  const qualifyingWorkspace = `/coach-dashboard/qualifying-manager?session=${encodeURIComponent(session.id)}`;
   return (
     <EventCard type="Qualifying" title={session.name} status={session.status} detail={`${session.selectedPlayers.length} players · ${days.length} ${days.length === 1 ? "day" : "days"}`}>
       <EventCardActions
         eventName={session.name}
-        openHref={workspace || "/coach-dashboard/qualifying-manager"}
-        manageHref="/coach-dashboard/qualifying-manager"
+        openHref={qualifyingWorkspace}
+        manageHref={qualifyingWorkspace}
         resultsHref={workspace ? `${workspace}?tab=Live+Scoring` : undefined}
       />
     </EventCard>

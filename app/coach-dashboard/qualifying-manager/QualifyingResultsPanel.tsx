@@ -82,6 +82,7 @@ export default function QualifyingResultsPanel({
   onFinalized,
   onResultsLoaded,
   operationalCurrentRoundId = null,
+  autoLoad = false,
 }: {
   sessionId: string;
   tournamentId: string;
@@ -90,6 +91,7 @@ export default function QualifyingResultsPanel({
   onFinalized?: () => void;
   onResultsLoaded?: (results: QualifyingResultsReadModel) => void;
   operationalCurrentRoundId?: string | null;
+  autoLoad?: boolean;
 }) {
   const [results, setResults] = useState<QualifyingResultsReadModel | null>(null);
   const [activeTab, setActiveTab] = useState("combined");
@@ -120,8 +122,8 @@ export default function QualifyingResultsPanel({
   }, [sessionId]);
 
   useEffect(() => {
-    if (historyMode) void refresh();
-  }, [historyMode, refresh]);
+    if (historyMode || autoLoad) void refresh();
+  }, [autoLoad, historyMode, refresh]);
 
   useEffect(() => {
     if (!results || historyMode || sessionStatus === "finalized" || results.sessionStatus === "finalized") return;
@@ -159,7 +161,7 @@ export default function QualifyingResultsPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-black">{historyMode ? "Qualifying History" : "Qualifying Operations"}</h3>
+            <h3 className="font-black">{historyMode ? "Qualifying History" : "Results"}</h3>
             {isFinalized ? (
               <span className="rounded-full bg-[#0B3D2E] px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white">
                 Read Only

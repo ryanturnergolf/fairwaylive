@@ -15,6 +15,20 @@ test("every Qualifying workspace action uses the canonical backing Tournament ro
     .toContain("getQualifyingTournamentWorkspaceHref(effectiveTournamentId)");
 });
 
+test("Qualifying management uses the shared Event Workspace hierarchy with progressive sections", () => {
+  const manager = source("app/coach-dashboard/qualifying-manager/page.tsx");
+  const events = source("app/coach-dashboard/events/page.tsx");
+  expect(manager).toContain('["Overview", "Players", "Rounds", "Groups", "Scoring", "Results"]');
+  expect(manager).toContain("Back to Events");
+  expect(manager).toContain("workspace sections");
+  expect(manager).toContain('activeTab === "Rounds"');
+  expect(manager).toContain('activeTab === "Scoring"');
+  expect(manager).toContain('activeTab === "Results"');
+  expect(manager).toContain("<QualifyingAccessPanel");
+  expect(manager).toContain("<QualifyingResultsPanel");
+  expect(events).toContain("qualifyingWorkspace");
+});
+
 test("Tournament hydration always verifies durable round and scorecard coverage", () => {
   const tournamentService = source("app/lib/services/tournamentService.ts");
   expect(tournamentService).toContain("getTournamentRounds(sharedTournamentUuidOrId)");

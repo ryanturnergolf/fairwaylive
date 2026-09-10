@@ -344,6 +344,8 @@ test("coach operations page exposes read-only daily and combined results", async
     "href",
     "/tournament/tournament"
   );
+  await page.setViewportSize({ width: 430, height: 932 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("active Qualifying results poll scoring changes without resetting leaderboard state", async ({ page }) => {
