@@ -1759,27 +1759,48 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="space-y-4" aria-label="Tournament team roster setup">
-                    {tournamentTeamDrafts.map((team) => (
-                      <section key={team.clientKey} className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5" aria-label={team.label}>
-                        <div className="flex items-center justify-between gap-4">
-                          <h4 className="text-xl font-black">{team.label}</h4>
-                          <button type="button" className="min-h-12 rounded-xl border border-[#B8892D] px-4 py-2 text-sm font-black" onClick={() => setTournamentTeamDrafts((current) => removeTournamentTeam(current, team.clientKey))}>Delete {team.label}</button>
-                        </div>
-                        <ol className="mt-4 grid gap-2 sm:grid-cols-5" aria-label={`${team.label} roster slots`}>
-                          {Array.from({ length: tournamentTeamRosterSlotCount }, (_, index) => (
-                            <li key={index} className="min-h-12 rounded-xl border border-dashed border-[#D9D0C0] bg-[#FCFAF5] px-3 py-3 text-sm font-bold text-[#51635C]">{index + 1}. Empty</li>
-                          ))}
-                        </ol>
-                      </section>
-                    ))}
                     <div className="flex flex-col gap-3 sm:flex-row">
                       <button type="button" className="min-h-12 rounded-xl bg-[#0B3D2E] px-5 py-3 text-sm font-black text-white" onClick={() => setTournamentTeamDrafts(addNextTournamentTeam)}>Add Team</button>
                       <button type="button" className="min-h-12 rounded-xl border border-[#0B3D2E] px-5 py-3 text-sm font-black" onClick={() => setFormState((current) => ({ ...current, includeIndividuals: true }))} disabled={formState.includeIndividuals}>Add Individuals</button>
                     </div>
+                    {tournamentTeamDrafts.map((team) => (
+                      <section key={team.clientKey} className="overflow-hidden rounded-2xl border border-[#E8DCC8] bg-white/80" aria-label={team.label}>
+                        <details className="group" open={team.displayOrder === 1}>
+                          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#0B3D2E] [&::-webkit-details-marker]:hidden">
+                            <span className="min-w-0">
+                              <span className="block truncate text-base font-black">{team.label}</span>
+                              <span className="block text-xs font-semibold text-[#51635C]">0/{tournamentTeamRosterSlotCount} players</span>
+                            </span>
+                            <span aria-hidden="true" className="text-lg leading-none transition group-open:rotate-180">⌄</span>
+                          </summary>
+                          <div className="border-t border-[#E8DCC8] px-4 pb-4">
+                            <ol className="divide-y divide-[#E8DCC8]" aria-label={`${team.label} roster slots`}>
+                              {Array.from({ length: tournamentTeamRosterSlotCount }, (_, index) => (
+                                <li key={index} className="flex min-h-10 items-center gap-3 py-2 text-sm font-bold text-[#51635C]">
+                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[#D9D0C0] bg-[#FCFAF5] text-xs text-[#0B3D2E]">{index + 1}</span>
+                                  <span>Empty roster spot</span>
+                                </li>
+                              ))}
+                            </ol>
+                            <div className="mt-3 flex justify-end">
+                              <button type="button" className="min-h-12 rounded-xl border border-[#B8892D] px-4 py-2 text-sm font-black" onClick={() => setTournamentTeamDrafts((current) => removeTournamentTeam(current, team.clientKey))}>Delete {team.label}</button>
+                            </div>
+                          </div>
+                        </details>
+                      </section>
+                    ))}
                     {formState.includeIndividuals ? (
-                      <section className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5" aria-label="Individuals">
-                        <h4 className="text-xl font-black">Individuals</h4>
-                        <p className="mt-2 text-sm text-[#51635C]">Independent players appear only on the individual leaderboard and never count toward a team total.</p>
+                      <section className="overflow-hidden rounded-2xl border border-[#E8DCC8] bg-white/80" aria-label="Individuals">
+                        <details className="group" open>
+                          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#0B3D2E] [&::-webkit-details-marker]:hidden">
+                            <span>
+                              <span className="block text-base font-black">Individuals</span>
+                              <span className="block text-xs font-semibold text-[#51635C]">Independent player roster</span>
+                            </span>
+                            <span aria-hidden="true" className="text-lg leading-none transition group-open:rotate-180">⌄</span>
+                          </summary>
+                          <p className="border-t border-[#E8DCC8] px-4 py-3 text-sm text-[#51635C]">Independent players appear only on the individual leaderboard and never count toward a team total.</p>
+                        </details>
                       </section>
                     ) : null}
                   </div>
