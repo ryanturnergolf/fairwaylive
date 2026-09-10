@@ -63,8 +63,16 @@ test("authenticated invitation redemption removes the raw token from the destina
   let redeemedToken = "";
   await page.route("**/api/tournament-team-invitations", async (route) => {
     const body = route.request().postDataJSON();
-    redeemedToken = body.rawToken;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: "invitation-a", tournamentId: "tournament", tournamentTeamId: "team-a", teamName: "Team A", state: "redeemed", expiresAt: "2030-01-01T00:00:00Z" }) });
+    if (body.action === "redeem") {
+      redeemedToken = body.rawToken;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: "invitation-a", tournamentId: "tournament", tournamentTeamId: "team-a", teamName: "Team A", state: "redeemed", expiresAt: "2030-01-01T00:00:00Z" }) });
+      return;
+    }
+    if (body.action === "loadStatisticPreferences") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ invitationId: "invitation-a", tournamentId: "tournament", tournamentName: "Fall Invitational", tournamentTeamId: "team-a", teamName: "Team A", players: [] }) });
   });
   await page.goto("/coach-dashboard/team-roster-invitation?token=raw-secret-token");
   await expect(page).toHaveURL(/\/coach-dashboard\/team-roster\/invitation-a$/);
