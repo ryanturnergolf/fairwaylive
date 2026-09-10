@@ -150,6 +150,7 @@ export type LegacyScorecardRow = {
   id: number;
   playerName: string;
   team: string;
+  isIndividual?: boolean;
   scores: number[];
 };
 

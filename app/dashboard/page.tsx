@@ -5,7 +5,7 @@ import CourseSetupEditor from "../components/CourseSetupEditor";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type SetStateAction } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabaseClient";
-import { getTournamentRounds } from "../lib/repositories/tournamentRepository";
+import { getTournamentRounds, reconcileTournamentTeams } from "../lib/repositories/tournamentRepository";
 import {
   loadDirectorDashboardReadModel,
   loadDirectorTournamentSummary,
@@ -37,6 +37,12 @@ import {
 } from "../lib/services/qaSeedTemplateService";
 import { loadQaSeedAccess, requireQaSeedAccess } from "../lib/services/qaSeedAccessService";
 import { createOperationId } from "../lib/services/operationIdService";
+import {
+  addNextTournamentTeam,
+  createDefaultTournamentTeams,
+  removeTournamentTeam,
+  tournamentTeamRosterSlotCount,
+} from "../lib/services/tournamentTeamService";
 import type { EventCourseSetupSelection } from "../lib/courseModel";
 import { createEmptyTournamentModel } from "../lib/tournamentModel";
 import {
@@ -165,6 +171,7 @@ type FormState = {
   eventType: string;
   teamSize: string;
   countingScores: string;
+  includeIndividuals: boolean;
   startFormat: "Tee" | "Shotgun";
   startingHoles: string;
   roundSetup: RoundSetup[];
@@ -234,6 +241,7 @@ const defaultFormState: FormState = {
   eventType: "Both",
   teamSize: "5",
   countingScores: "4",
+  includeIndividuals: false,
   startFormat: "Tee",
   startingHoles: "1",
   roundSetup: createRoundSetup(1),
@@ -256,6 +264,7 @@ export default function DashboardPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
+  const [tournamentTeamDrafts, setTournamentTeamDrafts] = useState(createDefaultTournamentTeams);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
   const [creationError, setCreationError] = useState("");
@@ -673,6 +682,7 @@ export default function DashboardPage() {
     const rounds = Math.max(1, Number(value.rounds) || 1);
     return {
       ...value,
+      includeIndividuals: value.includeIndividuals ?? false,
       rounds: String(rounds),
       roundSetup: createRoundSetup(rounds).map((round, index) => value.roundSetup[index] ?? round),
     };
@@ -683,6 +693,7 @@ export default function DashboardPage() {
     setSelectedTemplateId("");
     setCurrentStep(1);
     setErrors({});
+    setTournamentTeamDrafts(createDefaultTournamentTeams());
   };
 
   const openModal = () => {
@@ -841,6 +852,19 @@ export default function DashboardPage() {
       return;
     }
     const newTournament = createResult.tournament as Tournament;
+
+    try {
+      await reconcileTournamentTeams(newTournament.id, tournamentTeamDrafts.map((team) => ({
+        tournament_id: newTournament.id,
+        client_key: team.clientKey,
+        display_name: team.label,
+        display_order: team.displayOrder,
+      })));
+    } catch (error) {
+      setCreationError(error instanceof Error ? error.message : "Tournament teams could not be saved.");
+      setIsCreatingTournament(false);
+      return;
+    }
 
     const normalizedRoundCount = Number(normalizedFormState.rounds) || 1;
     const durableRounds = await getTournamentRounds(newTournament.id);
@@ -1704,6 +1728,31 @@ export default function DashboardPage() {
                       </label>
                     </div>
                   </div>
+                  <div className="space-y-4" aria-label="Tournament team roster setup">
+                    {tournamentTeamDrafts.map((team) => (
+                      <section key={team.clientKey} className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5" aria-label={team.label}>
+                        <div className="flex items-center justify-between gap-4">
+                          <h4 className="text-xl font-black">{team.label}</h4>
+                          <button type="button" className="min-h-12 rounded-xl border border-[#B8892D] px-4 py-2 text-sm font-black" onClick={() => setTournamentTeamDrafts((current) => removeTournamentTeam(current, team.clientKey))}>Delete {team.label}</button>
+                        </div>
+                        <ol className="mt-4 grid gap-2 sm:grid-cols-5" aria-label={`${team.label} roster slots`}>
+                          {Array.from({ length: tournamentTeamRosterSlotCount }, (_, index) => (
+                            <li key={index} className="min-h-12 rounded-xl border border-dashed border-[#D9D0C0] bg-[#FCFAF5] px-3 py-3 text-sm font-bold text-[#51635C]">{index + 1}. Empty</li>
+                          ))}
+                        </ol>
+                      </section>
+                    ))}
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button type="button" className="min-h-12 rounded-xl bg-[#0B3D2E] px-5 py-3 text-sm font-black text-white" onClick={() => setTournamentTeamDrafts(addNextTournamentTeam)}>Add Team</button>
+                      <button type="button" className="min-h-12 rounded-xl border border-[#0B3D2E] px-5 py-3 text-sm font-black" onClick={() => setFormState((current) => ({ ...current, includeIndividuals: true }))} disabled={formState.includeIndividuals}>Add Individuals</button>
+                    </div>
+                    {formState.includeIndividuals ? (
+                      <section className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5" aria-label="Individuals">
+                        <h4 className="text-xl font-black">Individuals</h4>
+                        <p className="mt-2 text-sm text-[#51635C]">Independent players appear only on the individual leaderboard and never count toward a team total.</p>
+                      </section>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -1871,6 +1920,14 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
                       <span className="font-semibold uppercase tracking-[0.25em]">Team Size</span>
                       <span className="text-right font-black text-[#0B3D2E]">{formState.teamSize}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Teams</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{tournamentTeamDrafts.map((team) => team.label).join(", ") || "None"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
+                      <span className="font-semibold uppercase tracking-[0.25em]">Individuals</span>
+                      <span className="text-right font-black text-[#0B3D2E]">{formState.includeIndividuals ? "Enabled" : "Not included"}</span>
                     </div>
                     <div className="flex items-center justify-between gap-4 border-b border-[#E8DCC8] pb-3">
                       <span className="font-semibold uppercase tracking-[0.25em]">Counting Scores</span>

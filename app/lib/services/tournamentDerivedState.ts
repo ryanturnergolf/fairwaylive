@@ -210,6 +210,7 @@ export const buildTeamLeaderboard = ({
   const grouped = new Map<string, LegacyScorecardRow[]>();
 
   scorecardRows.forEach((row) => {
+    if (row.isIndividual) return;
     const current = grouped.get(row.team) ?? [];
     current.push(row);
     grouped.set(row.team, current);

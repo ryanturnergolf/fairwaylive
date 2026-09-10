@@ -9,6 +9,7 @@ import {
   listTournamentRows,
   upsertTournamentStateSnapshot,
   reconcileTournamentPlayers,
+  reconcileTournamentTeams,
   type CreateTournamentRowInput,
   type TournamentPlayerRow,
   type TournamentRoundReadRow,
@@ -578,6 +579,7 @@ const scoreToScorecardRow = (
     id: toScorecardRowId(score.playerId, fallbackIndex),
     playerName: player ? getPlayerName(player) : score.playerId,
     team: team || envelope.tournament.teams.find((item) => item.players.includes(score.playerId))?.name || "Unassigned",
+    isIndividual: player?.isIndividual ?? false,
     scores: [...score.holeScores],
   };
 };
@@ -597,6 +599,7 @@ const blankScorecardRowsForRound = (
           id: toScorecardRowId(player.id, index),
           playerName: getPlayerName(player),
           team: getTeamName(player, teamsById) || "Unassigned",
+          isIndividual: player.isIndividual,
           scores: Array.from({ length: holeCount }, () => 0),
         };
       });
@@ -922,7 +925,10 @@ const asPositiveInteger = (value: unknown): number | null => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-export const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): TournamentPlayerUpsertRow[] => {
+export const buildTournamentPlayerRows = (
+  envelope: TournamentStorageEnvelope,
+  durableTeamIds = new Map<string, string>()
+): TournamentPlayerUpsertRow[] => {
   const { tournament } = envelope;
   const teamsById = new Map(tournament.teams.map((team) => [team.id, team]));
   const teamsByName = new Map(tournament.teams.map((team) => [team.name, team]));
@@ -944,12 +950,16 @@ export const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): 
     if (pairedRoundOneIdentities.has(buildPlayerIdentity(getPlayerName(player), getTeamName(player, teamsById) || "Unassigned"))) {
       return;
     }
+    const teamId = player.isIndividual ? null : player.teamId || null;
     addRow({
       tournament_id: tournament.id,
       player_id: player.id,
       player_name: getPlayerName(player),
-      team_id: player.teamId || null,
-      team_name: getTeamName(player, teamsById),
+      team_id: teamId,
+      team_name: player.isIndividual ? null : getTeamName(player, teamsById),
+      ...(teamId && durableTeamIds.has(teamId)
+        ? { tournament_team_id: durableTeamIds.get(teamId) }
+        : {}),
       round_number: 1,
       group_number: null,
       tee_number: null,
@@ -970,18 +980,25 @@ export const buildTournamentPlayerRows = (envelope: TournamentStorageEnvelope): 
       const team = player?.teamId ? teamsById.get(player.teamId) : teamsByName.get(pairingPlayer.teamName);
       const markerPlayer = pairing.players[(playerIndex + 1) % pairing.players.length];
 
+      const isIndividual = player?.isIndividual ?? !team;
+      const teamId = isIndividual ? null : player?.teamId || team?.id || null;
       addRow({
         tournament_id: tournament.id,
         player_id: pairingPlayer.playerId,
         player_name: pairingPlayer.playerName || (player ? getPlayerName(player) : pairingPlayer.playerId),
-        team_id: player?.teamId || team?.id || null,
-        team_name: pairingPlayer.teamName || team?.name || (player ? getTeamName(player, teamsById) : null),
+        team_id: teamId,
+        team_name: isIndividual
+          ? null
+          : pairingPlayer.teamName || team?.name || (player ? getTeamName(player, teamsById) : null),
+        ...(teamId && durableTeamIds.has(teamId)
+          ? { tournament_team_id: durableTeamIds.get(teamId) }
+          : {}),
         round_number: roundNumber,
         group_number: pairing.groupNumber,
         tee_number: startingHole,
         starting_hole: startingHole,
         marker_player_id: markerPlayer?.playerId || null,
-        is_individual: player?.isIndividual ?? !team,
+        is_individual: isIndividual,
         position: playerIndex + 1,
         status: "active",
       });
@@ -996,10 +1013,20 @@ export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope,
   if (durableRound?.qualifying_session_id) {
     return;
   }
+  const durableTeams = await reconcileTournamentTeams(
+    envelope.tournament.id,
+    envelope.tournament.teams.map((team, index) => ({
+      tournament_id: envelope.tournament.id,
+      client_key: team.id,
+      display_name: team.name,
+      display_order: index + 1,
+    }))
+  );
+  const durableTeamIds = new Map(durableTeams.map((team) => [team.client_key, team.id]));
   const durableRows = await getTournamentPlayers(envelope.tournament.id, roundNumber).catch(() => []);
   const durableRowsByPlayerId = new Map(durableRows.map((row) => [row.player_id, row]));
   const normalizeComparableTeamName = (value: string | null) => (value ?? "").trim().toLowerCase();
-  const rows = buildTournamentPlayerRows(envelope)
+  const rows = buildTournamentPlayerRows(envelope, durableTeamIds)
     .filter((row) => row.round_number === roundNumber)
     .map((row) => {
       const durableRow = durableRowsByPlayerId.get(row.player_id);
@@ -1008,7 +1035,7 @@ export const syncTournamentPlayers = async (envelope: TournamentStorageEnvelope,
         : row;
     });
   const comparableFields: Array<keyof TournamentPlayerUpsertRow> = [
-    "tournament_id", "player_id", "player_name", "team_id", "team_name", "round_number",
+    "tournament_id", "player_id", "player_name", "team_id", "team_name", "tournament_team_id", "round_number",
     "group_number", "tee_number", "starting_hole", "marker_player_id", "is_individual", "position", "status",
   ];
   const rowsMatch = rows.length === durableRows.length && rows.every((row) => {
@@ -1814,6 +1841,7 @@ export const loadSharedTournamentScorecardState = async (
         id: row.player_id,
         playerName: row.player_name,
         team: row.team_name || "",
+        isIndividual: row.is_individual,
         scores: Array.from(
           { length: parsedHoleCount },
           (_, index) => Number(snapshotScorecard?.scores[index]) || 0

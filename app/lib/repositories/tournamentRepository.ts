@@ -42,6 +42,7 @@ export type TournamentPlayerUpsertRow = {
   player_name: string;
   team_id: string | null;
   team_name: string | null;
+  tournament_team_id?: string | null;
   round_number: number;
   group_number: number | null;
   tee_number: number | null;
@@ -51,6 +52,21 @@ export type TournamentPlayerUpsertRow = {
   position: number | null;
   status: string;
 };
+
+export type TournamentTeamRow = {
+  id: string;
+  tournament_id: string;
+  client_key: string;
+  display_name: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TournamentTeamUpsertRow = Pick<
+  TournamentTeamRow,
+  "tournament_id" | "client_key" | "display_name" | "display_order"
+>;
 
 export type TournamentPlayerRow = TournamentPlayerUpsertRow & {
   id: string;
@@ -157,7 +173,7 @@ const tournamentColumns =
   "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
 
 const tournamentPlayerColumns =
-  "id,tournament_id,roster_player_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
+  "id,tournament_id,roster_player_id,player_id,player_name,team_id,team_name,tournament_team_id,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
 const legacyTournamentPlayerColumns =
   "id,tournament_id,player_id,player_name,team_id,team_name,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";
 
@@ -166,6 +182,7 @@ export const deserializeTournamentPlayer = (
 ): TournamentPlayerRow => ({
   ...row,
   roster_player_id: row.roster_player_id ?? null,
+  tournament_team_id: row.tournament_team_id ?? null,
 });
 
 const getClient = () => {
@@ -332,6 +349,35 @@ export const reconcileTournamentPlayers = async (
   }
 };
 
+export const reconcileTournamentTeams = async (
+  tournamentId: string,
+  rows: TournamentTeamUpsertRow[]
+): Promise<TournamentTeamRow[]> => {
+  if (typeof window !== "undefined") {
+    return postTournamentMutation<TournamentTeamRow[]>({ action: "reconcileTournamentTeams", tournamentId, rows });
+  }
+
+  const supabase = getClient();
+  const clientKeys = rows.map((row) => row.client_key);
+  let deleteQuery = supabase.from("tournament_teams").delete().eq("tournament_id", tournamentId);
+  if (clientKeys.length > 0) deleteQuery = deleteQuery.not("client_key", "in", `(${clientKeys.join(",")})`);
+  const { error: deleteError } = await deleteQuery;
+  if (deleteError) throw deleteError;
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("tournament_teams")
+      .upsert(rows, { onConflict: "tournament_id,client_key" });
+    if (error) throw error;
+  }
+  const { data, error } = await supabase
+    .from("tournament_teams")
+    .select("id,tournament_id,client_key,display_name,display_order,created_at,updated_at")
+    .eq("tournament_id", tournamentId)
+    .order("display_order");
+  if (error) throw error;
+  return (data ?? []) as TournamentTeamRow[];
+};
+
 export const upsertTournamentStateSnapshot = async (input: TournamentStateSnapshotUpsertInput) => {
   if (typeof window !== "undefined") {
     await postTournamentMutation<{ ok: true }>({ action: "upsertTournamentStateSnapshot", input });
@@ -443,7 +489,7 @@ export const getTournamentPlayers = async (
   }
   if (
     !["42703", "PGRST204"].includes(linkedResult.error.code ?? "") ||
-    !linkedResult.error.message.includes("roster_player_id")
+    !["roster_player_id", "tournament_team_id"].some((column) => linkedResult.error.message.includes(column))
   ) {
     throw linkedResult.error;
   }

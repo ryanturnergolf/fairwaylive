@@ -23,6 +23,16 @@ type MutationBody =
       rows: Array<Record<string, unknown>>;
     }
   | {
+      action: "reconcileTournamentTeams";
+      tournamentId: string;
+      rows: Array<{
+        tournament_id: string;
+        client_key: string;
+        display_name: string;
+        display_order: number;
+      }>;
+    }
+  | {
       action: "upsertTournamentStateSnapshot";
       input: {
         tournamentId: string;
@@ -254,6 +264,35 @@ export async function POST(request: Request) {
 
       if (error) throw error;
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "reconcileTournamentTeams") {
+      if (body.rows.some((row) => (
+        row.tournament_id !== body.tournamentId ||
+        !/^[A-Za-z0-9:_-]{1,128}$/.test(row.client_key) ||
+        !row.display_name.trim() ||
+        !Number.isInteger(row.display_order) || row.display_order < 1
+      ))) {
+        throw new Error("Invalid Tournament team reconciliation input.");
+      }
+      if (body.rows.length > 0) {
+        const { error } = await supabase
+          .from("tournament_teams")
+          .upsert(body.rows, { onConflict: "tournament_id,client_key" });
+        if (error) throw error;
+      }
+      const clientKeys = body.rows.map((row) => row.client_key);
+      let staleQuery = supabase.from("tournament_teams").delete().eq("tournament_id", body.tournamentId);
+      if (clientKeys.length > 0) staleQuery = staleQuery.not("client_key", "in", `(${clientKeys.join(",")})`);
+      const { error: staleError } = await staleQuery;
+      if (staleError) throw staleError;
+      const { data, error } = await supabase
+        .from("tournament_teams")
+        .select("id,tournament_id,client_key,display_name,display_order,created_at,updated_at")
+        .eq("tournament_id", body.tournamentId)
+        .order("display_order");
+      if (error) throw error;
+      return NextResponse.json(data ?? []);
     }
 
     if (body.action === "upsertTournamentStateSnapshot") {

@@ -148,6 +148,7 @@ export const generateScorecardRowsFromPairings = (
         id: player.id,
         playerName: pairedPlayer.playerName,
         team: pairedPlayer.teamName?.trim() ? pairedPlayer.teamName : "Unassigned",
+        isIndividual: !player.teamId,
         scores: Array.from({ length: holeCount }, () => 0),
       };
     })
