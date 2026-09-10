@@ -78,6 +78,10 @@ test("assigned coach edits exactly five mobile-contained roster positions", asyn
   const actions: string[] = [];
   await page.route("**/api/tournament-team-invitations", async (route) => {
     const body = route.request().postDataJSON(); actions.push(body.action);
+    if (body.action === "loadStatisticPreferences") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
     const players = body.action === "saveRoster" ? body.players : [{ playerId: "p1", playerName: "Alex One", slot: 1 }];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ invitationId: "invitation-a", tournamentId: "tournament", tournamentName: "Fall Invitational", tournamentTeamId: "team-a", teamName: "Team A", players }) });
   });
@@ -87,7 +91,7 @@ test("assigned coach edits exactly five mobile-contained roster positions", asyn
   await page.getByLabel("Player 2").fill("Blake Two");
   await page.getByRole("button", { name: "Save assigned roster" }).click();
   await expect(page.getByText("Roster saved.")).toBeVisible();
-  expect(actions).toEqual(["loadRoster", "saveRoster"]);
+  expect(actions).toEqual(["loadRoster", "loadStatisticPreferences", "saveRoster"]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect((await page.getByRole("button", { name: "Save assigned roster" }).boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(48);
 });

@@ -19,6 +19,14 @@ export type InvitedTeamRoster = {
   tournamentTeamId: string;
   teamName: string;
   players: Array<{ playerId: string; playerName: string; slot: number }>;
+  statistics?: TournamentTeamStatisticPreference[];
+};
+
+export type TournamentTeamStatisticPreference = {
+  definitionVersionId: string;
+  name: string;
+  state: "optional" | "required";
+  enabled: boolean;
 };
 
 const request = async <T>(body: Record<string, unknown>): Promise<T> => {
@@ -46,3 +54,11 @@ export const loadInvitedTeamRoster = (invitationId: string) =>
   request<InvitedTeamRoster>({ action: "loadRoster", invitationId });
 export const saveInvitedTeamRoster = (invitationId: string, players: InvitedTeamRoster["players"]) =>
   request<InvitedTeamRoster>({ action: "saveRoster", invitationId, players });
+export const loadInvitedTeamStatisticPreferences = (invitationId: string) =>
+  request<TournamentTeamStatisticPreference[]>({ action: "loadStatisticPreferences", invitationId });
+export const saveInvitedTeamStatisticPreferences = (invitationId: string, definitionVersionIds: string[]) =>
+  request<TournamentTeamStatisticPreference[]>({ action: "saveStatisticPreferences", invitationId, definitionVersionIds });
+export const listTournamentStatisticDefinitions = () =>
+  request<Array<{ definitionVersionId: string; name: string }>>({ action: "listStatisticDefinitions" });
+export const configureTournamentStatisticPolicy = (tournamentId: string, items: Array<{ definitionVersionId: string; displayOrder: number; state: "optional" | "required" }>) =>
+  request<{ packageVersionId: string }>({ action: "configureStatisticPolicy", tournamentId, items });

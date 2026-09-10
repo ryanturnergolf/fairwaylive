@@ -40,6 +40,16 @@ export async function POST(request: Request) {
         })),
       });
     }
+    if (body.action === "listStatisticDefinitions") {
+      const { data, error } = await supabase.from("statistic_definition_versions").select("id,name,definition_id,version,statistic_definitions!inner(is_active)").eq("statistic_definitions.is_active", true).order("name");
+      if (error) throw error;
+      const latest = new Map<string, { definitionVersionId: string; name: string; version: number }>();
+      for (const row of data ?? []) {
+        const current = latest.get(row.definition_id);
+        if (!current || row.version > current.version) latest.set(row.definition_id, { definitionVersionId: row.id, name: row.name, version: row.version });
+      }
+      return NextResponse.json([...latest.values()].map(({ definitionVersionId, name }) => ({ definitionVersionId, name })));
+    }
     const rpc = body.action === "create"
       ? ["create_tournament_team_roster_invitation", { input_tournament_team_id: body.tournamentTeamId, input_invited_email: body.invitedEmail }]
       : body.action === "redeem"
@@ -50,6 +60,12 @@ export async function POST(request: Request) {
             ? ["get_tournament_team_roster_access", { input_invitation_id: body.invitationId }]
             : body.action === "saveRoster"
               ? ["replace_tournament_team_invited_roster", { input_invitation_id: body.invitationId, input_players: body.players }]
+              : body.action === "loadStatisticPreferences"
+                ? ["get_tournament_team_statistic_preferences", { input_invitation_id: body.invitationId }]
+                : body.action === "saveStatisticPreferences"
+                  ? ["set_tournament_team_statistic_preferences", { input_invitation_id: body.invitationId, input_definition_version_ids: body.definitionVersionIds }]
+                  : body.action === "configureStatisticPolicy"
+                    ? ["configure_tournament_statistic_policy", { input_tournament_id: body.tournamentId, input_items: body.items }]
               : null;
     if (!rpc) return NextResponse.json({ error: "Unsupported invitation action." }, { status: 400 });
     const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);

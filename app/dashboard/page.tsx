@@ -44,6 +44,7 @@ import {
   tournamentTeamRosterSlotCount,
 } from "../lib/services/tournamentTeamService";
 import type { EventCourseSetupSelection } from "../lib/courseModel";
+import { configureTournamentStatisticPolicy, listTournamentStatisticDefinitions } from "../lib/services/tournamentTeamInvitationService";
 import { createEmptyTournamentModel } from "../lib/tournamentModel";
 import {
   buildTournamentStorageEnvelope,
@@ -75,6 +76,7 @@ const formatOptions = [
 
 const eventTypeOptions = ["Team Event", "Individual Event", "Both"];
 const steps = ["Basics", "Players", "Schedule", "Groups", "Scoring", "Statistics", "Review"];
+type TournamentStatisticPolicyDraft = { definitionVersionId: string; name: string; state: "off" | "optional" | "required" };
 const creationKeyStoragePrefix = "clubhouse-hq-tournament-creation-key:";
 
 const acquireTournamentCreationKey = (scope: string) => {
@@ -265,6 +267,7 @@ export default function DashboardPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [tournamentTeamDrafts, setTournamentTeamDrafts] = useState(createDefaultTournamentTeams);
+  const [statisticPolicy, setStatisticPolicy] = useState<TournamentStatisticPolicyDraft[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isCreatingTournament, setIsCreatingTournament] = useState(false);
   const [creationError, setCreationError] = useState("");
@@ -290,6 +293,11 @@ export default function DashboardPage() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isModalOpen || !isCoachAuthenticated) return;
+    void listTournamentStatisticDefinitions().then((definitions) => setStatisticPolicy(definitions.map((item) => ({ ...item, state: "off" })))).catch(() => setStatisticPolicy([]));
+  }, [isModalOpen, isCoachAuthenticated]);
 
   useEffect(() => {
     if (window.location.hash === "#create-tournament") {
@@ -860,8 +868,9 @@ export default function DashboardPage() {
         display_name: team.label,
         display_order: team.displayOrder,
       })));
+      await configureTournamentStatisticPolicy(newTournament.id, statisticPolicy.filter((item) => item.state !== "off").map((item, displayOrder) => ({ definitionVersionId: item.definitionVersionId, displayOrder, state: item.state as "optional" | "required" })));
     } catch (error) {
-      setCreationError(error instanceof Error ? error.message : "Tournament teams could not be saved.");
+      setCreationError(error instanceof Error ? error.message : "Tournament setup could not be saved.");
       setIsCreatingTournament(false);
       return;
     }
@@ -1867,8 +1876,12 @@ export default function DashboardPage() {
               {currentStep === 6 ? (
                 <div className="rounded-[24px] border border-[#E8DCC8] bg-white/80 p-5">
                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Statistics</p>
-                  <h4 className="mt-2 text-xl font-black">Use the Tournament statistics package</h4>
-                  <p className="mt-2 text-sm leading-6 text-[#51635C]">The existing dynamic-statistics package authority remains unchanged. After creation, assign or update the Tournament package from Statistics Configuration.</p>
+                  <h4 className="mt-2 text-xl font-black">Tournament statistics policy</h4>
+                  <p className="mt-2 text-sm leading-6 text-[#51635C]">Choose Off, Optional, or Required for each configured statistic. The resulting package version is immutable for this event.</p>
+                  <div className="mt-5 space-y-3">{statisticPolicy.length === 0 ? <p className="text-sm font-semibold text-[#51635C]">No active statistics are configured.</p> : statisticPolicy.map((item) => <fieldset key={item.definitionVersionId} className="rounded-xl border border-[#E8DCC8] p-4">
+                    <legend className="px-1 font-black">{item.name}</legend>
+                    <div className="mt-2 grid grid-cols-3 gap-2">{(["off", "optional", "required"] as const).map((state) => <button key={state} type="button" aria-pressed={item.state === state} onClick={() => setStatisticPolicy((current) => current.map((entry) => entry.definitionVersionId === item.definitionVersionId ? { ...entry, state } : entry))} className={`min-h-12 rounded-xl border px-2 text-sm font-black capitalize ${item.state === state ? "border-[#0B3D2E] bg-[#0B3D2E] text-white" : "border-[#D9D0C0] bg-white"}`}>{state}</button>)}</div>
+                  </fieldset>)}</div>
                   <Link href="/coach-dashboard/statistics" className="mt-5 inline-flex min-h-12 items-center rounded-xl border border-[#0B3D2E] px-4 py-3 text-sm font-black">Open Statistics Configuration</Link>
                 </div>
               ) : null}
