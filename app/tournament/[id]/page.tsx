@@ -98,6 +98,7 @@ import type { QualifyingTournamentAccessContext } from "../../lib/services/quali
 import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
 import { buildCourseHoleSequence } from "../../lib/services/courseService";
 import { buildMultiRoundTournamentLeaderboard } from "../../lib/services/multiRoundLeaderboardService";
+import TournamentTeamInvitationManager from "./components/TournamentTeamInvitationManager";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 const officialResultsTab = "Official Results";
@@ -1678,6 +1679,8 @@ export default function TournamentPage() {
 
           <div aria-label={`${activeTab} workspace`} className="px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
             {activeTab === "Teams" || activeTab === "Players" ? (
+              <>
+              {activeTab === "Teams" && isCoachAuthenticated ? <TournamentTeamInvitationManager tournamentId={sharedTournamentId || tournamentId} isReadOnly={isTournamentFinalized} /> : null}
               <TeamPlayerManagement
                 activeTab={activeTab}
                 teams={teams}
@@ -1724,6 +1727,7 @@ export default function TournamentPage() {
                 onPlayerImportConfirm={handlePlayerImportConfirm}
                 isReadOnly={isTournamentFinalized}
               />
+              </>
             ) : activeTab === "Pairings" ? (
               <PairingsScorecardGeneration
                 activeTab="Pairings"
