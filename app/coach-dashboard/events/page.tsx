@@ -10,6 +10,34 @@ import { loadTournamentList } from "../../lib/services/tournamentService";
 
 const actionClass = "inline-flex min-h-12 items-center justify-center rounded-lg border border-[#0B3D2E] px-4 py-3 text-center text-sm font-black transition hover:bg-[#F6F1E6]";
 
+function EventCardActions({ eventName, openHref, manageHref, resultsHref }: {
+  eventName: string;
+  openHref: string;
+  manageHref: string;
+  resultsHref?: string;
+}) {
+  return (
+    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-start">
+      <Link className={`${actionClass} bg-[#0B3D2E] text-white hover:bg-[#164F3E] sm:min-w-40`} href={openHref}>
+        Open Event
+      </Link>
+      <details className="group min-w-0 sm:w-52">
+        <summary
+          aria-label={`More actions for ${eventName}`}
+          className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-lg border border-[#D9D0C0] bg-white px-4 py-3 text-sm font-black transition hover:border-[#0B3D2E] hover:bg-[#F6F1E6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B3D2E] [&::-webkit-details-marker]:hidden"
+        >
+          <span>More actions</span>
+          <span aria-hidden="true" className="text-lg leading-none transition group-open:rotate-180">⌄</span>
+        </summary>
+        <div className="mt-2 grid min-w-0 gap-2 rounded-lg border border-[#E8DCC8] bg-white p-2 shadow-sm">
+          <Link className={actionClass} href={manageHref}>Setup / Manage</Link>
+          {resultsHref ? <Link className={actionClass} href={resultsHref}>Results / Live Scoring</Link> : null}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function EventCard({
   title,
   type,
@@ -33,7 +61,7 @@ function EventCard({
         </div>
         <span className="w-fit rounded-full border border-[#D9D0C0] bg-white px-3 py-1 text-xs font-black uppercase">{status}</span>
       </div>
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">{children}</div>
+      {children}
     </article>
   );
 }
@@ -90,9 +118,12 @@ export default function EventsPage() {
               <div className="mt-5 space-y-4">
                 {tournaments.length ? tournaments.map((tournament) => (
                   <EventCard key={tournament.id} type="Tournament" title={tournament.name} status={tournament.status} detail={[tournament.course, tournament.date].filter(Boolean).join(" · ") || "Tournament setup"}>
-                    <Link className={`${actionClass} bg-[#0B3D2E] text-white hover:bg-[#164F3E]`} href={`/tournament/${encodeURIComponent(tournament.id)}`}>Open Event</Link>
-                    <Link className={actionClass} href={`/tournament/${encodeURIComponent(tournament.id)}?tab=Teams`}>Setup / Manage</Link>
-                    <Link className={actionClass} href={`/tournament/${encodeURIComponent(tournament.id)}?tab=Live+Scoring`}>Results / Live Scoring</Link>
+                    <EventCardActions
+                      eventName={tournament.name}
+                      openHref={`/tournament/${encodeURIComponent(tournament.id)}`}
+                      manageHref={`/tournament/${encodeURIComponent(tournament.id)}?tab=Teams`}
+                      resultsHref={`/tournament/${encodeURIComponent(tournament.id)}?tab=Live+Scoring`}
+                    />
                   </EventCard>
                 )) : <p className="rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">No Tournaments yet.</p>}
               </div>
@@ -106,9 +137,12 @@ export default function EventsPage() {
                   const workspace = session.tournamentId ? `/tournament/${encodeURIComponent(session.tournamentId)}` : "";
                   return (
                     <EventCard key={session.id} type="Qualifying" title={session.name} status={session.status} detail={`${session.selectedPlayers.length} players · ${days.length} ${days.length === 1 ? "day" : "days"}`}>
-                      {workspace ? <Link className={`${actionClass} bg-[#0B3D2E] text-white hover:bg-[#164F3E]`} href={workspace}>Open Event</Link> : null}
-                      <Link className={actionClass} href="/coach-dashboard/qualifying-manager">Setup / Manage</Link>
-                      {workspace ? <Link className={actionClass} href={`${workspace}?tab=Live+Scoring`}>Results / Live Scoring</Link> : null}
+                      <EventCardActions
+                        eventName={session.name}
+                        openHref={workspace || "/coach-dashboard/qualifying-manager"}
+                        manageHref="/coach-dashboard/qualifying-manager"
+                        resultsHref={workspace ? `${workspace}?tab=Live+Scoring` : undefined}
+                      />
                     </EventCard>
                   );
                 }) : <p className="rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">No Qualifying Sessions yet.</p>}

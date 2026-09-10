@@ -136,10 +136,22 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
   await expect(page.getByRole("heading", { name: "Fall Invitational" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Travel Team Qualifying" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open Event" })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "Open Event" }).nth(0)).toHaveAttribute("href", "/tournament/tournament-1");
+  await expect(page.getByRole("link", { name: "Open Event" }).nth(1)).toHaveAttribute("href", "/tournament/backing-tournament-1");
+  await expect(page.getByRole("link", { name: "Setup / Manage" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Results / Live Scoring" })).toHaveCount(0);
+
+  await page.getByLabel("More actions for Fall Invitational").click();
+  await expect(page.getByRole("link", { name: "Setup / Manage" })).toHaveAttribute("href", "/tournament/tournament-1?tab=Teams");
+  await expect(page.getByRole("link", { name: "Results / Live Scoring" })).toHaveAttribute("href", "/tournament/tournament-1?tab=Live+Scoring");
+
+  await page.getByLabel("More actions for Travel Team Qualifying").click();
   await expect(page.getByRole("link", { name: "Setup / Manage" })).toHaveCount(2);
-  await expect(page.getByRole("link", { name: "Results / Live Scoring" })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "Setup / Manage" }).nth(1)).toHaveAttribute("href", "/coach-dashboard/qualifying-manager");
+  await expect(page.getByRole("link", { name: "Results / Live Scoring" }).nth(1)).toHaveAttribute("href", "/tournament/backing-tournament-1?tab=Live+Scoring");
   await expect(page.getByText("Tournament Director", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/QA seed/i)).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("empty, no-season, no-player, and error states are explicit", async ({ page }) => {
