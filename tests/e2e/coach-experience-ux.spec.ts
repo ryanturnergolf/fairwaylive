@@ -90,18 +90,32 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
   await routeValidCoachSession(page);
   await installCoachSession(page);
   await page.addInitScript(() => {
-    window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([{
-      id: "tournament-1",
-      name: "Fall Invitational",
-      course: "Hidden Creek",
-      date: "2026-09-20",
-      city: "",
-      state: "",
-      rounds: "2",
-      scoringFormat: "Stroke Play",
-      status: "Upcoming",
-      settings: {},
-    }]));
+    window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([
+      {
+        id: "tournament-1",
+        name: "Fall Invitational",
+        course: "Hidden Creek",
+        date: "2026-09-20",
+        city: "",
+        state: "",
+        rounds: "2",
+        scoringFormat: "Stroke Play",
+        status: "Upcoming",
+        settings: {},
+      },
+      {
+        id: "tournament-history",
+        name: "Spring Classic",
+        course: "Bluffton Golf Club",
+        date: "2026-04-12",
+        city: "",
+        state: "",
+        rounds: "1",
+        scoringFormat: "Stroke Play",
+        status: "Finalized",
+        settings: {},
+      },
+    ]));
   });
   await page.unroute("**/api/qualifying-sessions**");
   await page.route("**/api/qualifying-sessions**", (route) => route.fulfill({
@@ -124,6 +138,25 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
         updatedAt: null,
       },
       days: [{ id: "day-1", qualifyingSessionId: "qualifying-1", dayNumber: 1, playDate: "2026-09-18", holesTotal: 18, courseName: "Hidden Creek", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null }],
+      rounds: [],
+      scorerAssignments: [],
+    }, {
+      session: {
+        id: "qualifying-history",
+        tournamentId: "backing-history",
+        ownerId: "coach-1",
+        name: "Spring Qualifying",
+        rosterType: "men",
+        scoringMode: "reciprocal",
+        status: "finalized",
+        selectedPlayers: [],
+        groups: [],
+        finalizedAt: "2026-04-10T12:00:00.000Z",
+        finalizedBy: "coach-1",
+        createdAt: null,
+        updatedAt: null,
+      },
+      days: [],
       rounds: [],
       scorerAssignments: [],
     }] }),
@@ -149,6 +182,18 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
   await expect(page.getByRole("link", { name: "Setup / Manage" })).toHaveCount(2);
   await expect(page.getByRole("link", { name: "Setup / Manage" }).nth(1)).toHaveAttribute("href", "/coach-dashboard/qualifying-manager");
   await expect(page.getByRole("link", { name: "Results / Live Scoring" }).nth(1)).toHaveAttribute("href", "/tournament/backing-tournament-1?tab=Live+Scoring");
+  await expect(page.getByRole("heading", { name: "Spring Classic" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Spring Qualifying" })).toHaveCount(0);
+  await page.getByText("History", { exact: false }).click();
+  await expect(page.getByRole("heading", { name: "Spring Classic" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spring Qualifying" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Qualifying", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Fall Invitational" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Travel Team Qualifying" })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search events" }).fill("Spring Qualifying");
+  await expect(page.getByRole("heading", { name: "Travel Team Qualifying" })).toHaveCount(0);
+  await expect(page.getByText("History", { exact: false })).toBeVisible();
   await expect(page.getByText("Tournament Director", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/QA seed/i)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

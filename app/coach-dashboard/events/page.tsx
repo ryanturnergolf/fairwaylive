@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CoachBreadcrumbs, CoachHeader } from "../components/CoachChrome";
 import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
 import { loadTournamentsFromStorage, type StoredTournament } from "../../lib/tournamentStorage";
@@ -9,6 +9,18 @@ import { listQualifyingSessionFoundations } from "../../lib/services/qualifyingS
 import { loadTournamentList } from "../../lib/services/tournamentService";
 
 const actionClass = "inline-flex min-h-12 items-center justify-center rounded-lg border border-[#0B3D2E] px-4 py-3 text-center text-sm font-black transition hover:bg-[#F6F1E6]";
+type EventTypeFilter = "all" | "tournament" | "qualifying";
+
+function isHistoricalStatus(status: string) {
+  return ["archived", "complete", "completed", "finalized"].includes(status.trim().toLowerCase());
+}
+
+function activeStatusPriority(status: string) {
+  const normalized = status.trim().toLowerCase();
+  if (["active", "live", "in progress"].includes(normalized)) return 0;
+  if (["upcoming", "draft", "provisioned"].includes(normalized)) return 1;
+  return 2;
+}
 
 function EventCardActions({ eventName, openHref, manageHref, resultsHref }: {
   eventName: string;
@@ -66,11 +78,42 @@ function EventCard({
   );
 }
 
+function TournamentEventCard({ tournament }: { tournament: StoredTournament }) {
+  const workspace = `/tournament/${encodeURIComponent(tournament.id)}`;
+  return (
+    <EventCard type="Tournament" title={tournament.name} status={tournament.status} detail={[tournament.course, tournament.date].filter(Boolean).join(" · ") || "Tournament setup"}>
+      <EventCardActions
+        eventName={tournament.name}
+        openHref={workspace}
+        manageHref={`${workspace}?tab=Teams`}
+        resultsHref={`${workspace}?tab=Live+Scoring`}
+      />
+    </EventCard>
+  );
+}
+
+function QualifyingEventCard({ foundation }: { foundation: QualifyingSessionFoundation }) {
+  const { session, days } = foundation;
+  const workspace = session.tournamentId ? `/tournament/${encodeURIComponent(session.tournamentId)}` : "";
+  return (
+    <EventCard type="Qualifying" title={session.name} status={session.status} detail={`${session.selectedPlayers.length} players · ${days.length} ${days.length === 1 ? "day" : "days"}`}>
+      <EventCardActions
+        eventName={session.name}
+        openHref={workspace || "/coach-dashboard/qualifying-manager"}
+        manageHref="/coach-dashboard/qualifying-manager"
+        resultsHref={workspace ? `${workspace}?tab=Live+Scoring` : undefined}
+      />
+    </EventCard>
+  );
+}
+
 export default function EventsPage() {
   const [tournaments, setTournaments] = useState<StoredTournament[]>([]);
   const [qualifying, setQualifying] = useState<QualifyingSessionFoundation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [eventType, setEventType] = useState<EventTypeFilter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +132,27 @@ export default function EventsPage() {
     });
     return () => { cancelled = true; };
   }, []);
+
+  const visibleEvents = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = (...values: Array<string | null | undefined>) =>
+      !query || values.some((value) => value?.toLowerCase().includes(query));
+    const tournamentItems = eventType === "qualifying" ? [] : tournaments
+      .filter((tournament) => matchesSearch(tournament.name, tournament.course, tournament.date))
+      .sort((left, right) => activeStatusPriority(left.status) - activeStatusPriority(right.status));
+    const qualifyingItems = eventType === "tournament" ? [] : qualifying
+      .filter(({ session, days }) => matchesSearch(session.name, session.status, ...days.map((day) => day.courseName)))
+      .sort((left, right) => activeStatusPriority(left.session.status) - activeStatusPriority(right.session.status));
+    return {
+      activeTournaments: tournamentItems.filter((item) => !isHistoricalStatus(item.status)),
+      historicalTournaments: tournamentItems.filter((item) => isHistoricalStatus(item.status)),
+      activeQualifying: qualifyingItems.filter(({ session }) => !isHistoricalStatus(session.status)),
+      historicalQualifying: qualifyingItems.filter(({ session }) => isHistoricalStatus(session.status)),
+    };
+  }, [eventType, qualifying, search, tournaments]);
+
+  const historyCount = visibleEvents.historicalTournaments.length + visibleEvents.historicalQualifying.length;
+  const activeCount = visibleEvents.activeTournaments.length + visibleEvents.activeQualifying.length;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#F6F1E6] text-[#0B3D2E]">
@@ -111,43 +175,92 @@ export default function EventsPage() {
         {isLoading ? <p role="status" className="mt-8 rounded-lg border border-[#E8DCC8] bg-white p-6 font-semibold text-[#51635C]">Loading events...</p> : null}
 
         {!isLoading ? (
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            <section aria-labelledby="tournament-events-title" className="rounded-xl border border-[#E8DCC8] bg-white p-5 sm:p-6">
-              <h2 id="tournament-events-title" className="text-2xl font-black">Tournaments</h2>
-              <p className="mt-2 text-sm text-[#51635C]">Team and individual competition events.</p>
-              <div className="mt-5 space-y-4">
-                {tournaments.length ? tournaments.map((tournament) => (
-                  <EventCard key={tournament.id} type="Tournament" title={tournament.name} status={tournament.status} detail={[tournament.course, tournament.date].filter(Boolean).join(" · ") || "Tournament setup"}>
-                    <EventCardActions
-                      eventName={tournament.name}
-                      openHref={`/tournament/${encodeURIComponent(tournament.id)}`}
-                      manageHref={`/tournament/${encodeURIComponent(tournament.id)}?tab=Teams`}
-                      resultsHref={`/tournament/${encodeURIComponent(tournament.id)}?tab=Live+Scoring`}
-                    />
-                  </EventCard>
-                )) : <p className="rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">No Tournaments yet.</p>}
+          <div className="mt-8 space-y-6">
+            <section aria-label="Filter events" className="rounded-xl border border-[#E8DCC8] bg-white p-4 sm:p-5">
+              <label htmlFor="event-search" className="text-sm font-black">Search events</label>
+              <input
+                id="event-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by event or course"
+                className="mt-2 min-h-12 w-full rounded-lg border border-[#D9D0C0] bg-[#FCFAF5] px-4 text-base outline-none transition focus:border-[#0B3D2E] focus:ring-2 focus:ring-[#0B3D2E]/20"
+              />
+              <div className="mt-3 flex flex-wrap gap-2" aria-label="Event type">
+                {(["all", "tournament", "qualifying"] as const).map((value) => {
+                  const labels = { all: "All", tournament: "Tournaments", qualifying: "Qualifying" };
+                  const selected = eventType === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setEventType(value)}
+                      className={`min-h-12 rounded-full border px-4 text-sm font-black transition ${selected ? "border-[#0B3D2E] bg-[#0B3D2E] text-white" : "border-[#D9D0C0] bg-white hover:border-[#0B3D2E]"}`}
+                    >
+                      {labels[value]}
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
-            <section aria-labelledby="qualifying-events-title" className="rounded-xl border border-[#E8DCC8] bg-white p-5 sm:p-6">
-              <h2 id="qualifying-events-title" className="text-2xl font-black">Qualifying Sessions</h2>
-              <p className="mt-2 text-sm text-[#51635C]">Roster-based qualifying and team-selection events.</p>
-              <div className="mt-5 space-y-4">
-                {qualifying.length ? qualifying.map(({ session, days }) => {
-                  const workspace = session.tournamentId ? `/tournament/${encodeURIComponent(session.tournamentId)}` : "";
-                  return (
-                    <EventCard key={session.id} type="Qualifying" title={session.name} status={session.status} detail={`${session.selectedPlayers.length} players · ${days.length} ${days.length === 1 ? "day" : "days"}`}>
-                      <EventCardActions
-                        eventName={session.name}
-                        openHref={workspace || "/coach-dashboard/qualifying-manager"}
-                        manageHref="/coach-dashboard/qualifying-manager"
-                        resultsHref={workspace ? `${workspace}?tab=Live+Scoring` : undefined}
-                      />
-                    </EventCard>
-                  );
-                }) : <p className="rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">No Qualifying Sessions yet.</p>}
+            {activeCount ? (
+              <div className="grid gap-6 lg:grid-cols-2">
+                {eventType !== "qualifying" ? (
+                  <section aria-labelledby="tournament-events-title" className="rounded-xl border border-[#E8DCC8] bg-white p-5 sm:p-6">
+                    <h2 id="tournament-events-title" className="text-2xl font-black">Tournaments</h2>
+                    <p className="mt-2 text-sm text-[#51635C]">Team and individual competition events.</p>
+                    <div className="mt-5 space-y-4">
+                      {visibleEvents.activeTournaments.length ? visibleEvents.activeTournaments.map((tournament) => (
+                        <TournamentEventCard key={tournament.id} tournament={tournament} />
+                      )) : <p className="rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">No current Tournaments match.</p>}
+                    </div>
+                  </section>
+                ) : null}
+
+                {eventType !== "tournament" ? (
+                  <section aria-labelledby="qualifying-events-title" className="rounded-xl border border-[#E8DCC8] bg-white p-5 sm:p-6">
+                    <h2 id="qualifying-events-title" className="text-2xl font-black">Qualifying Sessions</h2>
+                    <p className="mt-2 text-sm text-[#51635C]">Roster-based qualifying and team-selection events.</p>
+                    <div className="mt-5 space-y-4">
+                      {visibleEvents.activeQualifying.length ? visibleEvents.activeQualifying.map((foundation) => (
+                        <QualifyingEventCard key={foundation.session.id} foundation={foundation} />
+                      )) : <p className="rounded-lg border border-dashed border-[#D9D0C0] bg-[#FCFAF5] p-5 text-sm font-semibold text-[#51635C]">No current Qualifying Sessions match.</p>}
+                    </div>
+                  </section>
+                ) : null}
               </div>
-            </section>
+            ) : (
+              <p role="status" className="rounded-xl border border-dashed border-[#D9D0C0] bg-white p-6 text-sm font-semibold text-[#51635C]">No current events match your filters.</p>
+            )}
+
+            {historyCount ? (
+              <details className="group rounded-xl border border-[#D9D0C0] bg-white">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B3D2E] [&::-webkit-details-marker]:hidden">
+                  <span>History <span className="text-sm font-semibold text-[#51635C]">({historyCount})</span></span>
+                  <span aria-hidden="true" className="text-lg leading-none transition group-open:rotate-180">⌄</span>
+                </summary>
+                <div className="grid gap-6 border-t border-[#E8DCC8] p-5 lg:grid-cols-2">
+                  {visibleEvents.historicalTournaments.length ? (
+                    <section aria-labelledby="historical-tournaments-title">
+                      <h2 id="historical-tournaments-title" className="text-lg font-black">Tournaments</h2>
+                      <div className="mt-3 space-y-4">
+                        {visibleEvents.historicalTournaments.map((tournament) => <TournamentEventCard key={tournament.id} tournament={tournament} />)}
+                      </div>
+                    </section>
+                  ) : null}
+                  {visibleEvents.historicalQualifying.length ? (
+                    <section aria-labelledby="historical-qualifying-title">
+                      <h2 id="historical-qualifying-title" className="text-lg font-black">Qualifying Sessions</h2>
+                      <div className="mt-3 space-y-4">
+                        {visibleEvents.historicalQualifying.map((foundation) => <QualifyingEventCard key={foundation.session.id} foundation={foundation} />)}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
           </div>
         ) : null}
       </div>
