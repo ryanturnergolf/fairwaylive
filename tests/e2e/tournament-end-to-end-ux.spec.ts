@@ -47,10 +47,18 @@ test.describe("Tournament end-to-end presentation contract", () => {
 
     const dialog = page.getByRole("dialog", { name: "Create Tournament" });
     await expect(dialog).toBeVisible();
+    await expect(page.getByText("Event Setup", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Build your Tournament" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tournament Director Dashboard" })).toBeHidden();
+    await expect(page.getByRole("link", { name: "Templates", exact: true })).toBeHidden();
+    await expect(page.getByText("Import Teams", { exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Close tournament creation dialog" })).toBeVisible();
     const bounds = await dialog.boundingBox();
     expect(bounds?.height ?? 0).toBeLessThanOrEqual(812);
     expect(bounds?.width ?? 0).toBeLessThanOrEqual(358);
+    await page.getByRole("button", { name: "Close tournament creation dialog" }).click();
+    await expect(page).toHaveURL(/\/coach-dashboard\/events$/);
+    await expect(page.getByRole("heading", { name: "Events", exact: true })).toBeVisible();
   });
 
   test("Tournament creation follows the shared seven-step event setup pattern", async ({ page }) => {

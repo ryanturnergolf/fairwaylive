@@ -713,6 +713,7 @@ export default function DashboardPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     resetForm();
+    router.replace("/coach-dashboard/events");
   };
 
   const updateRoundCount = (value: string) => {
@@ -1007,7 +1008,27 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+      {isModalOpen ? (
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(184,137,45,0.12),_transparent_32%),linear-gradient(180deg,_#FCFAF5_0%,_#F6F1E6_100%)]">
+          <header className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-5 sm:px-8 lg:py-7">
+            <Link href="/" className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0B3D2E] text-xs font-black tracking-[0.2em] text-[#F6F1E6]">HQ</span>
+              <span>
+                <span className="block font-black tracking-[-0.02em]">Clubhouse HQ</span>
+                <span className="block text-[9px] font-black uppercase tracking-[0.3em] text-[#B8892D]">Coach Portal</span>
+              </span>
+            </Link>
+            <span className="rounded-full border border-[#E8DCC8] bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">Event Setup</span>
+          </header>
+          <section className="mx-auto max-w-5xl px-5 pb-12 pt-6 sm:px-8 sm:pt-10">
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#B8892D]">Events / New Tournament</p>
+            <h2 className="mt-3 max-w-2xl text-3xl font-black tracking-[-0.03em] sm:text-5xl">Build your Tournament</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[#51635C] sm:text-base">Complete the guided setup, review the details, and create the event when you are ready.</p>
+          </section>
+        </div>
+      ) : null}
+
+      <header className={isModalOpen ? "hidden" : "mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 lg:py-6"}>
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
@@ -1062,7 +1083,7 @@ export default function DashboardPage() {
         </nav>
       </header>
 
-      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
+      <section className={isModalOpen ? "hidden" : "mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12"}>
         <div className="rounded-[24px] border border-[#E8DCC8] bg-white/90 p-5 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur sm:rounded-[36px] sm:p-8 lg:p-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -1558,7 +1579,7 @@ export default function DashboardPage() {
 
       {isModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#0B3D2E]/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#F6F1E6]/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
           onClick={closeModal}
         >
           <div
@@ -1997,7 +2018,7 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <footer className="bg-[#0B3D2E] px-6 py-10 text-[#F6F1E6] lg:px-8">
+      <footer className={isModalOpen ? "hidden" : "bg-[#0B3D2E] px-6 py-10 text-[#F6F1E6] lg:px-8"}>
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 md:flex-row md:items-center">
           <div>
             <h3 className="text-2xl font-black">Clubhouse HQ</h3>
