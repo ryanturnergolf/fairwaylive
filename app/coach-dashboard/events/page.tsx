@@ -159,7 +159,7 @@ export default function EventsPage() {
     <main className="min-h-screen overflow-x-hidden bg-[#F6F1E6] text-[#0B3D2E]">
       <CoachHeader />
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
-        <CoachBreadcrumbs items={[{ label: "Coach Dashboard", href: "/coach-dashboard" }, { label: "Events" }]} />
+        <CoachBreadcrumbs items={[{ label: "Coach Portal", href: "/coach-dashboard/events" }, { label: "Events" }]} />
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">Competition</p>

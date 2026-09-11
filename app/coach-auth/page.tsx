@@ -20,7 +20,7 @@ function CoachAuthForm() {
     const requestedPath = searchParams.get("next");
     return requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
       ? requestedPath
-      : "/dashboard";
+      : "/coach-dashboard/events";
   })();
 
   useEffect(() => {

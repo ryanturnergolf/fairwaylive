@@ -45,18 +45,18 @@ const routeDashboardReads = async (page: Page) => {
   );
 };
 
-test("signed-out homepage Login opens a stable coach sign-in form", async ({ page }) => {
+test("signed-out homepage Coach Portal opens a stable coach sign-in form", async ({ page }) => {
   await page.route("**/auth/v1/**", routeSignedOutAuth);
   await page.addInitScript(() => window.localStorage.clear());
 
   await gotoApp(page, "/");
-  await page.getByRole("link", { name: "Login", exact: true }).click();
+  await page.getByRole("link", { name: "Coach Portal", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/coach-auth\?next=(?:%2F|\/)dashboard$/);
+  await expect(page).toHaveURL(/\/coach-auth\?next=(?:%2F|\/)coach-dashboard(?:%2F|\/)events$/);
   await expect(page.getByRole("heading", { name: "Coach Sign In" })).toBeVisible();
   await expect(page.getByLabel("Email")).toBeEditable();
   await page.waitForTimeout(500);
-  await expect(page).toHaveURL(/\/coach-auth\?next=(?:%2F|\/)dashboard$/);
+  await expect(page).toHaveURL(/\/coach-auth\?next=(?:%2F|\/)coach-dashboard(?:%2F|\/)events$/);
   await expect(page.getByRole("heading", { name: "Coach Sign In" })).toBeVisible();
 });
 
@@ -209,7 +209,7 @@ const routeAuthenticatedAuth = async (page: Page) => {
   });
 };
 
-test("auth persists across homepage navigation and one seed creates and redirects to one tournament", async ({ page }) => {
+test("Coach Portal enters Events while the compatible dashboard can still seed a tournament", async ({ page }) => {
   const tournamentId = "77777777-7777-4777-8777-777777777777";
   let createCount = 0;
   let snapshotCount = 0;
@@ -263,17 +263,18 @@ test("auth persists across homepage navigation and one seed creates and redirect
   await gotoApp(page, "/");
   await page.evaluate(() => window.localStorage.clear());
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("link", { name: "Login", exact: true }).click();
+  await page.getByRole("link", { name: "Coach Portal", exact: true }).click();
+  await expect(page).toHaveURL(/\/coach-auth\?next=\/coach-dashboard\/events$/);
   await page.getByLabel("Email").fill("coach@example.test");
   await page.getByLabel("Password").fill("valid-password");
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/coach-dashboard\/events$/);
 
-  await page.getByRole("link", { name: "Homepage", exact: true }).click();
-  await expect(page).toHaveURL("/");
-  await expect(page.getByRole("link", { name: "Coach Dashboard", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Tournaments", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await gotoApp(page, "/");
+  await expect(page.getByRole("link", { name: "Coach Portal", exact: true })).toHaveAttribute("href", "/coach-dashboard/events");
+  await page.getByRole("link", { name: "Coach Portal", exact: true }).click();
+  await expect(page).toHaveURL(/\/coach-dashboard\/events$/);
+  await gotoApp(page, "/dashboard");
   await expect(page.getByRole("button", { name: "Coach Sign Out" })).toBeVisible();
 
   const seedButton = page.getByRole("button", { name: "Seed Test Tournament" });
@@ -288,7 +289,8 @@ test("auth persists across homepage navigation and one seed creates and redirect
   await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}$`));
   await expect(page.getByText(/Test Tournament 2026-/).first()).toBeVisible();
   await gotoApp(page, "/");
-  await expect(page.getByText(/Test Tournament 2026-/).first()).toBeVisible();
+  await expect(page.getByText(/Test Tournament 2026-/).first()).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Coach Portal", exact: true })).toHaveAttribute("href", "/coach-dashboard/events");
 });
 
 test("incomplete seed creates authoritative scores and statistics through hole 17", async ({ page }) => {

@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadTournamentCatalog } from "./lib/services/tournamentCatalogService";
 import { getSupabaseBrowserClient } from "./lib/supabaseClient";
-import { loadTournamentsFromStorage, type StoredTournament } from "./lib/tournamentStorage";
 import PlayerScoringCodeEntry from "./components/PlayerScoringCodeEntry";
 
 const teams = [
@@ -85,28 +83,7 @@ const features = [
 ];
 
 export default function Home() {
-  const [savedTournaments, setSavedTournaments] = useState<StoredTournament[]>([]);
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
-
-  useEffect(() => {
-    let isCancelled = false;
-    const localTournaments = loadTournamentsFromStorage();
-    setSavedTournaments(localTournaments);
-
-    void loadTournamentCatalog(localTournaments)
-      .then((catalog) => {
-        if (!isCancelled) {
-          setSavedTournaments(catalog.map((entry) => entry.tournament));
-        }
-      })
-      .catch((error) => {
-        console.warn("[TournamentService] Unable to load shared tournament aggregates.", error);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -124,7 +101,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
+      <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5 lg:px-8 lg:py-6">
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
@@ -137,36 +114,21 @@ export default function Home() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 xl:flex">
+        <nav aria-label="Public navigation" className="flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#0B3D2E]/75 sm:w-auto sm:justify-end sm:text-[11px] xl:gap-6 xl:tracking-[0.3em]">
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
             Live Scores
           </Link>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
-            Tournaments
-          </Link>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          <a className="transition duration-300 hover:text-[#B8892D]" href="#features">
             Features
           </a>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          <a className="transition duration-300 hover:text-[#B8892D]" href="#pricing">
             Pricing
           </a>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
-            Dashboard
-          </Link>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-dashboard">
-            Coach Portal
-          </Link>
-          <Link
-            className="transition duration-300 hover:text-[#B8892D]"
-            href={isCoachAuthenticated ? "/dashboard" : "/coach-auth?next=/dashboard"}
-          >
-            {isCoachAuthenticated ? "Coach Dashboard" : "Login"}
-          </Link>
           <Link
             className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
-            href={isCoachAuthenticated ? "/dashboard" : "/coach-auth?next=/dashboard"}
+            href={isCoachAuthenticated ? "/coach-dashboard/events" : "/coach-auth?next=/coach-dashboard/events"}
           >
-            {isCoachAuthenticated ? "Manage Tournaments" : "Get Started"}
+            Coach Portal
           </Link>
         </nav>
       </header>
@@ -218,9 +180,9 @@ export default function Home() {
                   <Link className="rounded-full bg-[#F6F1E6] px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1" href="/live">
                     View Live Scores
                   </Link>
-                  <a className="rounded-full border border-[#F0C96A]/60 px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] transition duration-300 hover:bg-[#F0C96A]/10" href="#">
-                    Host a Tournament
-                  </a>
+                  <Link className="rounded-full border border-[#F0C96A]/60 px-7 py-4 text-center text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] transition duration-300 hover:bg-[#F0C96A]/10" href={isCoachAuthenticated ? "/coach-dashboard/events" : "/coach-auth?next=/coach-dashboard/events"}>
+                    Open Coach Portal
+                  </Link>
                 </div>
               </div>
 
@@ -298,81 +260,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-24 lg:px-8">
-        <div className="rounded-[36px] border border-[#E8DCC8] bg-white/90 p-8 shadow-[0_24px_80px_rgba(11,61,46,0.08)] backdrop-blur lg:p-10">
-          <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-            <div>
-              <p className="text-sm font-black uppercase tracking-[0.35em] text-[#B8892D]">
-                Saved Tournaments
-              </p>
-              <h3 className="mt-2 text-3xl font-black tracking-[-0.02em]">
-                Open any tournament already created in Clubhouse HQ.
-              </h3>
-            </div>
-            <Link className="rounded-full bg-[#0B3D2E] px-6 py-3 text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] transition duration-300 hover:-translate-y-0.5" href="/dashboard">
-              Open Dashboard
-            </Link>
-          </div>
-
-          {savedTournaments.length === 0 ? (
-            <div className="rounded-[24px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center text-[#51635C] shadow-inner">
-              Create a tournament from the dashboard and it will appear here automatically.
-            </div>
-          ) : (
-            <div className="grid gap-6 lg:grid-cols-2">
-              {savedTournaments.map((tournament) => (
-                <div key={tournament.id} className="rounded-[32px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 shadow-[0_18px_45px_rgba(11,61,46,0.06)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
-                        {tournament.status}
-                      </p>
-                      <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">
-                        {tournament.name}
-                      </h3>
-                    </div>
-                    <span className="rounded-full border border-[#E8DCC8] bg-[#F6F1E6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#51635C]">
-                      {tournament.rounds} Rounds
-                    </span>
-                  </div>
-
-                  <div className="mt-6 space-y-3 text-sm text-[#51635C]">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-semibold uppercase tracking-[0.25em]">Course</span>
-                      <span className="text-right font-black text-[#0B3D2E]">{tournament.course || "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-semibold uppercase tracking-[0.25em]">Date</span>
-                      <span className="text-right font-black text-[#0B3D2E]">{tournament.date || "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-semibold uppercase tracking-[0.25em]">Status</span>
-                      <span className="text-right font-black text-[#0B3D2E]">{tournament.status}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                    <Link
-                      href={`/tournament/${tournament.id}`}
-                      className="rounded-full bg-[#0B3D2E] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5"
-                    >
-                      Open Tournament
-                    </Link>
-                    <Link
-                      href="/dashboard"
-                      className="rounded-full border border-[#B8892D] px-6 py-3 text-center text-sm font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
-                    >
-                      Manage
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-24 md:grid-cols-3 lg:px-8">
+      <section id="features" className="mx-auto grid max-w-7xl scroll-mt-6 gap-6 px-6 py-24 md:grid-cols-3 lg:px-8">
         {features.map((feature) => (
           <div key={feature.title} className="rounded-[30px] border border-[#E8DCC8] bg-white/90 p-8 shadow-[0_18px_45px_rgba(11,61,46,0.06)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_60px_rgba(11,61,46,0.12)]">
             <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[#0B3D2E] text-xl font-black text-[#F0C96A]">
@@ -386,6 +274,8 @@ export default function Home() {
           </div>
         ))}
       </section>
+
+      <section id="pricing" aria-label="Pricing" className="sr-only" />
 
       <footer className="bg-[#0B3D2E] px-6 py-10 text-[#F6F1E6] lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 md:flex-row md:items-center">

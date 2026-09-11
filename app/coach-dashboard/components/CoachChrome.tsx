@@ -54,7 +54,6 @@ export function CoachHeader() {
             <Link href="/coach-dashboard/team-statistics" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Team Statistics</Link>
             <Link href="/coach-dashboard/statistics" className="rounded-lg px-2 py-3 text-xs font-bold hover:bg-[#F6F1E6]">Stat Configuration</Link>
           </nav>
-          <Link href="/coach-dashboard" className="hidden min-h-11 items-center rounded-lg px-3 text-sm font-black text-[#0B3D2E] hover:bg-[#F6F1E6] sm:inline-flex">Dashboard</Link>
           <details className="group relative">
             <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-[#0B3D2E] bg-white px-4 text-sm font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8892D]">Coach Menu</summary>
             <nav aria-label="Coach navigation" className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-[#D9D0C0] bg-white p-4 shadow-xl">
@@ -75,10 +74,13 @@ export function CoachHeader() {
 }
 
 export function CoachBreadcrumbs({ items }: { items: Array<{ label: string; href?: string }> }) {
+  const coachFacingItems = items.map((item) => item.label === "Coach Dashboard"
+    ? { ...item, label: "Coach Portal", href: "/coach-dashboard/events" }
+    : item);
   return (
     <nav aria-label="Breadcrumb" className="mb-5 overflow-x-auto text-sm font-bold text-[#51635C]">
       <ol className="flex min-w-max items-center gap-2">
-        {items.map((item, index) => <li key={`${item.label}-${index}`} className="flex items-center gap-2">{index ? <span aria-hidden="true">/</span> : null}{item.href ? <Link href={item.href} className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8892D]">{item.label}</Link> : <span aria-current="page" className="text-[#0B3D2E]">{item.label}</span>}</li>)}
+        {coachFacingItems.map((item, index) => <li key={`${item.label}-${index}`} className="flex items-center gap-2">{index ? <span aria-hidden="true">/</span> : null}{item.href ? <Link href={item.href} className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8892D]">{item.label}</Link> : <span aria-current="page" className="text-[#0B3D2E]">{item.label}</span>}</li>)}
       </ol>
     </nav>
   );

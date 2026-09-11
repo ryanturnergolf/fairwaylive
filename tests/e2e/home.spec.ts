@@ -8,6 +8,30 @@ test("homepage loads", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Clubhouse HQ", level: 1 })).toBeVisible();
 });
 
+test("public navigation has one coach entry point on desktop and mobile", async ({ page }) => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await gotoApp(page, "/");
+    const navigation = page.getByRole("navigation", { name: "Public navigation" });
+    await expect(navigation).toBeVisible();
+    await expect(navigation.getByRole("link")).toHaveText(["Live Scores", "Features", "Pricing", "Coach Portal"]);
+    await expect(navigation.getByRole("link", { name: "Coach Portal" })).toHaveAttribute("href", "/coach-auth?next=/coach-dashboard/events");
+    for (const removedLabel of ["Tournaments", "Dashboard", "Coach Dashboard", "Manage Tournaments"]) {
+      await expect(navigation.getByText(removedLabel, { exact: true })).toHaveCount(0);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+});
+
+test("Live Scores preserves the same simplified public navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoApp(page, "/live");
+  const navigation = page.getByRole("navigation", { name: "Public navigation" });
+  await expect(navigation.getByRole("link")).toHaveText(["Live Scores", "Features", "Pricing", "Coach Portal"]);
+  await expect(navigation.getByRole("link", { name: "Coach Portal" })).toHaveAttribute("href", "/coach-auth?next=/coach-dashboard/events");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("homepage leaderboard omits shot-location labels and retains hole progress", async ({ page }) => {
   await gotoApp(page, "/");
 

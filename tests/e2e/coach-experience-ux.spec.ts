@@ -58,10 +58,10 @@ test("Coach Menu groups every destination by operating area", async ({ page }) =
   await expect(navigation.getByRole("link", { name: "Statistics", exact: true })).toHaveAttribute("href", "/coach-dashboard/statistics");
 });
 
-test("breadcrumbs provide reliable back navigation without changing routes", async ({ page }) => {
+test("breadcrumbs return routine coach workflows to the Events-centered Coach Portal", async ({ page }) => {
   await page.goto("/coach-dashboard/roster");
   const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
-  await expect(breadcrumb.getByRole("link", { name: "Coach Dashboard" })).toHaveAttribute("href", "/coach-dashboard");
+  await expect(breadcrumb.getByRole("link", { name: "Coach Portal" })).toHaveAttribute("href", "/coach-dashboard/events");
   await expect(breadcrumb.getByText("Rosters", { exact: true })).toHaveAttribute("aria-current", "page");
   await page.goto("/coach-dashboard/qualifying-manager/new");
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Qualifying" })).toHaveAttribute("href", "/coach-dashboard/qualifying-manager");

@@ -127,13 +127,14 @@ const foundationResponse = (input: CreateQualifyingSessionInput) => ({
   }],
 });
 
-test("Coach Dashboard exposes unified Events and its Create Qualifying action", async ({ page }) => {
+test("Coach Portal Events exposes Tournament and Qualifying creation together", async ({ page }) => {
   await page.route("**/rest/v1/**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
   );
   await page.goto("/coach-dashboard", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("link", { name: "Events", exact: true }).first()).toHaveAttribute("href", "/coach-dashboard/events");
   await page.goto("/coach-dashboard/events", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("link", { name: "Create Tournament" })).toHaveAttribute("href", "/dashboard#create-tournament");
   await expect(page.getByRole("link", { name: /Create Qualifying/ })).toBeVisible();
 });
 

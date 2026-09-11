@@ -1425,8 +1425,8 @@ export default function TournamentPage() {
         </Link>
 
         <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard" onClick={(event) => void handleTournamentNavigation(event, "/dashboard")}>
-            Dashboard
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-dashboard/events" onClick={(event) => void handleTournamentNavigation(event, "/coach-dashboard/events")}>
+            Events
           </Link>
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live" onClick={(event) => void handleTournamentNavigation(event, "/live")}>
             Live Scores

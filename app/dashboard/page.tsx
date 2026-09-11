@@ -1041,27 +1041,18 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0B3D2E]/75 xl:flex">
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/">
-            Homepage
-          </Link>
+        <nav aria-label="Public navigation" className="hidden items-center gap-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0B3D2E]/75 xl:flex">
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
             Live Scores
           </Link>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
-            Tournaments
-          </Link>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#director">
-            Director
-          </a>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/#features">
             Features
-          </a>
-          <a className="transition duration-300 hover:text-[#B8892E]" href="#">
+          </Link>
+          <Link className="transition duration-300 hover:text-[#B8892E]" href="/#pricing">
             Pricing
-          </a>
-          <Link className="transition duration-300 hover:text-[#B8892D]" href="/dashboard">
-            Dashboard
+          </Link>
+          <Link className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="/coach-dashboard/events">
+            Coach Portal
           </Link>
           {isCoachAuthenticated ? (
             <button
@@ -1073,13 +1064,10 @@ export default function DashboardPage() {
               {isSigningOut ? "Signing Out" : "Coach Sign Out"}
             </button>
           ) : (
-            <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-auth?next=/dashboard">
+            <Link className="transition duration-300 hover:text-[#B8892D]" href="/coach-auth?next=/coach-dashboard/events">
               Coach Sign In
             </Link>
           )}
-          <a className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="#">
-            Get Started
-          </a>
         </nav>
       </header>
 

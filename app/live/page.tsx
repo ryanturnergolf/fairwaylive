@@ -159,7 +159,7 @@ export default function LivePage() {
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] text-[#0B3D2E]">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-8 lg:py-6">
+      <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5 lg:px-8 lg:py-6">
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#B8892D]/30 bg-[#0B3D2E] text-sm font-black tracking-[0.25em] text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15">
             HQ
@@ -172,25 +172,19 @@ export default function LivePage() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#0B3D2E]/75 md:flex">
+        <nav aria-label="Public navigation" className="flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#0B3D2E]/75 sm:w-auto sm:justify-end sm:text-[11px] md:gap-6 md:tracking-[0.3em]">
           <Link className="transition duration-300 hover:text-[#B8892D]" href="/live">
             Live Scores
           </Link>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
-            Tournaments
-          </a>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/#features">
             Features
-          </a>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
+          </Link>
+          <Link className="transition duration-300 hover:text-[#B8892D]" href="/#pricing">
             Pricing
-          </a>
-          <a className="transition duration-300 hover:text-[#B8892D]" href="#">
-            Login
-          </a>
-          <a className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="#">
-            Get Started
-          </a>
+          </Link>
+          <Link className="rounded-full bg-[#0B3D2E] px-4 py-2.5 text-[#F6F1E6] shadow-lg shadow-[#0B3D2E]/15 transition duration-300 hover:-translate-y-0.5" href="/coach-auth?next=/coach-dashboard/events">
+            Coach Portal
+          </Link>
         </nav>
       </header>
 
