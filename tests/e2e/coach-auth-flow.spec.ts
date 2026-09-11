@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { routeValidCoachSession } from "./authSessionTestHelper";
 
 const gotoApp = (page: Page, url: string) => page.goto(url, { waitUntil: "domcontentloaded" });
 const userId = "88888888-8888-4888-8888-888888888888";
@@ -184,7 +185,8 @@ test("a revoked stored coach session is cleared and redirected through one frien
 });
 
 const routeAuthenticatedAuth = async (page: Page) => {
-  await page.route("**/auth/v1/**", async (route) => {
+  await routeValidCoachSession(page);
+  await page.route("**/auth/v1/token**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/token")) {
       await route.fulfill({
@@ -199,10 +201,6 @@ const routeAuthenticatedAuth = async (page: Page) => {
           user,
         }),
       });
-      return;
-    }
-    if (url.pathname.endsWith("/user")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(user) });
       return;
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
@@ -269,6 +267,7 @@ test("Coach Portal enters Events while the compatible dashboard can still seed a
   await page.getByLabel("Password").fill("valid-password");
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
   await expect(page).toHaveURL(/\/coach-dashboard\/events$/);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("clubhouse-hq-coach-auth"))).not.toBeNull();
 
   await gotoApp(page, "/");
   await expect(page.getByRole("link", { name: "Coach Portal", exact: true })).toHaveAttribute("href", "/coach-dashboard/events");

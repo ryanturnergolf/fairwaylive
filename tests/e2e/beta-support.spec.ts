@@ -15,7 +15,7 @@ test("Help and Support presents the certified workflow and accessible support co
   await expect(page.getByRole("heading", { name: "Event workflow" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Common troubleshooting" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Contact beta support" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Coach Dashboard" })).toHaveAttribute("href", "/coach-dashboard");
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Coach Portal" })).toHaveAttribute("href", "/coach-dashboard/events");
 });
 
 test("Help page remains usable at the certified mobile viewport", async ({ page }) => {
