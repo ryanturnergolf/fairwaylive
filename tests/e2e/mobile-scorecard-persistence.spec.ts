@@ -2919,8 +2919,8 @@ test("team-only roster persists two teams across refresh, second tab, and player
 
   await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), `clubhouse-hq-tournament-${tournamentId}`))
     .toContain("Team B");
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Teams" }).click();
+  await gotoApp(page, `${baseUrl}/tournament/${tournamentId}?tab=Teams`);
+  await expect(page.getByRole("button", { name: "Teams" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Team A", { exact: true })).toBeVisible();
   await expect(page.getByText("Team B", { exact: true })).toBeVisible();
 

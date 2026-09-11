@@ -208,7 +208,7 @@ test("finalized manager cards hide access rotation and retain results/history ac
   }));
   await page.goto("/coach-dashboard/qualifying-manager");
   await expect(page.getByText("finalized", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Results", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Results", exact: true }).click();
   await expect(page.getByRole("link", { name: "View History" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Rotate Code" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Generate Pairings & Scorecards" })).toHaveCount(0);
