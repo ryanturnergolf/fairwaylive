@@ -142,6 +142,8 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   await installCoachSession(page);
   await routeDurableRosters(page);
   let savedInput: CreateQualifyingSessionInput | null = null;
+  let provisionRequests = 0;
+  let activationRequests = 0;
   await page.route("**/api/qualifying-sessions", async (route) => {
     if (route.request().method() === "POST") {
       savedInput = route.request().postDataJSON() as CreateQualifyingSessionInput;
@@ -156,6 +158,31 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(savedInput ? foundationResponse(savedInput) : { sessions: [] }),
+    });
+  });
+  await page.route("**/api/qualifying-sessions/*/provision", (route) => {
+    provisionRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        qualifyingSessionId: "11111111-1111-4111-8111-111111111111",
+        tournamentId: "22222222-2222-4222-8222-222222222222",
+        status: "provisioned",
+      }),
+    });
+  });
+  await page.route("**/api/qualifying-sessions/*/activate", (route) => {
+    activationRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        qualifyingSessionId: "11111111-1111-4111-8111-111111111111",
+        tournamentId: "22222222-2222-4222-8222-222222222222",
+        status: "active",
+        reusedActivation: false,
+      }),
     });
   });
 
@@ -187,10 +214,9 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
 
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("p[role='alert']")).toContainText("Empty groups");
-  await page.getByLabel("Number of groups").fill("2");
+  await page.getByLabel("Number of groups").fill("1");
   await page.getByRole("button", { name: "Auto-balance" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Designated Group Scorer").check();
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Record During Qualifying" })).toBeVisible();
@@ -206,27 +232,29 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
   await expect(page.getByText("Round 1: Day 1, Round 1, holes 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18")).toBeVisible();
   await expect(page.getByText("Round 2: Day 1, Round 2, holes 1, 2, 3, 4, 5, 6, 7, 8, 9")).toBeVisible();
   await expect(page.getByText("Round 3: Day 2, Day 2, holes 10, 11, 12, 13, 14, 15, 16, 17, 18, 1, 2, 3, 4, 5, 6, 7, 8, 9")).toBeVisible();
-  await expect(page.getByText("Designated Group Scorer", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reciprocal", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Save Qualifying" }).click();
-  await expect(page).toHaveURL(/\/coach-dashboard\/qualifying-manager\?created=1$/);
+  await page.getByRole("button", { name: "Create Qualifying" }).click();
+  await expect(page).toHaveURL(/\/coach-dashboard\/qualifying-manager\?created=1&session=11111111-1111-4111-8111-111111111111$/);
   await expect(page.getByRole("heading", { name: "Fall Team Qualifying" })).toBeVisible();
   await expect(page.getByText("Women's · 2 players · 2 days")).toBeVisible();
 
   expect(savedInput).toMatchObject({
     name: "Fall Team Qualifying",
     rosterType: "women",
-    scoringMode: "designated_scorer",
+    scoringMode: "reciprocal",
   });
   expect(savedInput?.selectedPlayers).toHaveLength(2);
   expect(savedInput?.selectedPlayers.map((player) => player.rosterPlayerId).sort()).toEqual([...womenPlayerIds].sort());
-  expect(savedInput?.groups).toHaveLength(2);
+  expect(savedInput?.groups).toHaveLength(1);
   expect(savedInput?.days).toHaveLength(2);
   expect(savedInput?.statisticDefinitionVersionIds).toEqual([
     statisticVersions.fairway_hit,
     statisticVersions.green_in_regulation,
     statisticVersions.putts,
   ]);
+  expect(provisionRequests).toBe(1);
+  expect(activationRequests).toBe(1);
 });
 
 test("creation validation rejects duplicates, empty groups, and incomplete assignments", () => {

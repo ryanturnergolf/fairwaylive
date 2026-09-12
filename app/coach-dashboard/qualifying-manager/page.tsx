@@ -247,7 +247,7 @@ export default function QualifyingSessionsPage() {
                         >
                           {activatingId === session.id
                             ? "Activating..."
-                            : designatedReady ? "Generate Pairings & Scorecards" : "Assign Scorers First"}
+                            : designatedReady ? "Finish Setup" : "Assign Scorers First"}
                         </button>
                       ) : !session.tournamentId ? (
                         <button
@@ -258,7 +258,7 @@ export default function QualifyingSessionsPage() {
                         >
                           {provisioningId === session.id
                             ? "Provisioning..."
-                            : "Provision Tournament"}
+                            : "Retry Automatic Setup"}
                         </button>
                       ) : null}
                       {session.tournamentId || provisionedTournamentIds[session.id] ? (

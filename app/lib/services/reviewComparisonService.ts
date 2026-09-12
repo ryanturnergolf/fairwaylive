@@ -101,6 +101,25 @@ const findScoreEntry = (
       hasAnyScore(entry.hole_scores)
   );
 
+const scoresFromExactHoleEntries = (
+  entries: ScoreHoleEntryRow[],
+  playerIds: string[],
+  enteredByPlayerIds: string[],
+  holes: ReviewHole[]
+) => {
+  const byHole = new Map(
+    entries
+      .filter(
+        (entry) =>
+          playerIds.includes(String(entry.player_id)) &&
+          enteredByPlayerIds.includes(String(entry.entered_by_player_id))
+      )
+      .map((entry) => [Number(entry.hole_number), Number(entry.strokes) || 0])
+  );
+  const scores = holes.map((hole) => byHole.get(hole.holeNumber) ?? 0);
+  return hasAnyScore(scores) ? scores : undefined;
+};
+
 export const buildReviewComparisonModel = ({
   scoreEntries,
   statisticEntries,
@@ -113,12 +132,24 @@ export const buildReviewComparisonModel = ({
 }: BuildReviewComparisonInput): ReviewComparisonModel => {
   const stableSelfEntry = findScoreEntry(scoreEntries, markedPlayerIds, markedPlayerIds);
   const markerEntry = findScoreEntry(scoreEntries, markedPlayerIds, markerEnteredByPlayerIds);
+  const exactSelfHoleScores = scoresFromExactHoleEntries(
+    statisticEntries,
+    markedPlayerIds,
+    markedPlayerIds,
+    holes
+  );
+  const exactMarkerHoleScores = scoresFromExactHoleEntries(
+    statisticEntries,
+    markedPlayerIds,
+    markerEnteredByPlayerIds,
+    holes
+  );
   const unresolvedSelfScores = normalizeScores(
-    stableSelfEntry?.hole_scores ?? (hasAnyScore(snapshotSelfScores) ? snapshotSelfScores : undefined),
+    stableSelfEntry?.hole_scores ?? exactSelfHoleScores ?? (hasAnyScore(snapshotSelfScores) ? snapshotSelfScores : undefined),
     holes.length
   );
   const unresolvedMarkerScores = normalizeScores(
-    markerEntry?.hole_scores ?? (hasAnyScore(snapshotMarkerScores) ? snapshotMarkerScores : undefined),
+    markerEntry?.hole_scores ?? exactMarkerHoleScores ?? (hasAnyScore(snapshotMarkerScores) ? snapshotMarkerScores : undefined),
     holes.length
   );
   const reviewedPlayerId = markedPlayerIds[0] ?? "";

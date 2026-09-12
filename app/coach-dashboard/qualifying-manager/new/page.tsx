@@ -21,6 +21,7 @@ import { loadCurrentQualifyingRoster } from "../../../lib/services/rosterFoundat
 import { buildQualifyingPresetRounds, buildQualifyingRoundPlan } from "../../../lib/services/qualifyingScheduleService";
 import { countQualifyingRounds, MAX_CONFIGURED_ROUNDS } from "../../../lib/services/roundDomainService";
 import { createQualifyingSessionDraft } from "../../../lib/services/qualifyingSessionService";
+import { completeAutomaticQualifyingSetup } from "../../../lib/services/qualifyingAutomaticSetupService";
 import {
   getDefaultQualifyingStatisticKeys,
   loadQualifyingStatisticChoices,
@@ -54,6 +55,7 @@ export default function CreateQualifyingPage() {
   const [scoringMode, setScoringMode] = useState<QualifyingScoringMode>("reciprocal");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingSetupSessionId, setPendingSetupSessionId] = useState("");
   const [rosters, setRosters] = useState<Record<QualifyingRosterType, QualifyingRosterPlayer[]>>({ men: [], women: [] });
   const [rosterSeasonName, setRosterSeasonName] = useState("");
   const [isRosterLoading, setIsRosterLoading] = useState(true);
@@ -193,11 +195,17 @@ export default function CreateQualifyingPage() {
     }
     setIsSaving(true);
     setError("");
+    let setupSessionId = pendingSetupSessionId;
     try {
-      await createQualifyingSessionDraft(input);
-      router.push("/coach-dashboard/qualifying-manager?created=1");
+      setupSessionId ||= (await createQualifyingSessionDraft(input)).id;
+      setPendingSetupSessionId(setupSessionId);
+      await completeAutomaticQualifyingSetup(setupSessionId, scoringMode);
+      router.push(`/coach-dashboard/qualifying-manager?created=1&session=${encodeURIComponent(setupSessionId)}`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save qualifying.");
+      const message = saveError instanceof Error ? saveError.message : "Unable to create qualifying.";
+      setError(setupSessionId
+        ? `Qualifying was saved, but automatic setup could not finish: ${message}`
+        : message);
     } finally {
       setIsSaving(false);
     }
@@ -440,7 +448,7 @@ export default function CreateQualifyingPage() {
             {step < 6 ? (
               <button type="button" className="rounded-lg bg-[#0B3D2E] px-5 py-2 font-black text-white" onClick={next}>Continue</button>
             ) : (
-              <button type="button" disabled={isSaving} className="rounded-lg bg-[#0B3D2E] px-5 py-2 font-black text-white disabled:opacity-50" onClick={() => void save()}>{isSaving ? "Saving…" : "Save Qualifying"}</button>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-[#0B3D2E] px-5 py-2 font-black text-white disabled:opacity-50" onClick={() => void save()}>{isSaving ? "Preparing event…" : pendingSetupSessionId ? "Retry Setup" : "Create Qualifying"}</button>
             )}
           </div>
         </section>

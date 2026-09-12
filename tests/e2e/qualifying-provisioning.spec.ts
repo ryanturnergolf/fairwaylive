@@ -77,7 +77,7 @@ test("Q3B provisioning is locked, transactional, idempotent, and service-compose
   );
 });
 
-test("provision action uses the authenticated coordinator and exposes the existing tournament", async ({ page }) => {
+test("automatic-setup retry uses the authenticated coordinator and exposes the existing tournament", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
       access_token: "header.payload.signature",
@@ -132,7 +132,7 @@ test("provision action uses the authenticated coordinator and exposes the existi
   });
 
   await page.goto("/coach-dashboard/qualifying-manager");
-  await page.getByRole("button", { name: "Provision Tournament" }).click();
+  await page.getByRole("button", { name: "Retry Automatic Setup" }).click();
   await expect(page.getByText("provisioned", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open Event" })).toHaveAttribute(
     "href",

@@ -143,7 +143,7 @@ test("coach can activate a provisioned session exactly once from the qualifying 
   });
 
   await page.goto("/coach-dashboard/qualifying-manager");
-  const activate = page.getByRole("button", { name: "Generate Pairings & Scorecards" });
+  const activate = page.getByRole("button", { name: "Finish Setup" });
   await activate.click();
   await expect(page.getByText("active", { exact: true })).toBeVisible();
   expect(requests).toBe(1);

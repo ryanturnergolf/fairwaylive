@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { buildReviewComparisonModel } from "../../app/lib/services/reviewComparisonService";
 import { buildForwardScoringSummary } from "../../app/lib/services/reciprocalScoringSummaryService";
 import type { ScoreEntryRow } from "../../app/lib/repositories/scoreRepository";
+import type { ScoreHoleEntryRow } from "../../app/lib/repositories/statisticsRepository";
 
 const scoreEntry = (playerId: string, enteredByPlayerId: string, holeScores: number[]): ScoreEntryRow => ({
   id: `${playerId}:${enteredByPlayerId}`,
@@ -16,6 +17,33 @@ const scoreEntry = (playerId: string, enteredByPlayerId: string, holeScores: num
   created_at: null,
   updated_at: null,
 });
+
+const holeEntries = (
+  playerId: string,
+  enteredByPlayerId: string,
+  scores: number[]
+): ScoreHoleEntryRow[] => scores.map((strokes, index) => ({
+  id: `${playerId}:${enteredByPlayerId}:${index + 1}`,
+  tournament_id: "tournament",
+  round_number: 1,
+  player_id: playerId,
+  entered_by_player_id: enteredByPlayerId,
+  marker_for_player_id: playerId === enteredByPlayerId ? null : playerId,
+  hole_number: index + 1,
+  strokes,
+  fairway_hit: null,
+  green_in_regulation: null,
+  putts: null,
+  penalty_strokes: null,
+  entry_source: "mobile",
+  entry_status: "complete",
+  review_status: "pending",
+  is_official: false,
+  official_at: null,
+  official_by: null,
+  created_at: null,
+  updated_at: null,
+}));
 
 const buildComparison = (selfScores: number[], markerScores: number[], holes: Array<{ holeNumber: number; par: number }>) =>
   buildReviewComparisonModel({
@@ -100,6 +128,53 @@ test("asymmetric reciprocal verification preserves the known-good hole arrays an
   expect(projection.mismatches).toHaveLength(9);
   expect(projection.selfTotal).toBe(45);
   expect(projection.markerTotal).toBe(36);
+});
+
+test("Verify hydrates exact reciprocal identities from durable hole rows when aggregate rows are unavailable", () => {
+  const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
+  const selfScores = Array.from({ length: 9 }, () => 4);
+  const markerScores = Array.from({ length: 9 }, () => 6);
+  const outgoingDecoy = Array.from({ length: 9 }, () => 3);
+  const projection = buildReviewComparisonModel({
+    scoreEntries: [],
+    statisticEntries: [
+      ...holeEntries("player-a", "player-a", selfScores),
+      ...holeEntries("player-a", "player-b", markerScores),
+      ...holeEntries("player-b", "player-a", outgoingDecoy),
+    ],
+    markedPlayerIds: ["player-a"],
+    markerEnteredByPlayerIds: ["player-b"],
+    statisticsPlayerIds: ["player-a"],
+    holes,
+  });
+
+  expect(projection.selfScores).toEqual(selfScores);
+  expect(projection.markerScores).toEqual(markerScores);
+  expect(projection.selfTotal).toBe(36);
+  expect(projection.markerTotal).toBe(54);
+  expect(projection.markerScores).not.toEqual(outgoingDecoy);
+  expect(projection.mismatches).toHaveLength(9);
+});
+
+test("Verify keeps marker incomplete when exact durable rows contain only the outgoing marked-player card", () => {
+  const holes = Array.from({ length: 9 }, (_, index) => ({ holeNumber: index + 1, par: 4 }));
+  const projection = buildReviewComparisonModel({
+    scoreEntries: [],
+    statisticEntries: [
+      ...holeEntries("player-a", "player-a", Array.from({ length: 9 }, () => 4)),
+      ...holeEntries("player-b", "player-a", Array.from({ length: 9 }, () => 3)),
+    ],
+    markedPlayerIds: ["player-a"],
+    markerEnteredByPlayerIds: ["player-b"],
+    statisticsPlayerIds: ["player-a"],
+    holes,
+  });
+
+  expect(projection.selfTotal).toBe(36);
+  expect(projection.markerScores).toEqual(Array.from({ length: 9 }, () => 0));
+  expect(projection.markerTotal).toBe(0);
+  expect(projection.missingMarkerHoles).toEqual(holes.map((hole) => hole.holeNumber));
+  expect(projection.scoreComparisonComplete).toBe(false);
 });
 
 test("mixed reciprocal verification marks only equal complete holes as matches", () => {
