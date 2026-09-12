@@ -373,9 +373,16 @@ function ReciprocalPlayerScorecardPage() {
           return;
         }
 
-        const localTournament = loadTournamentsFromStorage().find((item) => item.id === effectiveTournamentId);
-        const localTournamentState = loadTournamentStateFromStorage<PersistedTournamentState>(effectiveTournamentId);
-        const storedEnvelope = loadTournamentStorageEnvelope(effectiveTournamentId);
+        const mayUseLocalTournamentState = !requestedShareToken;
+        const localTournament = mayUseLocalTournamentState
+          ? loadTournamentsFromStorage().find((item) => item.id === effectiveTournamentId)
+          : undefined;
+        const localTournamentState = mayUseLocalTournamentState
+          ? loadTournamentStateFromStorage<PersistedTournamentState>(effectiveTournamentId)
+          : null;
+        const storedEnvelope = mayUseLocalTournamentState
+          ? loadTournamentStorageEnvelope(effectiveTournamentId)
+          : null;
         const localResolvedRound = storedEnvelope?.tournament.rounds.length
           ? resolveScorecardRound({
               tournamentId: effectiveTournamentId,

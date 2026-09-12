@@ -3270,7 +3270,7 @@ test("stable score rows override more-complete snapshot presentation without ena
   expect(writeRequests).toEqual([]);
 });
 
-test("signed-out shared scorecard hydrates legacy snapshot scores by stable Supabase identity", async ({ page }) => {
+test("secure shared scorecard ignores a stale local Tournament snapshot and hydrates by stable Supabase identity", async ({ page }) => {
   const snapshotScores = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
   snapshotScores.uiState.scorecards.scorecardRows[0].scores = [3, 5, 4, ...Array.from({ length: 15 }, () => 0)];
   snapshotScores.uiState.scorecards.scorecardRows[1].scores = [4, 4, 5, ...Array.from({ length: 15 }, () => 0)];
@@ -3335,11 +3335,35 @@ test("signed-out shared scorecard hydrates legacy snapshot scores by stable Supa
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(row) });
   });
 
-  await page.addInitScript(({ key, stale }) => {
-    window.localStorage.setItem(key, JSON.stringify(stale));
+  const staleLocalEnvelope = JSON.parse(JSON.stringify(tournamentEnvelope)) as typeof tournamentEnvelope;
+  staleLocalEnvelope.tournament = {
+    ...staleLocalEnvelope.tournament,
+    id: sharedTournamentId,
+    name: "Stale local Tournament",
+    players: staleLocalEnvelope.tournament.players.map((player, index) => ({
+      ...player,
+      id: `stale-player-${index + 1}`,
+      firstName: "Stale",
+      lastName: `Player ${index + 1}`,
+    })),
+  };
+  staleLocalEnvelope.uiState.pairings = staleLocalEnvelope.uiState.pairings.map((pairing) => ({
+    ...pairing,
+    players: pairing.players.map((player, index) => ({
+      ...player,
+      playerId: `stale-player-${index + 1}`,
+      playerName: `Stale Player ${index + 1}`,
+    })),
+  }));
+
+  await page.addInitScript(({ tournamentsKey, envelopeKey, staleTournament, staleEnvelope }) => {
+    window.localStorage.setItem(tournamentsKey, JSON.stringify([staleTournament]));
+    window.localStorage.setItem(envelopeKey, JSON.stringify(staleEnvelope));
   }, {
-    key: tournamentsStorageKey,
-    stale: [{ ...storedTournament, id: "popcorn", name: "popcorn" }],
+    tournamentsKey: tournamentsStorageKey,
+    envelopeKey: `clubhouse-hq-tournament-${sharedTournamentId}`,
+    staleTournament: { ...storedTournament, id: sharedTournamentId, name: "Stale local Tournament" },
+    staleEnvelope: staleLocalEnvelope,
   });
   await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=secure-e2e-token`);
 
