@@ -1,5 +1,6 @@
 import {
   canUseDevelopmentBrowserSupabaseWriteFallback,
+  getSupabaseAuthAccessToken,
   getSupabaseBrowserClient,
 } from "../supabaseClient";
 import { hashShareToken } from "../shareTokens";
@@ -99,9 +100,13 @@ const getReadClient = async (shareToken?: string) => {
 };
 
 const postScoreMutation = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const accessToken = body.shareToken ? "" : await getSupabaseAuthAccessToken().catch(() => "");
   const response = await fetch("/api/score-mutations", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify(body),
   });
 

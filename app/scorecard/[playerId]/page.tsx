@@ -1835,7 +1835,7 @@ function ReciprocalPlayerScorecardPage() {
           "hole",
           targetHoleStats
         );
-        if (!selfSaveCompleted && (Boolean(requestedShareToken) || hasEnteredStatistics || !selfScoreSaved)) {
+        if (!selfSaveCompleted && (Boolean(requestedShareToken) || Boolean(requestedQualifyingRoundId) || hasEnteredStatistics || !selfScoreSaved)) {
           return;
         }
 
@@ -1890,7 +1890,7 @@ function ReciprocalPlayerScorecardPage() {
             nextMarkerScores,
             "hole"
           );
-          if (!markerSaveCompleted && (Boolean(requestedShareToken) || !markerScoreSaved)) {
+          if (!markerSaveCompleted && (Boolean(requestedShareToken) || Boolean(requestedQualifyingRoundId) || !markerScoreSaved)) {
             return;
           }
         }

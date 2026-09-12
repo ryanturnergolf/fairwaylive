@@ -2414,6 +2414,33 @@ test("mobile scorecard saves a hole with no optional stats", async ({ page }) =>
     });
 });
 
+test("authenticated desktop scoring sends durable self and reciprocal writes through the server boundary", async ({ page }) => {
+  const mutationRequests: Array<{ authorization: string; action: string; input?: Record<string, unknown>; rows?: Array<Record<string, unknown>> }> = [];
+  await page.route("**/api/score-mutations", async (route) => {
+    const body = route.request().postDataJSON() as { action: string; input?: Record<string, unknown>; rows?: Array<Record<string, unknown>> };
+    mutationRequests.push({ authorization: route.request().headers().authorization ?? "", ...body });
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify(body.action === "saveScoreHoleEntries" ? body.rows ?? [] : { id: `saved-${mutationRequests.length}`, ...(body.input ?? {}) }),
+    });
+  });
+
+  await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1&qualifyingRoundId=qualifying-r1`);
+  await waitForMobileScorecardControls(page);
+  await fillSelfScoreAndWaitForSave(page, 4);
+  await page.getByLabel("Ben Marker's Score").fill("5");
+  await page.getByRole("button", { name: "Save Hole" }).click();
+
+  await expect.poll(() => mutationRequests.filter((request) => request.action === "saveScoreEntry").length).toBeGreaterThanOrEqual(2);
+  const scoreRequests = mutationRequests.filter((request) => request.action === "saveScoreEntry");
+  expect(scoreRequests.every((request) => request.authorization === `Bearer ${e2eCoachAccessToken}`)).toBe(true);
+  expect(scoreRequests.map((request) => request.input)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ playerId: "player-1", enteredByPlayerId: "player-1", holeScores: expect.arrayContaining([4]) }),
+    expect.objectContaining({ playerId: "player-2", enteredByPlayerId: "player-1", holeScores: expect.arrayContaining([5]) }),
+  ]));
+});
+
 test("mobile scorecard hides Fairway Hit on par 3s", async ({ page }) => {
   const sharedStore = await routeSharedScoreEntriesStore(page);
 

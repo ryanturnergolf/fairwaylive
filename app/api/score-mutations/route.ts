@@ -46,9 +46,9 @@ const scoreReviewStatusColumns =
 const scoreHoleEntryColumns =
   "id,tournament_id,round_number,player_id,entered_by_player_id,marker_for_player_id,hole_number,strokes,fairway_hit,green_in_regulation,putts,penalty_strokes,entry_source,entry_status,review_status,is_official,official_at,official_by,created_at,updated_at";
 
-const getClient = async (shareToken?: string) => {
+const getClient = async (shareToken?: string, accessToken?: string) => {
   const shareTokenHash = shareToken ? await hashShareToken(shareToken) : undefined;
-  const supabase = getSupabaseServerClient({ shareTokenHash });
+  const supabase = getSupabaseServerClient({ shareTokenHash, accessToken });
 
   if (!supabase) {
     throw new Error("Supabase is not configured.");
@@ -75,7 +75,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = await getClient(body.shareToken);
+    const authorization = request.headers.get("authorization") ?? "";
+    const accessToken = authorization.toLowerCase().startsWith("bearer ")
+      ? authorization.slice(7).trim()
+      : undefined;
+    const supabase = await getClient(body.shareToken, accessToken);
 
     if (body.action === "saveScoreEntry") {
       const { data, error } = await supabase

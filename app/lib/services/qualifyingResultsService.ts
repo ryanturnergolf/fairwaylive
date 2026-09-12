@@ -142,6 +142,7 @@ const buildSegment = ({
   holeEntries,
   reviewStatuses,
   scoringMode,
+  assignedScorerPlayerId,
 }: {
   player: QualifyingEnginePlayer;
   round: QualifyingRoundMapping;
@@ -149,6 +150,7 @@ const buildSegment = ({
   holeEntries: ScoreHoleEntryRow[];
   reviewStatuses: ScoreReviewStatusRow[];
   scoringMode: QualifyingSession["scoringMode"];
+  assignedScorerPlayerId?: string | null;
 }): QualifyingSegmentResult => {
   const playerScores = scoreEntries.filter((entry) =>
     entry.round_number === round.roundNumber && String(entry.player_id) === player.playerId
@@ -166,10 +168,34 @@ const buildSegment = ({
     scoreEntries: playerScores,
     officialEntries: holeEntries.filter((entry) => entry.round_number === round.roundNumber),
     holeCount: round.holeCount,
-    assignedScorerPlayerId: scoringMode === "designated_scorer" ? marker?.entered_by_player_id : player.assignedMarkerPlayerId,
+    assignedScorerPlayerId: scoringMode === "designated_scorer" ? assignedScorerPlayerId : player.assignedMarkerPlayerId,
   });
   const primary = selected?.entry;
-  const resolvedSelf = selected?.holeScores ?? [];
+  const expectedScorerPlayerId = scoringMode === "designated_scorer"
+    ? (assignedScorerPlayerId ?? primary?.entered_by_player_id ?? null)
+    : player.playerId;
+  const holeNumbers = round.holeSequence?.length
+    ? round.holeSequence.slice(0, round.holeCount)
+    : Array.from({ length: round.holeCount }, (_, index) => ((Number(round.startingHole ?? 1) - 1 + index) % 18) + 1);
+  const liveHoleScores = new Map(
+    holeEntries
+      .filter((entry) =>
+        !entry.is_official &&
+        entry.round_number === round.roundNumber &&
+        String(entry.player_id) === player.playerId &&
+        Boolean(expectedScorerPlayerId) &&
+        String(entry.entered_by_player_id) === String(expectedScorerPlayerId) &&
+        Number(entry.strokes) > 0
+      )
+      .map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
+  );
+  const persistedScores = selected?.holeScores ?? [];
+  const liveScores = holeNumbers.map((holeNumber, index) =>
+    (isSubmitted(primary)
+      ? Number(persistedScores[index])
+      : (liveHoleScores.get(holeNumber) ?? Number(persistedScores[index]))) || 0
+  );
+  const resolvedSelf = applyOfficialScoreResolutions(liveScores, player.playerId, round.holeCount, official);
   const review = reviewStatuses.find((row) =>
     row.round_number === round.roundNumber && String(row.player_id) === player.playerId
   );
@@ -192,12 +218,14 @@ const buildSegment = ({
       : scoreComplete && markerComplete && reviewComplete && submitted
         ? "complete"
         : "incomplete";
-  const score = scoreComplete ? resolvedSelf.reduce((sum, value) => sum + value, 0) : null;
-  const par = round.immutablePar ?? null;
-  const holeNumbers = round.holeSequence?.length
-    ? round.holeSequence.slice(0, round.holeCount)
-    : Array.from({ length: round.holeCount }, (_, index) => ((Number(round.startingHole ?? 1) - 1 + index) % 18) + 1);
   const playedHoles = resolvedSelf.slice(0, round.holeCount).filter((value) => value > 0).length;
+  const score = playedHoles > 0 ? resolvedSelf.reduce((sum, value) => sum + (value > 0 ? value : 0), 0) : null;
+  const par = round.immutablePar ?? null;
+  const holePars = holeNumbers.map((_, index) => round.immutableHolePars?.[index] ?? null);
+  const playedPar = holePars.reduce<number>((sum, holePar, index) =>
+    Number(resolvedSelf[index]) > 0 && holePar !== null ? sum + Number(holePar) : sum, 0
+  );
+  const hasCompletePlayedPar = resolvedSelf.every((value, index) => value <= 0 || holePars[index] !== null);
 
   return {
     tournamentRoundId: round.id,
@@ -206,12 +234,12 @@ const buildSegment = ({
     segmentNumber: round.qualifyingSegment,
     holeCount: round.holeCount,
     holeNumbers,
-    holePars: holeNumbers.map((_, index) => round.immutableHolePars?.[index] ?? null),
+    holePars,
     holeScores: holeNumbers.map((_, index) => Number(resolvedSelf[index]) > 0 ? Number(resolvedSelf[index]) : null),
-    through: playedHoles === 0 ? "Not started" : playedHoles === round.holeCount ? "F" : `${playedHoles}/${round.holeCount}`,
+    through: playedHoles === 0 ? "Not started" : playedHoles === round.holeCount ? "F" : String(playedHoles),
     score,
     par,
-    toPar: score === null || par === null ? null : score - par,
+    toPar: score === null || !hasCompletePlayedPar ? null : score - playedPar,
     completionStatus,
     reviewComplete,
     submitted,
@@ -334,7 +362,15 @@ export const buildQualifyingResults = ({
       const roundPlayer = players.find((candidate) =>
         candidate.playerId === player.playerId && candidate.roundNumber === round.roundNumber
       ) ?? player;
-      return buildSegment({ player: roundPlayer, round, scoreEntries, holeEntries, reviewStatuses, scoringMode: session.scoringMode });
+      return buildSegment({
+        player: roundPlayer,
+        round,
+        scoreEntries,
+        holeEntries,
+        reviewStatuses,
+        scoringMode: session.scoringMode,
+        assignedScorerPlayerId: designatedScorerByPlayerRound.get(`${round.roundNumber}:${roundPlayer.playerId}`) ?? null,
+      });
     });
     allSegmentsByPlayer.set(player.playerId, playerRounds);
   });

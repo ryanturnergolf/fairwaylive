@@ -290,8 +290,62 @@ test("three-round Qualifying hydrates completed, partial, and unstarted rounds i
 
   const alex = projected.combined.find((player) => player.playerId === "alex")!;
   expect(alex.segments[0]).toMatchObject({ tournamentRoundId: "tournament-round-1", score: 36, toPar: 0, through: "F", holeScores: Array(9).fill(4) });
-  expect(alex.segments[1]).toMatchObject({ tournamentRoundId: "tournament-round-2", score: null, through: "4/9", holeScores: [5, 5, 5, 5, null, null, null, null, null] });
+  expect(alex.segments[1]).toMatchObject({ tournamentRoundId: "tournament-round-2", score: 20, toPar: 4, through: "4", holeScores: [5, 5, 5, 5, null, null, null, null, null] });
   expect(alex.segments[2]).toMatchObject({ tournamentRoundId: "tournament-round-3", score: null, through: "Not started", holeScores: Array(9).fill(null) });
+});
+
+test("live Qualifying results project exact-round self hole rows before aggregate submission", () => {
+  const liveRounds: QualifyingRoundMapping[] = [
+    { ...rounds[0], id: "live-r1", roundNumber: 1, holeCount: 9, immutablePar: 36, immutableHolePars: Array(9).fill(4), holeSequence: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+    { ...rounds[1], id: "live-r2", roundNumber: 2, holeCount: 18, immutablePar: 72, immutableHolePars: Array(18).fill(4), holeSequence: Array.from({ length: 18 }, (_, index) => index + 1) },
+  ];
+  const livePlayers: QualifyingEnginePlayer[] = liveRounds.flatMap((round) => [
+    { playerId: "alex", playerName: "Alex Morgan", roundNumber: round.roundNumber, status: "active", assignedMarkerPlayerId: "jordan" },
+    { playerId: "jordan", playerName: "Jordan Lee", roundNumber: round.roundNumber, status: "active", assignedMarkerPlayerId: "alex" },
+  ]);
+  const liveHole = (playerId: string, enteredByPlayerId: string, roundNumber: number, holeNumber: number, strokes: number): ScoreHoleEntryRow => ({
+    ...holeEntries[0],
+    id: `${playerId}-${enteredByPlayerId}-${roundNumber}-${holeNumber}`,
+    round_number: roundNumber,
+    player_id: playerId,
+    entered_by_player_id: enteredByPlayerId,
+    marker_for_player_id: playerId === enteredByPlayerId ? null : playerId,
+    hole_number: holeNumber,
+    strokes,
+    entry_source: playerId === enteredByPlayerId ? "self" : "marker",
+    entry_status: "in_progress",
+    review_status: "pending",
+    is_official: false,
+  });
+  const liveRows = [
+    liveHole("alex", "alex", 1, 1, 4),
+    liveHole("alex", "alex", 1, 2, 5),
+    liveHole("alex", "alex", 1, 3, 3),
+    liveHole("alex", "alex", 1, 4, 4),
+    liveHole("alex", "jordan", 1, 1, 6),
+    liveHole("jordan", "jordan", 1, 1, 5),
+    liveHole("alex", "alex", 2, 1, 2),
+  ];
+  const projected = buildQualifyingResults({
+    session: { ...session, selectedPlayers: session.selectedPlayers.slice(0, 2) },
+    days: [
+      { ...days[0], dayNumber: 1, holesTotal: 9 },
+      { ...days[1], dayNumber: 2, holesTotal: 18 },
+    ],
+    rounds: liveRounds,
+    players: livePlayers,
+    scorecards: livePlayers.map((player) => ({ playerId: player.playerId, roundNumber: player.roundNumber, holeCount: liveRounds[player.roundNumber - 1].holeCount })),
+    scoreEntries: [],
+    holeEntries: liveRows,
+    reviewStatuses: [],
+  });
+
+  const alex = projected.combined.find((player) => player.playerId === "alex")!;
+  expect(alex.segments[0]).toMatchObject({ score: 16, toPar: 0, through: "4", holeScores: [4, 5, 3, 4, null, null, null, null, null] });
+  expect(alex.segments[1]).toMatchObject({ score: 2, toPar: -2, through: "1", holeScores: [2, ...Array(17).fill(null)] });
+  const jordan = projected.combined.find((player) => player.playerId === "jordan")!;
+  expect(jordan.segments[0]).toMatchObject({ score: 5, toPar: 1, through: "1", holeScores: [5, ...Array(8).fill(null)] });
+  expect(jordan.segments[1]).toMatchObject({ score: null, toPar: null, through: "Not started", holeScores: Array(18).fill(null) });
 });
 
 test("coach operations page exposes read-only daily and combined results", async ({ page }) => {

@@ -7,7 +7,6 @@ const total = (holes: GolfScorecardHole[], field: "par" | "score") =>
 
 export default function GolfScorecardGrid({ holes, label }: { holes: GolfScorecardHole[]; label: string }) {
   const played = holes.filter((hole) => hole.score !== null);
-  if (played.length === 0) return <p className="rounded-xl bg-[#F6F1E6] p-4 text-sm font-bold text-[#51635C]">Not started</p>;
   const naturalOutIn = holes.length === 18 && holes.slice(0, 9).every((hole, index) => hole.holeNumber === index + 1);
   const groups = naturalOutIn ? [holes.slice(0, 9), holes.slice(9)] : [holes];
   return (
@@ -36,8 +35,8 @@ export default function GolfScorecardGrid({ holes, label }: { holes: GolfScoreca
           {naturalOutIn ? (
             <tr className="border-t border-[#E8DCC8] bg-[#FCFAF5]">
               <th className="sticky left-0 z-10 bg-[#FCFAF5] px-3 py-3 text-left font-black">Round</th>
-              <td colSpan={18} className="px-3 py-3 text-right font-black">Total {total(holes, "score")}</td>
-              <td className="px-3 py-3 font-black">{played.length === holes.length ? "F" : `${played.length}/${holes.length}`}</td>
+              <td colSpan={18} className="px-3 py-3 text-right font-black">Total {played.length > 0 ? total(holes, "score") : "â€”"}</td>
+              <td className="px-3 py-3 font-black">{played.length === 0 ? "Not started" : played.length === holes.length ? "F" : played.length}</td>
             </tr>
           ) : null}
         </tbody>

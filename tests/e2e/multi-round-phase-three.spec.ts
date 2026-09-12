@@ -149,11 +149,16 @@ test("polling keeps child selection and expansion state while stale responses ar
 test("Qualifying projection carries exact round, hole, par, score, and through identity", () => {
   const service = source("app/lib/services/qualifyingResultsService.ts");
   const component = source("app/components/leaderboards/MultiRoundQualifyingLeaderboard.tsx");
+  const grid = source("app/components/leaderboards/GolfScorecardGrid.tsx");
   expect(service).toContain("tournamentRoundId: round.id");
   expect(service).toContain("round.immutableHolePars?.[index]");
+  expect(service).toContain("liveHoleScores");
   expect(service).not.toContain("holeCount * 4");
   expect(component).toContain("segment.tournamentRoundId === globalRoundId");
   expect(component).toContain("expandedRounds");
+  expect(grid).not.toContain("if (played.length === 0) return");
+  expect(grid).toContain('hole.score ??');
+  expect(grid).toContain('hole.par ??');
 });
 
 test("Phase 3 is presentation-only and introduces no migration or scoring writes", () => {
