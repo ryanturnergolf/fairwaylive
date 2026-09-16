@@ -265,6 +265,11 @@ const normalizeHoleScores = (holeScores: number[] | undefined, holeCount: number
     return Number.isFinite(score) ? score : 0;
   });
 
+const areConfiguredRoundScoresComplete = (holeScores: number[], holeCount: number) =>
+  holeCount > 0 &&
+  holeScores.length >= holeCount &&
+  holeScores.slice(0, holeCount).every((score) => score > 0);
+
 const emptyHoleStats = (): HoleStatCapture => ({
   fairwayHit: null,
   greenInRegulation: null,
@@ -1404,7 +1409,7 @@ function ReciprocalPlayerScorecardPage() {
     !isTournamentFinalized;
 
   const currentHole = scorecard.holes[currentHoleIndex];
-  const allHolesScored = scorecard.holes.length > 0 && scores.every((s) => s > 0);
+  const allHolesScored = areConfiguredRoundScoresComplete(scores, scorecard.holes.length);
 
   const front9Holes = scorecard.holes.slice(0, 9);
   const back9Holes = scorecard.holes.slice(9);

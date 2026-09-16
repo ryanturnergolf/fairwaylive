@@ -1116,6 +1116,72 @@ test("two isolated homepage sessions create all four reciprocal score identities
   await Promise.all(contexts.map((context) => context.close()));
 });
 
+test("front-nine completion ignores retained scores outside the configured round", async ({ page }) => {
+  const frontNineRoundId = "66666666-6666-4666-8666-666666666666";
+  await routeSharedTournamentRoster(page);
+  await routeSharedScoreEntriesStore(page, 0, [
+    buildScoreEntry("player-1", "player-1", [...Array(9).fill(4), ...Array(9).fill(0)]),
+  ]);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: tournamentEnvelope,
+  }]);
+  await routeAuthoritativeTournamentRound(page, {
+    id: frontNineRoundId,
+    roundNumber: 1,
+    startingHole: 1,
+    holeSequence: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  });
+  await page.route("**/api/share-tokens/resolve", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ tournamentId: sharedTournamentId, purpose: "mobile_scoring", expiresAt: null }),
+  }));
+
+  await gotoApp(
+    page,
+    `${baseUrl}/scorecard/player-1?pairing=1&round=1&roundId=${frontNineRoundId}&shareToken=front-nine-token`
+  );
+
+  await expect(page.getByText("Through 9/9", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review & Submit Round" })).toBeEnabled();
+});
+
+test("a missing configured front-nine score still blocks submission", async ({ page }) => {
+  const frontNineRoundId = "77777777-7777-4777-8777-777777777777";
+  await routeSharedTournamentRoster(page);
+  await routeSharedScoreEntriesStore(page, 0, [
+    buildScoreEntry("player-1", "player-1", [...Array(8).fill(4), 0, ...Array(9).fill(4)]),
+  ]);
+  await routeTournamentStateSnapshotStore(page, 201, [{
+    tournament_id: sharedTournamentId,
+    local_tournament_id: tournamentId,
+    schema_version: 2,
+    state_snapshot: tournamentEnvelope,
+  }]);
+  await routeAuthoritativeTournamentRound(page, {
+    id: frontNineRoundId,
+    roundNumber: 1,
+    startingHole: 1,
+    holeSequence: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  });
+  await page.route("**/api/share-tokens/resolve", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ tournamentId: sharedTournamentId, purpose: "mobile_scoring", expiresAt: null }),
+  }));
+
+  await gotoApp(
+    page,
+    `${baseUrl}/scorecard/player-1?pairing=1&round=1&roundId=${frontNineRoundId}&shareToken=front-nine-token`
+  );
+
+  await expect(page.getByText("Through 8/9", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review & Submit Round" })).toBeDisabled();
+});
+
 test("secure scorecard uses the durable back-nine hole sequence instead of an 18-hole snapshot", async ({ page }) => {
   const backNineRoundId = "44444444-4444-4444-8444-444444444444";
   await routeSharedTournamentRoster(page, {
@@ -1125,6 +1191,9 @@ test("secure scorecard uses the durable back-nine hole sequence instead of an 18
       yardage: 300 + index,
     })),
   });
+  await routeSharedScoreEntriesStore(page, 0, [
+    buildScoreEntry("player-1", "player-1", [...Array(9).fill(4), ...Array(9).fill(0)]),
+  ]);
   await routeTournamentStateSnapshotStore(page, 201, [{
     tournament_id: sharedTournamentId,
     local_tournament_id: tournamentId,
@@ -1150,8 +1219,8 @@ test("secure scorecard uses the durable back-nine hole sequence instead of an 18
 
   await expect.poll(() => durableRoundStore.getReadCount()).toBeGreaterThan(0);
   await expect(page.getByText("Hole 10", { exact: true })).toBeVisible();
-  await expect(page.getByText("Through 0/9", { exact: true })).toBeVisible();
-  await expect(page.getByText("Save all 9 holes to submit", { exact: true })).toBeVisible();
+  await expect(page.getByText("Through 9/9", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review & Submit Round" })).toBeEnabled();
   await expect(page.getByText("309", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next Hole" }).click();
   await expect(page.getByText("Hole 11", { exact: true })).toBeVisible();
@@ -1160,6 +1229,9 @@ test("secure scorecard uses the durable back-nine hole sequence instead of an 18
 test("secure scorecard preserves a durable full 18-hole round", async ({ page }) => {
   const fullRoundId = "55555555-5555-4555-8555-555555555555";
   await routeSharedTournamentRoster(page);
+  await routeSharedScoreEntriesStore(page, 0, [
+    buildScoreEntry("player-1", "player-1", [...Array(17).fill(4), 0]),
+  ]);
   await routeTournamentStateSnapshotStore(page, 201, [{
     tournament_id: sharedTournamentId,
     local_tournament_id: tournamentId,
@@ -1184,8 +1256,9 @@ test("secure scorecard preserves a durable full 18-hole round", async ({ page })
   );
 
   await expect(page.getByText("Hole 1", { exact: true })).toBeVisible();
-  await expect(page.getByText("Through 0/18", { exact: true })).toBeVisible();
+  await expect(page.getByText("Through 17/18", { exact: true })).toBeVisible();
   await expect(page.getByText("Save all 18 holes to submit", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review & Submit Round" })).toBeDisabled();
 });
 
 test("mobile scorecard saves four holes, reloads them from localStorage, and resumes at the next unscored hole", async ({ page }) => {
