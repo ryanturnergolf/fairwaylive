@@ -182,9 +182,14 @@ const defaultHoles: Hole[] = [
   { holeNumber: 18, par: 4, yardage: 421 },
 ];
 
-const buildRoundHoles = (startingHole: number, holeCount: number, configuredHoles: Hole[] = defaultHoles) =>
+const buildRoundHoles = (
+  startingHole: number,
+  holeCount: number,
+  configuredHoles: Hole[] = defaultHoles,
+  holeSequence?: number[]
+) =>
   Array.from({ length: holeCount }, (_, index) => {
-    const courseHoleNumber = ((startingHole - 1 + index) % 18) + 1;
+    const courseHoleNumber = holeSequence?.[index] ?? ((startingHole - 1 + index) % 18) + 1;
     const configured = configuredHoles.find((hole) => hole.holeNumber === courseHoleNumber) ?? defaultHoles[courseHoleNumber - 1];
     return { ...configured, holeNumber: index + 1, courseHoleNumber };
   });
@@ -615,9 +620,10 @@ function ReciprocalPlayerScorecardPage() {
           scorecardRoundId,
           roundNumber: scorecardRoundNumber,
           holes: buildRoundHoles(
-            Math.max(1, Math.min(18, Number(pairing.startingHole) || 1)),
+            Math.max(1, Math.min(18, Number(sharedState?.roundSetup.startingHole ?? pairing.startingHole) || 1)),
             holeCount,
-            courseHoleSnapshot.map((hole) => ({ holeNumber: hole.holeNumber, par: hole.par, yardage: hole.yardage }))
+            courseHoleSnapshot.map((hole) => ({ holeNumber: hole.holeNumber, par: hole.par, yardage: hole.yardage })),
+            sharedState?.roundSetup.holeSequence
           ),
           hasCourseYardageSnapshot: courseHoleSnapshot.length > 0,
           markerPlayerId,

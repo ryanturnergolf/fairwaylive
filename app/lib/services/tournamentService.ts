@@ -825,6 +825,7 @@ export type SharedTournamentScorecardState = {
     numberOfHoles: string;
     countingScores: string;
     startingHole: string;
+    holeSequence?: number[];
   };
 };
 
@@ -1735,12 +1736,10 @@ export const loadSharedTournamentScorecardState = async (
     ) &&
     snapshotEnvelope.uiState.scorecards.scorecardRows.length > 0
   );
-  const [durableRound, durableScorecards] = snapshotHasCompleteScorecardState
-    ? [null, []]
-    : await Promise.all([
-        getTournamentRound(tournamentId, roundNumber, { shareToken }).catch(() => null),
-        getTournamentScorecards(tournamentId, roundNumber, { shareToken }).catch(() => []),
-      ]);
+  const durableRound = await getTournamentRound(tournamentId, roundNumber, { shareToken }).catch(() => null);
+  const durableScorecards = snapshotHasCompleteScorecardState
+    ? []
+    : await getTournamentScorecards(tournamentId, roundNumber, { shareToken }).catch(() => []);
   const hasDurableQualifyingArtifacts =
     Boolean(durableRound) &&
     durableScorecards.length === playerRows.length &&
@@ -1770,8 +1769,8 @@ export const loadSharedTournamentScorecardState = async (
   }
 
   const parsedHoleCount = Number(
-    exactRoundSetup?.numberOfHoles ??
     durableRound?.hole_count ??
+    exactRoundSetup?.numberOfHoles ??
     durableScorecards[0]?.hole_count
   );
   if ((!exactRoundSetup && !durableRound) || !Number.isInteger(parsedHoleCount) || parsedHoleCount < 1 || parsedHoleCount > 18) {
@@ -1852,7 +1851,10 @@ export const loadSharedTournamentScorecardState = async (
       roundNumber: String(roundNumber),
       numberOfHoles: String(parsedHoleCount),
       countingScores: String(Number(exactRoundSetup?.countingScores) || 4),
-      startingHole: String(Number(exactRoundSetup?.startingHole ?? durableRound?.starting_hole ?? sharedPlayerRows[0]?.starting_hole) || 1),
+      startingHole: String(Number(durableRound?.starting_hole ?? exactRoundSetup?.startingHole ?? sharedPlayerRows[0]?.starting_hole) || 1),
+      holeSequence: durableRound?.hole_sequence?.length === parsedHoleCount
+        ? durableRound.hole_sequence.map(Number)
+        : undefined,
     },
   };
 };
