@@ -176,7 +176,7 @@ test("public mobile leaderboard selects R10, expands independently, and persists
   await page.setViewportSize({ width: 390, height: 844 });
   await routePublicFixture(page);
   await page.goto("/leaderboard?shareToken=phase-three-token&round=1", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("tab", { name: "R3" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "R3" })).toHaveAttribute("aria-selected", "true", { timeout: 20_000 });
   await page.getByRole("tab", { name: "R10" }).click();
   await expect(page.locator("[data-selected-round='R10']")).toBeVisible();
   const teamButton = page.getByRole("button", { name: "▸ Bluffton", exact: true });

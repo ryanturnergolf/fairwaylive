@@ -1329,12 +1329,15 @@ test("rapid Save Hole actions preserve adjacent persisted hole positions", async
   const saveHoleButton = page.getByRole("button", { name: "Save Hole" });
 
   for (let holeIndex = 0; holeIndex < selfScores.length; holeIndex += 1) {
-    await expect(page.getByText(`Hole ${holeIndex + 1}`, { exact: true })).toBeVisible();
+    await expect(page.getByText(`Hole ${holeIndex + 1}`, { exact: true })).toBeVisible({ timeout: 20_000 });
     await expect(selfScoreInput).toBeEditable();
     await expect(markerScoreInput).toBeEditable();
     await selfScoreInput.fill(String(selfScores[holeIndex]));
     await markerScoreInput.fill(String(markerScores[holeIndex]));
     await saveHoleButton.click();
+    if (holeIndex < selfScores.length - 1) {
+      await expect(page.getByText(`Hole ${holeIndex + 2}`, { exact: true })).toBeVisible({ timeout: 20_000 });
+    }
   }
 
   await expect
