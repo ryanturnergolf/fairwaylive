@@ -106,24 +106,40 @@ test("durable player UUIDs bind submitted Qualifying scores to legacy snapshot p
   ];
   const tournament = bindSnapshotPlayersToDurableRoster(snapshot, durablePlayers);
   const durableScoreEntries = [
-    { player_id: "stable-a", entered_by_player_id: "stable-a", round_number: 1, hole_scores: [4, 4, 4], entry_status: "submitted" },
-    { player_id: "stable-b", entered_by_player_id: "stable-b", round_number: 1, hole_scores: [5, 5, 5], entry_status: "submitted" },
+    { player_id: "stable-a", entered_by_player_id: "stable-a", round_number: 1, hole_scores: Array(9).fill(4), entry_status: "submitted" },
+    { player_id: "stable-b", entered_by_player_id: "stable-b", round_number: 1, hole_scores: Array(9).fill(5), entry_status: "submitted" },
   ] as Parameters<typeof buildMultiRoundTournamentLeaderboard>[0]["durableScoreEntries"];
+  const qualifyingConfiguration = {
+    "stable-r1": { holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9], pars: Array(9).fill(4) },
+    "stable-r2": { holeNumbers: [10, 11, 12, 13, 14, 15, 16, 17, 18], pars: Array(9).fill(4) },
+  };
   const model = buildMultiRoundTournamentLeaderboard({
     tournament,
-    roundConfigurationById: configurations(2),
+    roundConfigurationById: qualifyingConfiguration,
     durableScoreEntries,
     scoringMode: "reciprocal",
     allowLegacyScoreFallback: false,
   });
 
   expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r1"]).toMatchObject({
-    total: 12,
+    total: 36,
     toPar: "E",
     through: "F",
   });
-  expect(model.players.find((player) => player.id === "stable-b")?.rounds["stable-r1"].total).toBe(15);
+  expect(model.players.find((player) => player.id === "stable-b")?.rounds["stable-r1"]).toMatchObject({
+    total: 45,
+    toPar: "+9",
+    through: "F",
+  });
   expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r2"].through).toBe("Not started");
+});
+
+test("Tournament workspace uses durable Qualifying roster identities and disables legacy score lookup", () => {
+  const workspace = source("app/tournament/[id]/page.tsx");
+  expect(workspace).toContain("getTournamentPlayers(sharedTournamentId, roundNumber)");
+  expect(workspace).toContain("bindSnapshotPlayersToDurableRoster(");
+  expect(workspace).toContain("id: player.player_id");
+  expect(workspace).toContain("allowLegacyScoreFallback: !isQualifyingTournament");
 });
 
 test("team expansion projection batches all team players without per-player requests", () => {

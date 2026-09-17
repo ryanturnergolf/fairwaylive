@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     if (sessionError) throw sessionError;
 
     const sessionIds = (sessions ?? []).map((session) => String(session.id));
-    const [{ data: days, error: dayError }, { data: configuredRounds, error: roundError }, { data: participants, error: participantError }, { data: groups, error: groupError }] = sessionIds.length > 0
+    const [{ data: days, error: dayError }, { data: configuredRounds, error: roundError }, { data: tournamentRounds, error: tournamentRoundError }, { data: participants, error: participantError }, { data: groups, error: groupError }] = sessionIds.length > 0
       ? await Promise.all([
         supabase
           .from("qualifying_days")
@@ -57,6 +57,10 @@ export async function GET(request: Request) {
           .select("id,qualifying_session_id,qualifying_day_id,round_order,display_name,starting_hole,hole_count,ending_hole,hole_sequence")
           .in("qualifying_session_id", sessionIds)
           .order("round_order"),
+        supabase
+          .from("tournament_rounds")
+          .select("id,qualifying_session_id,qualifying_day,qualifying_segment")
+          .in("qualifying_session_id", sessionIds),
         supabase
           .from("qualifying_participants")
           .select("id,qualifying_session_id,roster_player_id,player_id,player_name,roster_type,display_order")
@@ -70,11 +74,12 @@ export async function GET(request: Request) {
       ])
       : [
         { data: [], error: null }, { data: [], error: null },
-        { data: [], error: null },
+        { data: [], error: null }, { data: [], error: null },
         { data: [], error: null },
       ];
     if (dayError) throw dayError;
     if (roundError) throw roundError;
+    if (tournamentRoundError) throw tournamentRoundError;
     if (participantError) throw participantError;
     if (groupError) throw groupError;
 
@@ -123,6 +128,17 @@ export async function GET(request: Request) {
             const rightDay = (days ?? []).find((day) => day.id === right.qualifying_day_id)?.day_number ?? 0;
             return leftDay - rightDay || left.round_order - right.round_order;
           });
+        const tournamentRoundByQualifyingRoundId = new Map(
+          orderedConfiguredRounds.map((round) => {
+            const dayNumber = (days ?? []).find((day) => day.id === round.qualifying_day_id)?.day_number;
+            const mappedTournamentRound = (tournamentRounds ?? []).find((candidate) =>
+              candidate.qualifying_session_id === session.id &&
+              candidate.qualifying_day === dayNumber &&
+              candidate.qualifying_segment === round.round_order
+            );
+            return [round.id, mappedTournamentRound?.id ?? null];
+          })
+        );
         return {
         session: {
           id: session.id,
@@ -172,7 +188,7 @@ export async function GET(request: Request) {
         scorerAssignments: [],
         configuredRounds: orderedConfiguredRounds.map((round, index) => ({
           qualifyingRoundId: round.id,
-          tournamentRoundId: null,
+          tournamentRoundId: tournamentRoundByQualifyingRoundId.get(round.id) ?? null,
           roundNumber: index + 1,
           displayLabel: `R${index + 1}`,
           qualifyingDay: (days ?? []).find((day) => day.id === round.qualifying_day_id)?.day_number ?? 0,

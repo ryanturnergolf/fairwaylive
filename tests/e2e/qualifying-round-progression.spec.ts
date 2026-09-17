@@ -44,6 +44,16 @@ test("coach progression readiness comes from canonical result segments", () => {
   expect(buildQualifyingRoundProgressionState(foundation, results)).toMatchObject({ completeScorecards: 2, requiredScorecards: 2, ready: true, isFinalRound: false });
 });
 
+test("session hydration exposes the durable Tournament round mapping instead of a null placeholder", () => {
+  const route = source("app/api/qualifying-sessions/route.ts");
+  expect(route).toContain('.from("tournament_rounds")');
+  expect(route).toContain('.select("id,qualifying_session_id,qualifying_day,qualifying_segment")');
+  expect(route).toContain("candidate.qualifying_day === dayNumber");
+  expect(route).toContain("candidate.qualifying_segment === round.round_order");
+  expect(route).toContain("tournamentRoundId: tournamentRoundByQualifyingRoundId.get(round.id) ?? null");
+  expect(route).not.toContain("tournamentRoundId: null");
+});
+
 test("incomplete canonical Review disables progression", () => {
   const incomplete = structuredClone(results);
   incomplete.combined[1].segments[0].reviewComplete = false;

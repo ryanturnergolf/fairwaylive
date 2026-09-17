@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
-import { configureTournamentRoundCount, getTournamentPlayers, setTournamentOperationalRound } from "../../lib/repositories/tournamentRepository";
+import { configureTournamentRoundCount, getTournamentPlayers, setTournamentOperationalRound, type TournamentPlayerRow } from "../../lib/repositories/tournamentRepository";
 import {
   normalizeTournamentRoundSetup,
   projectOfficialLeaderboardScorecards,
@@ -98,6 +98,7 @@ import type { QualifyingTournamentAccessContext } from "../../lib/services/quali
 import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
 import { buildCourseHoleSequence } from "../../lib/services/courseService";
 import { buildMultiRoundTournamentLeaderboard } from "../../lib/services/multiRoundLeaderboardService";
+import { bindSnapshotPlayersToDurableRoster } from "../../lib/services/shareTokenLeaderboardService";
 import TournamentTeamInvitationManager from "./components/TournamentTeamInvitationManager";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
@@ -259,6 +260,7 @@ export default function TournamentPage() {
   const [multiRoundScoreEntries, setMultiRoundScoreEntries] = useState<ScoreEntryRow[]>([]);
   const [scoreHoleEntries, setScoreHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
   const [multiRoundHoleEntries, setMultiRoundHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
+  const [durableLeaderboardPlayers, setDurableLeaderboardPlayers] = useState<TournamentPlayerRow[]>([]);
   const [reviewResolutionMessage, setReviewResolutionMessage] = useState("");
   const [reviewOverrideValues, setReviewOverrideValues] = useState<Record<string, string>>({});
   const [reviewOverrideReasons, setReviewOverrideReasons] = useState<Record<string, string>>({});
@@ -311,15 +313,26 @@ export default function TournamentPage() {
         countingScores: Math.max(1, Number(setup?.countingScores) || 4),
       }];
     }));
+    const leaderboardTournament = isQualifyingTournament
+      ? bindSnapshotPlayersToDurableRoster(
+          envelope.tournament,
+          durableLeaderboardPlayers.map((player) => ({
+            id: player.player_id,
+            playerName: player.player_name,
+            team: player.team_name ?? "",
+          }))
+        )
+      : envelope.tournament;
     return buildMultiRoundTournamentLeaderboard({
-      tournament: envelope.tournament,
+      tournament: leaderboardTournament,
       roundConfigurationById,
       operationalCurrentRoundId: String(settings.operationalCurrentRoundId ?? operationalCurrentRoundId),
       durableScoreEntries: multiRoundScoreEntries,
       officialEntries: multiRoundHoleEntries,
       scoringMode: qualifyingScoringMode,
+      allowLegacyScoreFallback: !isQualifyingTournament,
     });
-  }, [eventCourseHoles, isClientMounted, multiRoundHoleEntries, multiRoundScoreEntries, operationalCurrentRoundId, qualifyingScoringMode, scorecardRows, sharedScoreEntries, tournamentId]);
+  }, [durableLeaderboardPlayers, eventCourseHoles, isClientMounted, isQualifyingTournament, multiRoundHoleEntries, multiRoundScoreEntries, operationalCurrentRoundId, qualifyingScoringMode, tournamentId]);
   const handleQualifyingContextResolved = useCallback((context: QualifyingTournamentAccessContext | null) => {
     setIsQualifyingTournament(Boolean(
       context &&
@@ -513,12 +526,13 @@ export default function TournamentPage() {
       setMultiRoundScoreEntries([]);
       setScoreHoleEntries([]);
       setMultiRoundHoleEntries([]);
+      setDurableLeaderboardPlayers([]);
       setDynamicReviewFoundation(null);
       return;
     }
 
     const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
-    const [scores, allScores, holes, allHoles, dynamicFoundation] = await Promise.all([
+    const [scores, allScores, holes, allHoles, durablePlayers, dynamicFoundation] = await Promise.all([
       loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
         console.warn("[ScoreService] Unable to load review score entries.", error);
         return [];
@@ -535,6 +549,10 @@ export default function TournamentPage() {
         console.warn("[StatisticsService] Unable to load multi-round official entries.", error);
         return [];
       }),
+      getTournamentPlayers(sharedTournamentId, roundNumber).catch((error) => {
+        console.warn("[TournamentService] Unable to load durable leaderboard player authority.", error);
+        return [];
+      }),
       loadDynamicStatisticReviewFoundation(sharedTournamentId).catch((error) => {
         console.warn("[DynamicStatistics] Unable to load Review statistics.", error);
         return null;
@@ -545,6 +563,7 @@ export default function TournamentPage() {
     setMultiRoundScoreEntries(allScores);
     setScoreHoleEntries(holes);
     setMultiRoundHoleEntries(allHoles);
+    setDurableLeaderboardPlayers(durablePlayers);
     setDynamicReviewFoundation(dynamicFoundation);
   }, [normalizedRoundSetup.roundNumber, sharedTournamentId]);
 
