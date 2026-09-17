@@ -94,10 +94,12 @@ test("designated scorer is canonical and official hole resolution is applied", (
   expect(result?.holeScores).toEqual([5,5,4,5,5,5,5,5,5]);
 });
 
-test("coach readiness loads independently of the Results panel", () => {
+test("coach readiness and Results use the same canonical results projection", () => {
   const page = source("app/coach-dashboard/qualifying-manager/page.tsx");
   const migration = source("supabase/migrations/20260902000000_add_qualifying_round_progression.sql");
-  expect(page).toContain("loadQualifyingRoundProgressionState");
+  expect(page).not.toContain("loadQualifyingRoundProgressionState");
+  expect(page).toContain("const results = await loadQualifyingResults(foundation.session.id)");
+  expect(page).toContain("buildQualifyingRoundProgressionState(foundation, results)");
   expect(page).not.toContain("Open Results to load canonical round readiness");
   expect(migration).toContain("private.qualifying_round_readiness");
   expect(migration).toContain("readiness := private.qualifying_round_readiness");

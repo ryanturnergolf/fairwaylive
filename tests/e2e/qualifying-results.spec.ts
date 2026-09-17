@@ -41,10 +41,10 @@ const days: QualifyingDay[] = [
   { id: "d2", qualifyingSessionId: "session", dayNumber: 2, playDate: "2026-08-02", holesTotal: 36, courseName: "South", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null },
 ];
 const rounds: QualifyingRoundMapping[] = [
-  { id: "r1", tournamentId: "tournament", roundNumber: 1, name: "Day 1 Segment 1", holeCount: 18, immutablePar: 72, qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 1, createdAt: null, updatedAt: null },
-  { id: "r2", tournamentId: "tournament", roundNumber: 2, name: "Day 1 Segment 2", holeCount: 9, immutablePar: 36, qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 2, createdAt: null, updatedAt: null },
-  { id: "r3", tournamentId: "tournament", roundNumber: 3, name: "Day 2 Segment 1", holeCount: 18, immutablePar: 72, qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 1, createdAt: null, updatedAt: null },
-  { id: "r4", tournamentId: "tournament", roundNumber: 4, name: "Day 2 Segment 2", holeCount: 18, immutablePar: 72, qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 2, createdAt: null, updatedAt: null },
+  { id: "r1", tournamentId: "tournament", roundNumber: 1, name: "Day 1 Segment 1", holeCount: 18, immutablePar: 72, immutableHolePars: Array(18).fill(4), qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 1, createdAt: null, updatedAt: null },
+  { id: "r2", tournamentId: "tournament", roundNumber: 2, name: "Day 1 Segment 2", holeCount: 9, immutablePar: 36, immutableHolePars: Array(9).fill(4), qualifyingSessionId: "session", qualifyingDay: 1, qualifyingSegment: 2, createdAt: null, updatedAt: null },
+  { id: "r3", tournamentId: "tournament", roundNumber: 3, name: "Day 2 Segment 1", holeCount: 18, immutablePar: 72, immutableHolePars: Array(18).fill(4), qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 1, createdAt: null, updatedAt: null },
+  { id: "r4", tournamentId: "tournament", roundNumber: 4, name: "Day 2 Segment 2", holeCount: 18, immutablePar: 72, immutableHolePars: Array(18).fill(4), qualifyingSessionId: "session", qualifyingDay: 2, qualifyingSegment: 2, createdAt: null, updatedAt: null },
 ];
 const playerIds = ["alex", "jordan", "sam", "casey"];
 const playerNames: Record<string, string> = {
@@ -289,7 +289,7 @@ test("three-round Qualifying hydrates completed, partial, and unstarted rounds i
   });
 
   const alex = projected.combined.find((player) => player.playerId === "alex")!;
-  expect(alex.segments[0]).toMatchObject({ tournamentRoundId: "tournament-round-1", score: 36, toPar: 0, through: "F", holeScores: Array(9).fill(4) });
+  expect(alex.segments[0]).toMatchObject({ tournamentRoundId: "tournament-round-1", courseName: "Test Course", score: 36, toPar: 0, through: "F", holeScores: Array(9).fill(4) });
   expect(alex.segments[1]).toMatchObject({ tournamentRoundId: "tournament-round-2", score: 20, toPar: 4, through: "4", holeScores: [5, 5, 5, 5, null, null, null, null, null] });
   expect(alex.segments[2]).toMatchObject({ tournamentRoundId: "tournament-round-3", score: null, through: "Not started", holeScores: Array(9).fill(null) });
 });
@@ -391,6 +391,9 @@ test("coach operations page exposes read-only daily and combined results", async
   await expect(page.getByText("16/16", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("tab", { name: "Combined" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("T2", { exact: true }).first()).toBeVisible();
+  await page.locator('button[aria-expanded="false"]').filter({ hasText: "Alex Morgan" }).click();
+  await expect(page.getByText("Course: North", { exact: true })).toBeVisible();
+  await expect(page.getByText("Round: 54 (-18)", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Day 1" }).click();
   await page.getByText("Alex Morgan round summaries").click();
   await expect(page.getByText("Day 1 · Segment 2").first()).toBeVisible();

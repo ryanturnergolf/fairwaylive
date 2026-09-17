@@ -143,6 +143,7 @@ const buildSegment = ({
   reviewStatuses,
   scoringMode,
   assignedScorerPlayerId,
+  courseName,
 }: {
   player: QualifyingEnginePlayer;
   round: QualifyingRoundMapping;
@@ -151,6 +152,7 @@ const buildSegment = ({
   reviewStatuses: ScoreReviewStatusRow[];
   scoringMode: QualifyingSession["scoringMode"];
   assignedScorerPlayerId?: string | null;
+  courseName?: string;
 }): QualifyingSegmentResult => {
   const playerScores = scoreEntries.filter((entry) =>
     entry.round_number === round.roundNumber && String(entry.player_id) === player.playerId
@@ -232,6 +234,7 @@ const buildSegment = ({
     roundNumber: round.roundNumber,
     dayNumber: round.qualifyingDay,
     segmentNumber: round.qualifyingSegment,
+    courseName,
     holeCount: round.holeCount,
     holeNumbers,
     holePars,
@@ -370,6 +373,7 @@ export const buildQualifyingResults = ({
         reviewStatuses,
         scoringMode: session.scoringMode,
         assignedScorerPlayerId: designatedScorerByPlayerRound.get(`${round.roundNumber}:${roundPlayer.playerId}`) ?? null,
+        courseName: days.find((day) => day.dayNumber === round.qualifyingDay)?.courseName,
       });
     });
     allSegmentsByPlayer.set(player.playerId, playerRounds);

@@ -7,7 +7,7 @@ import {
 } from "./tournamentDerivedState";
 import { loadComparisonScores } from "./scoreService";
 import { loadSharedTournamentScorecardState } from "./tournamentService";
-import type { LegacyScorecardRow } from "../tournamentModel";
+import type { LegacyScorecardRow, Tournament } from "../tournamentModel";
 import { buildCourseRoundProjection } from "./courseService";
 import { getQualifyingBackingTournamentStatus } from "../repositories/tournamentRepository";
 import { getQualifyingBackingScoringMode } from "../repositories/tournamentRepository";
@@ -27,6 +27,44 @@ export type ShareTokenLeaderboardReadModel = {
   individualLeaderboard: IndividualLeaderboardRow[];
   teamLeaderboard: TeamLeaderboardRow[];
   multiRoundProjection: MultiRoundTournamentLeaderboardProjection | null;
+};
+
+export const bindSnapshotPlayersToDurableRoster = (
+  tournament: Tournament,
+  scorecardRows: Array<Pick<LegacyScorecardRow, "playerName" | "team"> & { id: string | number }>
+) => {
+  const stableIdByIdentity = new Map(
+    scorecardRows.map((row) => [`${row.playerName}\u0000${row.team}`, String(row.id)])
+  );
+  const stableIdBySnapshotId = new Map(
+    tournament.players.map((player) => {
+      const playerName = `${player.firstName} ${player.lastName}`.trim();
+      const teamName = tournament.teams.find((team) => team.id === player.teamId)?.name ?? "";
+      return [player.id, stableIdByIdentity.get(`${playerName}\u0000${teamName}`) ?? player.id];
+    })
+  );
+  return {
+    ...tournament,
+    players: tournament.players.map((player) => ({
+      ...player,
+      id: stableIdBySnapshotId.get(player.id) ?? player.id,
+    })),
+    teams: tournament.teams.map((team) => ({
+      ...team,
+      players: team.players.map((playerId) => stableIdBySnapshotId.get(playerId) ?? playerId),
+    })),
+    scores: tournament.scores.map((score) => ({
+      ...score,
+      playerId: stableIdBySnapshotId.get(score.playerId) ?? score.playerId,
+    })),
+    pairings: tournament.pairings.map((pairing) => ({
+      ...pairing,
+      players: pairing.players.map((player) => ({
+        ...player,
+        playerId: stableIdBySnapshotId.get(player.playerId) ?? player.playerId,
+      })),
+    })),
+  };
 };
 
 export const loadShareTokenLeaderboard = async ({
@@ -95,21 +133,23 @@ export const loadShareTokenLeaderboard = async ({
     ? snapshot.state_snapshot
     : null;
   const multiRoundProjection = snapshotEnvelope?.tournament.players.length && snapshotEnvelope.tournament.rounds.length > 1 ? (() => {
-    const settings = snapshotEnvelope.tournament.settings;
+    const tournament = bindSnapshotPlayersToDurableRoster(snapshotEnvelope.tournament, sharedState.scorecardRows);
+    const settings = tournament.settings;
     const roundSetups = settings.roundSetups ?? {};
     const parsByHole = new Map(sharedState.courseHoles.map((hole) => [hole.holeNumber, hole.par]));
-    const roundConfigurationById = Object.fromEntries(snapshotEnvelope.tournament.rounds.map((round) => {
+    const roundConfigurationById = Object.fromEntries(tournament.rounds.map((round) => {
       const setup = roundSetups[String(round.roundNumber)];
       const holeNumbers = buildCourseHoleSequence(Math.max(1, Number(setup?.startingHole) || 1), Math.max(1, Number(setup?.numberOfHoles) || 18));
       return [round.id, { holeNumbers, pars: holeNumbers.map((hole) => parsByHole.get(hole) ?? null), countingScores: Number(setup?.countingScores) || 4 }];
     }));
     return buildMultiRoundTournamentLeaderboard({
-      tournament: snapshotEnvelope.tournament,
+      tournament,
       roundConfigurationById,
       operationalCurrentRoundId: settings.operationalCurrentRoundId,
       durableScoreEntries: scoreEntries,
       officialEntries,
       scoringMode: scoringMode ?? "reciprocal",
+      allowLegacyScoreFallback: !isQualifying,
     });
   })() : null;
 

@@ -204,6 +204,7 @@ export type QualifyingSegmentResult = {
   roundNumber: number;
   dayNumber: number;
   segmentNumber: number;
+  courseName?: string;
   holeCount: number;
   holeNumbers: number[];
   holePars: Array<number | null>;

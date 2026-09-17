@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { buildMultiRoundTournamentLeaderboard } from "../../app/lib/services/multiRoundLeaderboardService";
+import { bindSnapshotPlayersToDurableRoster } from "../../app/lib/services/shareTokenLeaderboardService";
 import { getLeaderboardFavoritesKey, partitionLeaderboardFavorites } from "../../app/lib/services/leaderboardFavoritesService";
 import type { Tournament } from "../../app/lib/tournamentModel";
 
@@ -96,6 +97,35 @@ test("custom immutable hole sequence and par remain attached to each round", () 
   expect(model.players[0].rounds["stable-r1"].toPar).toBe("E");
 });
 
+test("durable player UUIDs bind submitted Qualifying scores to legacy snapshot players", () => {
+  const snapshot = tournamentFixture(2);
+  const durablePlayers = [
+    { id: "stable-a", playerName: "AJ Gerber", team: "Bluffton", scores: [] },
+    { id: "stable-b", playerName: "Colin King", team: "Bluffton", scores: [] },
+    { id: "stable-c", playerName: "Evan Kindred", team: "Visitors", scores: [] },
+  ];
+  const tournament = bindSnapshotPlayersToDurableRoster(snapshot, durablePlayers);
+  const durableScoreEntries = [
+    { player_id: "stable-a", entered_by_player_id: "stable-a", round_number: 1, hole_scores: [4, 4, 4], entry_status: "submitted" },
+    { player_id: "stable-b", entered_by_player_id: "stable-b", round_number: 1, hole_scores: [5, 5, 5], entry_status: "submitted" },
+  ] as Parameters<typeof buildMultiRoundTournamentLeaderboard>[0]["durableScoreEntries"];
+  const model = buildMultiRoundTournamentLeaderboard({
+    tournament,
+    roundConfigurationById: configurations(2),
+    durableScoreEntries,
+    scoringMode: "reciprocal",
+    allowLegacyScoreFallback: false,
+  });
+
+  expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r1"]).toMatchObject({
+    total: 12,
+    toPar: "E",
+    through: "F",
+  });
+  expect(model.players.find((player) => player.id === "stable-b")?.rounds["stable-r1"].total).toBe(15);
+  expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r2"].through).toBe("Not started");
+});
+
 test("team expansion projection batches all team players without per-player requests", () => {
   const model = buildMultiRoundTournamentLeaderboard({ tournament: tournamentFixture(), roundConfigurationById: configurations() });
   expect(model.teams.find((team) => team.id === "team-a")?.players.map((player) => player.id)).toEqual(["a", "b"]);
@@ -156,6 +186,8 @@ test("Qualifying projection carries exact round, hole, par, score, and through i
   expect(service).not.toContain("holeCount * 4");
   expect(component).toContain("segment.tournamentRoundId === globalRoundId");
   expect(component).toContain("expandedRounds");
+  expect(component).toContain("Course:");
+  expect(component).toContain("Round:");
   expect(grid).not.toContain("if (played.length === 0) return");
   expect(grid).toContain('hole.score ??');
   expect(grid).toContain('hole.par ??');

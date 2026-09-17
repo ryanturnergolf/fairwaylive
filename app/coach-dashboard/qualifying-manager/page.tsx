@@ -12,7 +12,7 @@ import {
   listQualifyingSessionFoundations,
   loadQualifyingResults,
 } from "../../lib/services/qualifyingSessionService";
-import { advanceQualifyingOperationalRound, buildQualifyingRoundProgressionState, loadQualifyingRoundProgressionState, type QualifyingRoundProgressionState } from "../../lib/services/qualifyingRoundProgressionService";
+import { advanceQualifyingOperationalRound, buildQualifyingRoundProgressionState, type QualifyingRoundProgressionState } from "../../lib/services/qualifyingRoundProgressionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
 import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
@@ -46,7 +46,8 @@ export default function QualifyingSessionsPage() {
           setSessions(loaded);
           void Promise.all(loaded.filter((foundation) => foundation.session.status === "active").map(async (foundation) => {
             try {
-              const progression = await loadQualifyingRoundProgressionState(foundation);
+              const results = await loadQualifyingResults(foundation.session.id);
+              const progression = buildQualifyingRoundProgressionState(foundation, results);
               if (!cancelled) setRoundProgression((current) => ({ ...current, [foundation.session.id]: progression }));
             } catch {
               if (!cancelled) setRoundProgression((current) => ({ ...current, [foundation.session.id]: null }));
