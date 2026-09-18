@@ -37,6 +37,20 @@ const installEmptyReads = async (page: Page) => {
   await page.route("**/api/qualifying-sessions**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [] }) })
   );
+  await page.route("**/api/event-archive", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        cutoffDate: "2026-08-18",
+        tournamentCandidates: [],
+        qualifyingCandidates: [],
+        safetyExclusions: [],
+        archivedTournamentCount: 0,
+        archivedQualifyingCount: 0,
+      }),
+    })
+  );
 };
 
 test.beforeEach(async ({ page }) => {
@@ -113,6 +127,7 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
         rounds: "1",
         scoringFormat: "Stroke Play",
         status: "Finalized",
+        archivedAt: "2026-08-01T12:00:00.000Z",
         settings: {},
       },
     ]));
@@ -149,6 +164,7 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
         rosterType: "men",
         scoringMode: "reciprocal",
         status: "finalized",
+        archivedAt: "2026-08-01T12:00:00.000Z",
         selectedPlayers: [],
         groups: [],
         finalizedAt: "2026-04-10T12:00:00.000Z",
@@ -184,19 +200,86 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
   await expect(page.getByRole("link", { name: "Results / Live Scoring" }).nth(1)).toHaveAttribute("href", "/tournament/backing-tournament-1?tab=Live+Scoring");
   await expect(page.getByRole("heading", { name: "Spring Classic" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Spring Qualifying" })).toHaveCount(0);
-  await page.getByText("History", { exact: false }).click();
+  await page.getByRole("button", { name: "Archived Events (2)" }).click();
   await expect(page.getByRole("heading", { name: "Spring Classic" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Spring Qualifying" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Event" }).nth(0)).toHaveAttribute("href", "/tournament/tournament-history");
+  await expect(page.getByRole("link", { name: "Open Event" }).nth(1)).toHaveAttribute("href", "/coach-dashboard/qualifying-manager?session=qualifying-history");
 
   await page.getByRole("button", { name: "Qualifying", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Fall Invitational" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Travel Team Qualifying" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spring Qualifying" })).toBeVisible();
   await page.getByRole("searchbox", { name: "Search events" }).fill("Spring Qualifying");
-  await expect(page.getByRole("heading", { name: "Travel Team Qualifying" })).toHaveCount(0);
-  await expect(page.getByText("History", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spring Qualifying" })).toBeVisible();
   await expect(page.getByText("Tournament Director", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/QA seed/i)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("Events safely bulk-archives eligible Tournaments and Qualifying without hiding protected events", async ({ page }) => {
+  await routeValidCoachSession(page);
+  await installCoachSession(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([
+      { id: "old-tournament", name: "Old Tournament", course: "Legacy Course", date: "2026-06-01", city: "", state: "", rounds: "1", scoringFormat: "Stroke Play", status: "Finalized", settings: {} },
+      { id: "active-backing", name: "Active Qualifying Backing", course: "Current Course", date: "2026-09-17", city: "", state: "", rounds: "1", scoringFormat: "Stroke Play", status: "Active", settings: {} },
+    ]));
+  });
+  await page.unroute("**/api/qualifying-sessions**");
+  await page.route("**/api/qualifying-sessions**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ sessions: [{
+      session: { id: "old-qualifying", tournamentId: "old-backing", ownerId: coachId, name: "Old Qualifying", rosterType: "men", scoringMode: "reciprocal", status: "finalized", selectedPlayers: [], groups: [], finalizedAt: "2026-06-02T12:00:00.000Z", finalizedBy: coachId, createdAt: null, updatedAt: null },
+      days: [{ id: "old-day", qualifyingSessionId: "old-qualifying", dayNumber: 1, playDate: "2026-06-02", holesTotal: 18, courseName: "Legacy Course", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null }], rounds: [], scorerAssignments: [],
+    }, {
+      session: { id: "active-qualifying", tournamentId: "active-backing", ownerId: coachId, name: "Current Qualifying", rosterType: "men", scoringMode: "reciprocal", status: "active", selectedPlayers: [], groups: [], finalizedAt: null, finalizedBy: null, createdAt: null, updatedAt: null },
+      days: [{ id: "current-day", qualifyingSessionId: "active-qualifying", dayNumber: 1, playDate: "2026-09-17", holesTotal: 18, courseName: "Current Course", teeName: "Blue", startingHole: 1, createdAt: null, updatedAt: null }], rounds: [], scorerAssignments: [],
+    }] }),
+  }));
+  await page.unroute("**/api/event-archive");
+  await page.route("**/api/event-archive", async (route) => {
+    const inventory = {
+      cutoffDate: "2026-08-18",
+      tournamentCandidates: [{ id: "old-tournament", name: "Old Tournament", eventDate: "2026-06-01", status: "Finalized", reason: "Completed before cutoff", qualifyingSessionId: null }],
+      qualifyingCandidates: [{ id: "old-qualifying", name: "Old Qualifying", startDate: "2026-06-02", endDate: "2026-06-02", status: "finalized", reason: "Completed before cutoff", backingTournamentId: "old-backing" }],
+      safetyExclusions: [
+        { eventType: "qualifying", id: "active-qualifying", name: "Current Qualifying", eventDate: "2026-09-17", status: "active", reason: "Active workflow protected", backingTournamentId: "active-backing" },
+        { eventType: "tournament", id: "active-backing", name: "Active Qualifying Backing", eventDate: "2026-09-17", status: "Active", reason: "Backing Tournament for a protected Qualifying event", backingTournamentId: null },
+      ],
+      archivedTournamentCount: route.request().method() === "POST" ? 1 : 0,
+      archivedQualifyingCount: route.request().method() === "POST" ? 1 : 0,
+    };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(inventory) });
+  });
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  await page.goto("/coach-dashboard/events");
+  await expect(page.getByRole("heading", { name: "Current Qualifying" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Old Tournament" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Old Qualifying" })).toHaveCount(0);
+  await page.getByText("Old events ready to archive", { exact: false }).click();
+  await expect(page.getByText("Tournament: Old Tournament", { exact: false })).toBeVisible();
+  await expect(page.getByText("Qualifying: Old Qualifying", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Archive both" }).click();
+  await expect(page.getByRole("status")).toContainText("1 Tournaments and 1 Qualifying events archived");
+  await page.getByRole("button", { name: "Archived Events (2)" }).click();
+  await expect(page.getByRole("heading", { name: "Old Tournament" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Old Qualifying" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Current Qualifying" })).toHaveCount(0);
+});
+
+test("archive authority is date-based, preserves history, and protects active Qualifying backing Tournaments", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const migration = await readFile("supabase/migrations/20260918000000_add_event_archival_authority.sql", "utf8");
+  expect(migration).toContain("dates.end_date < input_cutoff");
+  expect(migration).toContain("coalesce(tournament.tournament_date, tournament.finalized_at::date) < input_cutoff");
+  expect(migration).not.toContain("created_at < input_cutoff");
+  expect(migration).toContain("'active', 'provisioning', 'activating', 'finalizing'");
+  expect(migration).toContain("Backing Tournament for a protected Qualifying event");
+  expect(migration).toContain("not (session.id = any(qualifying_candidate_ids))");
+  expect(migration).toContain("set archived_at = now(), updated_at = now()");
+  expect(migration).not.toMatch(/delete\s+from\s+public\.(tournaments|qualifying_sessions)/i);
 });
 
 test("empty, no-season, no-player, and error states are explicit", async ({ page }) => {

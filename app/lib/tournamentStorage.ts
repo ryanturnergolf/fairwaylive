@@ -28,6 +28,7 @@ export type StoredTournament = {
   rounds: string;
   scoringFormat: string;
   status: string;
+  archivedAt?: string | null;
   settings: unknown;
 };
 

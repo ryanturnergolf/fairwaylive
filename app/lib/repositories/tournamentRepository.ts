@@ -15,6 +15,7 @@ export type TournamentRow = {
   number_of_rounds: number;
   status: string;
   finalized_at?: string | null;
+  archived_at?: string | null;
   aggregate_version?: number;
   created_at: string | null;
   updated_at: string | null;
@@ -170,7 +171,7 @@ export const getQualifyingBackingScoringMode = async (
 };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,archived_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
 
 const tournamentPlayerColumns =
   "id,tournament_id,roster_player_id,player_id,player_name,team_id,team_name,tournament_team_id,round_number,group_number,tee_number,starting_hole,marker_player_id,is_individual,position,status,created_at,updated_at";

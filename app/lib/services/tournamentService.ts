@@ -1115,6 +1115,7 @@ const toStoredTournament = (row: TournamentRow): StoredTournament => ({
   rounds: String(row.number_of_rounds || 1),
   scoringFormat: "",
   status: row.status,
+  archivedAt: row.archived_at ?? null,
   settings: row.course_id ? {
     courseSetup: {
       courseId: row.course_id,

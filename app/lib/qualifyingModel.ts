@@ -22,6 +22,7 @@ export type QualifyingSession = {
   rosterType: QualifyingRosterType;
   scoringMode: QualifyingScoringMode;
   status: QualifyingSessionStatus;
+  archivedAt?: string | null;
   operationalCurrentQualifyingRoundId?: string | null;
   selectedPlayers: QualifyingRosterPlayer[];
   groups: QualifyingGroup[];

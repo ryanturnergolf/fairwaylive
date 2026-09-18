@@ -92,7 +92,7 @@ type MutationBody =
     };
 
 const tournamentColumns =
-  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
+  "id,created_by,owner_id,name,course,tournament_date,number_of_rounds,status,finalized_at,archived_at,aggregate_version,created_at,updated_at,course_id,tee_set_id,saved_course_setup_id,course_setup_name,course_hole_snapshot,operational_current_round_id";
 
 const getAuthenticatedClient = async (request: Request) => {
   const authorization = request.headers.get("authorization") ?? "";

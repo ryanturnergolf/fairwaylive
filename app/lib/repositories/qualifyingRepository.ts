@@ -21,6 +21,7 @@ type QualifyingSessionRow = {
   selected_players: QualifyingSession["selectedPlayers"];
   groups: QualifyingSession["groups"];
   finalized_at: string | null;
+  archived_at?: string | null;
   finalized_by: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -120,6 +121,7 @@ const mapSession = (row: QualifyingSessionRow): QualifyingSession => ({
   rosterType: row.roster_type,
   scoringMode: row.scoring_mode,
   status: row.status,
+  archivedAt: row.archived_at ?? null,
   operationalCurrentQualifyingRoundId: row.operational_current_qualifying_round_id ?? null,
   selectedPlayers: row.selected_players,
   groups: row.groups,
@@ -266,7 +268,7 @@ export const getQualifyingSessionRow = async (
 ): Promise<QualifyingSession | null> => {
   const { data, error } = await getClient()
     .from("qualifying_sessions")
-    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,created_at,updated_at")
+    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,archived_at,created_at,updated_at")
     .eq("id", sessionId)
     .maybeSingle();
   if (error) throw error;
@@ -276,7 +278,7 @@ export const getQualifyingSessionRow = async (
 export const listQualifyingSessionRows = async (): Promise<QualifyingSession[]> => {
   const { data, error } = await getClient()
     .from("qualifying_sessions")
-    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,created_at,updated_at")
+    .select("id,tournament_id,owner_id,name,roster_type,scoring_mode,status,selected_players,groups,operational_current_qualifying_round_id,finalized_at,finalized_by,archived_at,created_at,updated_at")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => mapSession(row as QualifyingSessionRow));
