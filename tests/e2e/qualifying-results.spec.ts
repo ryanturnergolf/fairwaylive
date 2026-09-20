@@ -12,9 +12,55 @@ import {
   type QualifyingEngineScorecard,
 } from "../../app/lib/services/qualifyingResultsService";
 import { routeValidCoachSession } from "./authSessionTestHelper";
+import { buildQualifyingAdminMarkerMutation } from "../../app/lib/services/qualifyingAdminScoringService";
 
 test.beforeEach(async ({ page }) => {
   await routeValidCoachSession(page);
+});
+
+test("admin Qualifying entry preserves marker identity and exact configured R2 holes", () => {
+  const mutation = buildQualifyingAdminMarkerMutation({
+    tournamentId: "tournament",
+    roundNumber: 2,
+    subjectPlayerId: "dylan",
+    assignedMarkerPlayerId: "grayson",
+    holeNumbers: [10, 11, 12, 13, 14, 15, 16, 17, 18],
+    holeScores: [5, 5, 5, 5, 5, 5, 5, 5, 5],
+    holeIndex: 7,
+  });
+
+  expect(mutation?.scoreEntry).toMatchObject({
+    playerId: "dylan",
+    enteredByPlayerId: "grayson",
+    roundNumber: 2,
+    total: 45,
+    entryStatus: "complete",
+  });
+  expect(mutation?.holeEntry).toMatchObject({
+    playerId: "dylan",
+    enteredByPlayerId: "grayson",
+    markerForPlayerId: "dylan",
+    roundNumber: 2,
+    holeNumber: 17,
+    strokes: 5,
+    entrySource: "marker",
+  });
+});
+
+test("admin Qualifying entry stays incomplete until every configured hole is scored", () => {
+  const mutation = buildQualifyingAdminMarkerMutation({
+    tournamentId: "tournament",
+    roundNumber: 1,
+    subjectPlayerId: "grayson",
+    assignedMarkerPlayerId: "dylan",
+    holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    holeScores: [4, 4, 4, 4, 0, 0, 0, 0, 0],
+    holeIndex: 3,
+  });
+
+  expect(mutation?.scoreEntry.entryStatus).toBe("in_progress");
+  expect(mutation?.holeEntry.holeNumber).toBe(4);
+  expect(mutation?.holeEntry.entryStatus).toBe("in_progress");
 });
 
 const session: QualifyingSession = {
@@ -156,6 +202,8 @@ test("Q6 aggregates 27/36-hole days, multiple days, competition ties, and player
   expect(results.combined.find((player) => player.playerId === "jordan")?.position).toBe("T2");
   expect(results.combined.find((player) => player.playerId === "sam")?.position).toBe("T2");
   expect(results.combined.find((player) => player.playerId === "casey")?.position).toBe("4");
+  expect(results.combined.find((player) => player.playerId === "alex")?.segments[0].markerHoleScores)
+    .toEqual(Array(9).fill(3));
   expect(results.combined.find((player) => player.playerId === "alex")?.statistics).toMatchObject({
     greensAvailable: 63,
     totalPutts: 126,

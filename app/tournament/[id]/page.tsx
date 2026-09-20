@@ -21,10 +21,11 @@ import {
   loadTournamentFinalizationStatus,
   type TournamentFinalizationRecord,
 } from "../../lib/services/tournamentFinalizationService";
-import { loadComparisonScores } from "../../lib/services/scoreService";
+import { loadComparisonScores, saveHole } from "../../lib/services/scoreService";
 import {
   loadTournamentHoleStatistics,
   resolveOfficialScore,
+  saveHoleStatistics,
   type OfficialScoreResolutionChoice,
 } from "../../lib/services/statisticsService";
 import {
@@ -95,11 +96,14 @@ import DynamicStatisticsReviewPanel from "./components/DynamicStatisticsReviewPa
 import OfficialResultsDashboard from "./components/OfficialResultsDashboard";
 import QualifyingAccessContext from "./components/QualifyingAccessContext";
 import type { QualifyingTournamentAccessContext } from "../../lib/services/qualifyingAccessService";
+import { loadQualifyingResults } from "../../lib/services/qualifyingSessionService";
+import type { QualifyingResultsReadModel } from "../../lib/qualifyingModel";
 import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
 import { buildCourseHoleSequence } from "../../lib/services/courseService";
 import { buildMultiRoundTournamentLeaderboard } from "../../lib/services/multiRoundLeaderboardService";
 import { bindSnapshotPlayersToDurableRoster } from "../../lib/services/shareTokenLeaderboardService";
 import TournamentTeamInvitationManager from "./components/TournamentTeamInvitationManager";
+import { buildQualifyingAdminMarkerMutation } from "../../lib/services/qualifyingAdminScoringService";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 const officialResultsTab = "Official Results";
@@ -225,6 +229,8 @@ export default function TournamentPage() {
   const [roundSetup, setRoundSetup] = useState<RoundSetupState>(defaultRoundSetupState);
   const [scorecardsGenerated, setScorecardsGenerated] = useState(false);
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>([]);
+  const scorecardRowsRef = useRef<ScorecardRow[]>([]);
+  const qualifyingAdminSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [pairings, setPairings] = useState<PairingGroup[]>([]);
   const [pairingsMessage, setPairingsMessage] = useState("");
   const previousValidPairingsRef = useRef<PairingGroup[] | null>(null);
@@ -250,6 +256,8 @@ export default function TournamentPage() {
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
   const [isQualifyingTournament, setIsQualifyingTournament] = useState(false);
+  const [qualifyingContext, setQualifyingContext] = useState<QualifyingTournamentAccessContext | null>(null);
+  const [qualifyingResults, setQualifyingResults] = useState<QualifyingResultsReadModel | null>(null);
   const [qualifyingScoringMode, setQualifyingScoringMode] = useState<"reciprocal" | "designated_scorer">("reciprocal");
   const [tournamentMeta, setTournamentMeta] = useState<TournamentMeta>(() => createFallbackTournamentMeta(""));
   const [sharedTournamentId, setSharedTournamentId] = useState("");
@@ -334,11 +342,14 @@ export default function TournamentPage() {
     });
   }, [durableLeaderboardPlayers, eventCourseHoles, isClientMounted, isQualifyingTournament, multiRoundHoleEntries, multiRoundScoreEntries, operationalCurrentRoundId, qualifyingScoringMode, tournamentId]);
   const handleQualifyingContextResolved = useCallback((context: QualifyingTournamentAccessContext | null) => {
-    setIsQualifyingTournament(Boolean(
+    const isMatchingQualifyingTournament = Boolean(
       context &&
       context.backingTournamentId === tournamentId &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tournamentId)
-    ));
+    );
+    setIsQualifyingTournament(isMatchingQualifyingTournament);
+    setQualifyingContext(isMatchingQualifyingTournament ? context : null);
+    if (!isMatchingQualifyingTournament) setQualifyingResults(null);
     if (context?.scoringMode) setQualifyingScoringMode(context.scoringMode);
   }, [tournamentId]);
   useEffect(() => {
@@ -380,6 +391,9 @@ export default function TournamentPage() {
     ]
   );
   const latestStateRef = useLatestTournamentPageState(latestState);
+  useEffect(() => {
+    scorecardRowsRef.current = scorecardRows;
+  }, [scorecardRows]);
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
   const tournamentSettings =
@@ -426,6 +440,32 @@ export default function TournamentPage() {
       }),
     [normalizedRoundSetup.numberOfHoles, playerIdsByName, scoreHoleEntries, scorecardRows]
   );
+  const qualifyingScorecardRows = useMemo(() => {
+    if (!isQualifyingTournament || !qualifyingResults || !selectedRoundOption?.roundId) {
+      return leaderboardScorecardRows;
+    }
+
+    return scorecardRows.map((row) => {
+      const matchingDurablePlayers = durableLeaderboardPlayers.filter(
+        (candidate) => candidate.player_name === row.playerName
+      );
+      const playerId = matchingDurablePlayers.length === 1
+        ? matchingDurablePlayers[0].player_id
+        : null;
+      const player = playerId
+        ? qualifyingResults.combined.find((candidate) => String(candidate.playerId) === String(playerId))
+        : null;
+      const segment = player?.segments.find(
+        (candidate) => candidate.tournamentRoundId === selectedRoundOption.roundId
+      );
+      const canonicalScores = qualifyingScoringMode === "reciprocal"
+        ? segment?.markerHoleScores
+        : segment?.holeScores;
+      return segment
+        ? { ...row, scores: (canonicalScores ?? []).map((score) => Number(score) || 0) }
+        : { ...row, scores: Array.from({ length: normalizedRoundSetup.numberOfHoles }, () => 0) };
+    });
+  }, [durableLeaderboardPlayers, isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingResults, qualifyingScoringMode, scorecardRows, selectedRoundOption?.roundId]);
   const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
     const displayHoleNumbers = buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles);
     const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
@@ -450,7 +490,7 @@ export default function TournamentPage() {
       }
 
       return Array.from({ length: normalizedRoundSetup.numberOfHoles }, (_, index) => {
-        const holeNumber = index + 1;
+        const holeNumber = displayHoleNumbers[index] ?? index + 1;
         const playerScore = Number(selfEntry.hole_scores[index]) || 0;
         const markerScore = Number(markerEntry.hole_scores[index]) || 0;
         if (
@@ -468,7 +508,7 @@ export default function TournamentPage() {
           playerId,
           playerName: row.playerName,
           holeNumber,
-          displayHoleNumber: displayHoleNumbers[index] ?? holeNumber,
+          displayHoleNumber: holeNumber,
           playerScore,
           markerScore,
           playerEntry: holeEntries.find((entry) => String(entry.entered_by_player_id) === String(entry.player_id)) ?? null,
@@ -527,12 +567,13 @@ export default function TournamentPage() {
       setScoreHoleEntries([]);
       setMultiRoundHoleEntries([]);
       setDurableLeaderboardPlayers([]);
+      setQualifyingResults(null);
       setDynamicReviewFoundation(null);
       return;
     }
 
     const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
-    const [scores, allScores, holes, allHoles, durablePlayers, dynamicFoundation] = await Promise.all([
+    const [scores, allScores, holes, allHoles, durablePlayers, dynamicFoundation, canonicalQualifyingResults] = await Promise.all([
       loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
         console.warn("[ScoreService] Unable to load review score entries.", error);
         return [];
@@ -557,6 +598,12 @@ export default function TournamentPage() {
         console.warn("[DynamicStatistics] Unable to load Review statistics.", error);
         return null;
       }),
+      qualifyingContext?.sessionId
+        ? loadQualifyingResults(qualifyingContext.sessionId).catch((error) => {
+            console.warn("[QualifyingResults] Unable to load canonical Qualifying results.", error);
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
 
     setSharedScoreEntries(scores);
@@ -565,7 +612,8 @@ export default function TournamentPage() {
     setMultiRoundHoleEntries(allHoles);
     setDurableLeaderboardPlayers(durablePlayers);
     setDynamicReviewFoundation(dynamicFoundation);
-  }, [normalizedRoundSetup.roundNumber, sharedTournamentId]);
+    setQualifyingResults(canonicalQualifyingResults);
+  }, [normalizedRoundSetup.roundNumber, qualifyingContext?.sessionId, sharedTournamentId]);
 
   useEffect(() => {
     if (!isClientMounted || activeTab !== "Live Scoring") {
@@ -573,6 +621,8 @@ export default function TournamentPage() {
     }
 
     void refreshReviewResolutionData();
+    const intervalId = window.setInterval(() => void refreshReviewResolutionData(), 10_000);
+    return () => window.clearInterval(intervalId);
   }, [activeTab, isClientMounted, refreshReviewResolutionData]);
 
   useEffect(() => {
@@ -1129,7 +1179,54 @@ export default function TournamentPage() {
       return;
     }
 
-    setScorecardRows((current) => updateScorecardRows(current, rowId, holeIndex, value));
+    if (!isQualifyingTournament || qualifyingScoringMode !== "reciprocal" || !sharedTournamentId) {
+      setScorecardRows((current) => updateScorecardRows(current, rowId, holeIndex, value));
+      return;
+    }
+
+    const updatedRows = updateScorecardRows(scorecardRowsRef.current, rowId, holeIndex, value);
+    scorecardRowsRef.current = updatedRows;
+    setScorecardRows(updatedRows);
+
+    const updatedRow = updatedRows.find((row) => row.id === rowId);
+    const matchingDurablePlayers = updatedRow
+      ? durableLeaderboardPlayers.filter((player) => player.player_name === updatedRow.playerName)
+      : [];
+    const durablePlayer = matchingDurablePlayers.length === 1 ? matchingDurablePlayers[0] : null;
+    const playerId = durablePlayer?.player_id;
+    const mutation = updatedRow && playerId && durablePlayer?.marker_player_id
+      ? buildQualifyingAdminMarkerMutation({
+          tournamentId: sharedTournamentId,
+          roundNumber: normalizedRoundSetup.roundNumber,
+          subjectPlayerId: playerId,
+          assignedMarkerPlayerId: durablePlayer.marker_player_id,
+          holeNumbers: buildCourseHoleSequence(
+            normalizedRoundSetup.startingHole,
+            normalizedRoundSetup.numberOfHoles
+          ),
+          holeScores: updatedRow.scores.slice(0, normalizedRoundSetup.numberOfHoles),
+          holeIndex,
+        })
+      : null;
+
+    if (!mutation) {
+      setReviewResolutionMessage("Qualifying score was not saved because its exact player, marker, round, or hole authority is unavailable.");
+      return;
+    }
+
+    qualifyingAdminSaveQueueRef.current = qualifyingAdminSaveQueueRef.current
+      .then(async () => {
+        await Promise.all([
+          saveHole(mutation.scoreEntry),
+          saveHoleStatistics(mutation.holeEntry),
+        ]);
+        await refreshReviewResolutionData();
+      })
+      .catch((error) => {
+        console.warn("[QualifyingScoring] Unable to persist authoritative marker score.", error);
+        setReviewResolutionMessage("Qualifying score was not saved. Refresh and try again.");
+        void refreshReviewResolutionData();
+      });
   };
 
   const handleResolveReviewItem = async (item: ReviewResolutionItem, choice: OfficialScoreResolutionChoice) => {
@@ -1818,9 +1915,11 @@ export default function TournamentPage() {
                        normalizedRoundSetup={normalizedRoundSetup}
                        eventCourseHoles={eventCourseHoles}
                        scorecardsGenerated={scorecardsGenerated}
-                       scorecardRows={scorecardRows}
-                       leaderboardScorecardRows={leaderboardScorecardRows}
+                       scorecardRows={isQualifyingTournament ? qualifyingScorecardRows : scorecardRows}
+                       leaderboardScorecardRows={isQualifyingTournament ? qualifyingScorecardRows : leaderboardScorecardRows}
                        multiRoundProjection={multiRoundLeaderboardProjection}
+                       qualifyingResults={qualifyingResults}
+                       operationalCurrentRoundId={operationalCurrentRoundId}
                        tournamentId={sharedTournamentId || tournamentId}
                       onPrintTournamentScorecards={onPrintTournamentScorecards}
                       onGenerateScorecards={generateScorecards}

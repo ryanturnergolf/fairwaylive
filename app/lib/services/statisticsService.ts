@@ -30,6 +30,7 @@ export type SaveRoundHoleStatisticsInput = Omit<
   "holeNumber" | "strokes" | "entrySource" | "markerForPlayerId"
 > & {
   holeScores: number[];
+  holeNumbers: number[];
   markerForPlayerId?: string | null;
 };
 
@@ -434,15 +435,16 @@ export const resolveOfficialScore = async ({
 
 export const saveRoundHoleStatistics = async ({
   holeScores,
+  holeNumbers,
   markerForPlayerId,
   ...input
 }: SaveRoundHoleStatisticsInput): Promise<ScoreHoleEntryRow[]> => {
   const rows = holeScores
     .map((score, index) => ({
       score: Number(score) || 0,
-      holeNumber: index + 1,
+      holeNumber: Number(holeNumbers[index]) || 0,
     }))
-    .filter(({ score }) => score > 0)
+    .filter(({ score, holeNumber }) => score > 0 && holeNumber > 0)
     .map(({ score, holeNumber }) =>
       buildScoreHoleEntryInput({
         ...input,

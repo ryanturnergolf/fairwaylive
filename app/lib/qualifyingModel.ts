@@ -210,6 +210,7 @@ export type QualifyingSegmentResult = {
   holeNumbers: number[];
   holePars: Array<number | null>;
   holeScores: Array<number | null>;
+  markerHoleScores: Array<number | null>;
   through: string;
   score: number | null;
   par: number | null;

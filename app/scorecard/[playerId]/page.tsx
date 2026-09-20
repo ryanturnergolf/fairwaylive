@@ -1653,6 +1653,7 @@ function ReciprocalPlayerScorecardPage() {
               playerId,
               enteredByPlayerId,
               holeScores: [...holeScores],
+              holeNumbers: scorecard.holes.map((hole) => hole.holeNumber),
               entryStatus,
               shareToken: requestedShareToken || undefined,
             });

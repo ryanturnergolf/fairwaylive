@@ -134,12 +134,32 @@ test("durable player UUIDs bind submitted Qualifying scores to legacy snapshot p
   expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r2"].through).toBe("Not started");
 });
 
-test("Tournament workspace uses durable Qualifying roster identities and disables legacy score lookup", () => {
+test("Tournament workspace uses canonical Qualifying results and exact durable roster identities", () => {
   const workspace = source("app/tournament/[id]/page.tsx");
+  const liveScoring = source("app/tournament/[id]/components/LiveScoringLeaderboard.tsx");
   expect(workspace).toContain("getTournamentPlayers(sharedTournamentId, roundNumber)");
-  expect(workspace).toContain("bindSnapshotPlayersToDurableRoster(");
-  expect(workspace).toContain("id: player.player_id");
-  expect(workspace).toContain("allowLegacyScoreFallback: !isQualifyingTournament");
+  expect(workspace).toContain("loadQualifyingResults(qualifyingContext.sessionId)");
+  expect(workspace).toContain("candidate.tournamentRoundId === selectedRoundOption.roundId");
+  expect(workspace).toContain("candidate.player_name === row.playerName");
+  expect(workspace).toContain('qualifyingScoringMode === "reciprocal"');
+  expect(workspace).toContain("segment?.markerHoleScores");
+  expect(liveScoring).toContain("isQualifyingTournament && qualifyingResults");
+  expect(liveScoring).toContain("<MultiRoundQualifyingLeaderboard");
+});
+
+test("Qualifying workspace writes admin marker scores through both canonical durable boundaries", () => {
+  const workspace = source("app/tournament/[id]/page.tsx");
+  const scorecard = source("app/scorecard/[playerId]/page.tsx");
+  const statistics = source("app/lib/services/statisticsService.ts");
+  expect(workspace).toContain("buildQualifyingAdminMarkerMutation");
+  expect(workspace).toContain("saveHole(mutation.scoreEntry)");
+  expect(workspace).toContain("saveHoleStatistics(mutation.holeEntry)");
+  expect(workspace).toContain("durablePlayer.marker_player_id");
+  expect(workspace).toContain("qualifyingAdminSaveQueueRef.current = qualifyingAdminSaveQueueRef.current");
+  expect(workspace).toContain("const holeNumber = displayHoleNumbers[index] ?? index + 1");
+  expect(scorecard).toContain("holeNumbers: scorecard.holes.map((hole) => hole.holeNumber)");
+  expect(statistics).toContain("holeNumber: Number(holeNumbers[index]) || 0");
+  expect(statistics).not.toContain("holeNumber: index + 1");
 });
 
 test("team expansion projection batches all team players without per-player requests", () => {
@@ -199,9 +219,13 @@ test("Qualifying projection carries exact round, hole, par, score, and through i
   expect(service).toContain("tournamentRoundId: round.id");
   expect(service).toContain("round.immutableHolePars?.[index]");
   expect(service).toContain("liveHoleScores");
+  expect(service).toContain("liveMarkerHoleScores");
+  expect(service).toContain("markerHoleScores:");
   expect(service).not.toContain("holeCount * 4");
   expect(component).toContain("segment.tournamentRoundId === globalRoundId");
   expect(component).toContain("expandedRounds");
+  expect(component).toContain("hasSelectedRoundRef");
+  expect(component).toContain("setGlobalRoundId(defaultRoundId)");
   expect(component).toContain("Course:");
   expect(component).toContain("Round:");
   expect(grid).not.toContain("if (played.length === 0) return");

@@ -191,11 +191,28 @@ const buildSegment = ({
       )
       .map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
   );
+  const liveMarkerHoleScores = new Map(
+    holeEntries
+      .filter((entry) =>
+        !entry.is_official &&
+        entry.round_number === round.roundNumber &&
+        String(entry.player_id) === player.playerId &&
+        Boolean(player.assignedMarkerPlayerId) &&
+        String(entry.entered_by_player_id) === String(player.assignedMarkerPlayerId) &&
+        Number(entry.strokes) > 0
+      )
+      .map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
+  );
   const persistedScores = selected?.holeScores ?? [];
   const liveScores = holeNumbers.map((holeNumber, index) =>
     (isSubmitted(primary)
       ? Number(persistedScores[index])
       : (liveHoleScores.get(holeNumber) ?? Number(persistedScores[index]))) || 0
+  );
+  const markerHoleScores = holeNumbers.map((holeNumber, index) =>
+    (isSubmitted(marker)
+      ? Number(marker?.hole_scores[index])
+      : (liveMarkerHoleScores.get(holeNumber) ?? Number(marker?.hole_scores[index]))) || 0
   );
   const resolvedSelf = applyOfficialScoreResolutions(liveScores, player.playerId, round.holeCount, official);
   const review = reviewStatuses.find((row) =>
@@ -239,6 +256,7 @@ const buildSegment = ({
     holeNumbers,
     holePars,
     holeScores: holeNumbers.map((_, index) => Number(resolvedSelf[index]) > 0 ? Number(resolvedSelf[index]) : null),
+    markerHoleScores: holeNumbers.map((_, index) => Number(markerHoleScores[index]) > 0 ? Number(markerHoleScores[index]) : null),
     through: playedHoles === 0 ? "Not started" : playedHoles === round.holeCount ? "F" : String(playedHoles),
     score,
     par,

@@ -17,7 +17,9 @@ import type {
 import { buildCourseHoleSequence } from "../../../lib/services/courseService";
 import type { EventCourseHoleSnapshot } from "../../../lib/courseModel";
 import MultiRoundTournamentLeaderboard from "../../../components/leaderboards/MultiRoundTournamentLeaderboard";
+import MultiRoundQualifyingLeaderboard from "../../../components/leaderboards/MultiRoundQualifyingLeaderboard";
 import type { MultiRoundTournamentLeaderboardProjection } from "../../../lib/services/multiRoundLeaderboardService";
+import type { QualifyingResultsReadModel } from "../../../lib/qualifyingModel";
 
 export type ScorecardRow = {
   id: number;
@@ -45,6 +47,8 @@ type LiveScoringLeaderboardProps = {
   scorecardRows: ScorecardRow[];
   leaderboardScorecardRows?: ScorecardRow[];
   multiRoundProjection?: MultiRoundTournamentLeaderboardProjection | null;
+  qualifyingResults?: QualifyingResultsReadModel | null;
+  operationalCurrentRoundId?: string | null;
   tournamentId?: string;
   onPrintTournamentScorecards: () => void;
   onGenerateScorecards: () => void;
@@ -91,6 +95,8 @@ export default function LiveScoringLeaderboard({
   scorecardRows,
   leaderboardScorecardRows = scorecardRows,
   multiRoundProjection = null,
+  qualifyingResults = null,
+  operationalCurrentRoundId = null,
   tournamentId = "",
   onPrintTournamentScorecards,
   onGenerateScorecards,
@@ -377,10 +383,16 @@ export default function LiveScoringLeaderboard({
           </div>
         </section>
       ) : null}
-      {scorecardsGenerated ? (
-        leaderboardScorecardRows.length > 0 ? (
+      {scorecardsGenerated || Boolean(qualifyingResults) ? (
+        leaderboardScorecardRows.length > 0 || Boolean(qualifyingResults?.combined.length) ? (
           <div className="space-y-6">
-            {multiRoundProjection ? (
+            {isQualifyingTournament && qualifyingResults ? (
+              <MultiRoundQualifyingLeaderboard
+                eventId={qualifyingResults.qualifyingSessionId}
+                players={qualifyingResults.combined}
+                operationalCurrentRoundId={operationalCurrentRoundId}
+              />
+            ) : multiRoundProjection ? (
               <MultiRoundTournamentLeaderboard
                 projection={multiRoundProjection}
                 eventId={tournamentId}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { QualifyingPlayerResult } from "../../lib/qualifyingModel";
 import { partitionLeaderboardFavorites, readLeaderboardFavorites, writeLeaderboardFavorites } from "../../lib/services/leaderboardFavoritesService";
 import FavoriteStar from "./FavoriteStar";
@@ -17,11 +17,24 @@ export default function MultiRoundQualifyingLeaderboard({ eventId, players, oper
   }, [players]);
   const defaultRoundId = rounds.some((round) => round.id === operationalCurrentRoundId) ? String(operationalCurrentRoundId) : rounds[0]?.id ?? "";
   const [globalRoundId, setGlobalRoundId] = useState(defaultRoundId);
+  const hasSelectedRoundRef = useRef(false);
+  const previousEventIdRef = useRef(eventId);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedRounds, setExpandedRounds] = useState<Record<string, string>>({});
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   useEffect(() => setFavorites(readLeaderboardFavorites("qualifying-player", eventId)), [eventId]);
-  useEffect(() => { if (!rounds.some((round) => round.id === globalRoundId)) setGlobalRoundId(defaultRoundId); }, [defaultRoundId, globalRoundId, rounds]);
+  useEffect(() => {
+    if (previousEventIdRef.current !== eventId) {
+      previousEventIdRef.current = eventId;
+      hasSelectedRoundRef.current = false;
+      setGlobalRoundId(defaultRoundId);
+    }
+  }, [defaultRoundId, eventId]);
+  useEffect(() => {
+    if (!hasSelectedRoundRef.current || !rounds.some((round) => round.id === globalRoundId)) {
+      setGlobalRoundId(defaultRoundId);
+    }
+  }, [defaultRoundId, globalRoundId, rounds]);
   const toggleFavorite = (id: string) => setFavorites((current) => {
     const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id);
     writeLeaderboardFavorites("qualifying-player", eventId, next); return next;
@@ -43,5 +56,5 @@ export default function MultiRoundQualifyingLeaderboard({ eventId, players, oper
       {isExpanded ? <div className="border-t border-[#E8DCC8] bg-white p-4"><RoundSelector rounds={rounds} selectedRoundId={roundId} onSelect={(id) => setExpandedRounds((current) => ({ ...current, [player.playerId]: id }))} label={`${player.playerName} Qualifying scorecard round`} /><div className="mt-3 rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-xs text-[#51635C]"><p><span className="font-black text-[#0B3D2E]">Course:</span> {expandedSegment?.courseName || "Course not set"}</p><p className="mt-1"><span className="font-black text-[#0B3D2E]">Round:</span> {expandedSegment?.score ?? "\u2014"} ({formatToPar(expandedSegment?.toPar ?? null)})</p></div><div className="mt-3"><GolfScorecardGrid holes={(expandedSegment?.holeNumbers ?? []).map((holeNumber, index) => ({ holeNumber, par: expandedSegment?.holePars[index] ?? null, score: expandedSegment?.holeScores[index] ?? null }))} label={`${player.playerName} Qualifying scorecard`} /></div></div> : null}
     </div>;
   };
-  return <div className="space-y-4"><div className="rounded-xl border border-[#E8DCC8] bg-[#F6F1E6] p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#51635C]">Selected round</p><RoundSelector rounds={rounds} selectedRoundId={globalRoundId} onSelect={setGlobalRoundId} label="Qualifying leaderboard round" /></div>{partitioned.favorites.length > 0 ? <section><h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#B8892D]">★ Favorites</h4><div className="mt-2 space-y-2">{partitioned.favorites.map(renderPlayer)}</div></section> : null}<section><h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">Standings</h4><div className="mt-2 space-y-2">{partitioned.standings.map(renderPlayer)}</div></section></div>;
+  return <div className="space-y-4"><div className="rounded-xl border border-[#E8DCC8] bg-[#F6F1E6] p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#51635C]">Selected round</p><RoundSelector rounds={rounds} selectedRoundId={globalRoundId} onSelect={(roundId) => { hasSelectedRoundRef.current = true; setGlobalRoundId(roundId); }} label="Qualifying leaderboard round" /></div>{partitioned.favorites.length > 0 ? <section><h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#B8892D]">★ Favorites</h4><div className="mt-2 space-y-2">{partitioned.favorites.map(renderPlayer)}</div></section> : null}<section><h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">Standings</h4><div className="mt-2 space-y-2">{partitioned.standings.map(renderPlayer)}</div></section></div>;
 }
