@@ -574,44 +574,52 @@ export default function TournamentPage() {
     }
 
     const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
-    const [allScores, allHoles, durablePlayers, dynamicFoundation, canonicalQualifyingResults] = await Promise.all([
-      loadComparisonScores({ tournamentId: sharedTournamentId }).catch((error) => {
+    const scoresPromise = loadComparisonScores({ tournamentId: sharedTournamentId }).catch((error) => {
         console.warn("[ScoreService] Unable to load multi-round score entries.", error);
         return [];
-      }),
-      loadTournamentHoleStatistics({ tournamentId: sharedTournamentId }).catch((error) => {
+      });
+    const holesPromise = loadTournamentHoleStatistics({ tournamentId: sharedTournamentId }).catch((error) => {
         console.warn("[StatisticsService] Unable to load multi-round official entries.", error);
         return [];
-      }),
-      getTournamentPlayers(sharedTournamentId, roundNumber).catch((error) => {
+      });
+    const playersPromise = getTournamentPlayers(sharedTournamentId, roundNumber).catch((error) => {
         console.warn("[TournamentService] Unable to load durable leaderboard player authority.", error);
         return [];
-      }),
-      loadDynamicStatisticReviewFoundation(sharedTournamentId).catch((error) => {
+      });
+    const dynamicFoundationPromise = loadDynamicStatisticReviewFoundation(sharedTournamentId).catch((error) => {
         console.warn("[DynamicStatistics] Unable to load Review statistics.", error);
         return null;
-      }),
-      qualifyingContext?.sessionId
-        ? loadQualifyingResults(qualifyingContext.sessionId).catch((error) => {
-            console.warn("[QualifyingResults] Unable to load canonical Qualifying results.", error);
-            return null;
-          })
-        : Promise.resolve(null),
-    ]);
-    const scores = allScores.filter((entry) => Number(entry.round_number) === roundNumber);
-    const holes = allHoles.filter((entry) => Number(entry.round_number) === roundNumber);
+      });
+    const qualifyingResultsPromise = qualifyingContext?.sessionId
+      ? loadQualifyingResults(qualifyingContext.sessionId).catch((error) => {
+          console.warn("[QualifyingResults] Unable to load canonical Qualifying results.", error);
+          return null;
+        })
+      : Promise.resolve(null);
 
+    // Apply the live score authority as soon as it is available. Slower Review,
+    // statistics, or roster requests must not hold the scoreboard at zero.
+    const allScores = await scoresPromise;
+    const scores = allScores.filter((entry) => Number(entry.round_number) === roundNumber);
     setSharedScoreEntries(scores);
     setMultiRoundScoreEntries(allScores);
+    setScorecardRows((currentRows) => {
+      const mergedRows = mergeSharedScores(currentRows, scores, playerIdsByName);
+      return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
+    });
+
+    const [allHoles, durablePlayers, dynamicFoundation, canonicalQualifyingResults] = await Promise.all([
+      holesPromise,
+      playersPromise,
+      dynamicFoundationPromise,
+      qualifyingResultsPromise,
+    ]);
+    const holes = allHoles.filter((entry) => Number(entry.round_number) === roundNumber);
     setScoreHoleEntries(holes);
     setMultiRoundHoleEntries(allHoles);
     setDurableLeaderboardPlayers(durablePlayers);
     setDynamicReviewFoundation(dynamicFoundation);
     setQualifyingResults(canonicalQualifyingResults);
-    setScorecardRows((currentRows) => {
-      const mergedRows = mergeSharedScores(currentRows, scores, playerIdsByName);
-      return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
-    });
   }, [normalizedRoundSetup.roundNumber, playerIdsByName, qualifyingContext?.sessionId, sharedTournamentId]);
 
   const liveScoringInProgress = useMemo(() => {
@@ -623,7 +631,14 @@ export default function TournamentPage() {
     });
   }, [isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingScorecardRows]);
   useVisibilityAwarePolling({
-    enabled: isClientMounted && activeTab === "Live Scoring" && !isTournamentFinalized,
+    enabled: Boolean(
+      isClientMounted &&
+      sharedTournamentId &&
+      scorecardsGenerated &&
+      scorecardRows.length > 0 &&
+      activeTab === "Live Scoring" &&
+      !isTournamentFinalized
+    ),
     intervalMs: liveScoringInProgress ? 10_000 : 30_000,
     poll: refreshReviewResolutionData,
   });
