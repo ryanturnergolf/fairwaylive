@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CoachBreadcrumbs, CoachHeader } from "../components/CoachChrome";
 import { useEffect, useState } from "react";
-import type { QualifyingSessionFoundation } from "../../lib/qualifyingModel";
+import type { QualifyingResultsReadModel, QualifyingSessionFoundation } from "../../lib/qualifyingModel";
 import { activateQualifyingSession } from "../../lib/services/qualifyingActivationService";
 import { provisionQualifyingSession } from "../../lib/services/qualifyingProvisioningService";
 import { finalizeQualifyingSession } from "../../lib/services/qualifyingFinalizationService";
@@ -29,6 +29,7 @@ export default function QualifyingSessionsPage() {
   const [provisionedTournamentIds, setProvisionedTournamentIds] = useState<Record<string, string>>({});
   const [operationalRoundMessage, setOperationalRoundMessage] = useState<Record<string, string>>({});
   const [roundProgression, setRoundProgression] = useState<Record<string, QualifyingRoundProgressionState | null>>({});
+  const [resultsBySession, setResultsBySession] = useState<Record<string, QualifyingResultsReadModel>>({});
   const [advancingId, setAdvancingId] = useState("");
   const [finalizingId, setFinalizingId] = useState("");
   const [activeWorkspaceTabs, setActiveWorkspaceTabs] = useState<Record<string, WorkspaceTab>>({});
@@ -46,9 +47,12 @@ export default function QualifyingSessionsPage() {
           setSessions(loaded);
           void Promise.all(loaded.filter((foundation) => foundation.session.status === "active").map(async (foundation) => {
             try {
-              const results = await loadQualifyingResults(foundation.session.id);
-              const progression = buildQualifyingRoundProgressionState(foundation, results);
-              if (!cancelled) setRoundProgression((current) => ({ ...current, [foundation.session.id]: progression }));
+               const results = await loadQualifyingResults(foundation.session.id);
+               const progression = buildQualifyingRoundProgressionState(foundation, results);
+               if (!cancelled) {
+                 setResultsBySession((current) => ({ ...current, [foundation.session.id]: results }));
+                 setRoundProgression((current) => ({ ...current, [foundation.session.id]: progression }));
+               }
             } catch {
               if (!cancelled) setRoundProgression((current) => ({ ...current, [foundation.session.id]: null }));
             }
@@ -147,7 +151,8 @@ export default function QualifyingSessionsPage() {
         : item));
       setOperationalRoundMessage((current) => ({ ...current, [foundation.session.id]: `${next.displayLabel} is now the current scoring round.` }));
       const refreshed = { ...foundation, session: { ...foundation.session, operationalCurrentQualifyingRoundId: String(updated.newQualifyingRoundId) } };
-      const results = await loadQualifyingResults(foundation.session.id);
+      const results = await loadQualifyingResults(foundation.session.id, { fresh: true });
+      setResultsBySession((current) => ({ ...current, [foundation.session.id]: results }));
       setRoundProgression((current) => ({ ...current, [foundation.session.id]: buildQualifyingRoundProgressionState(refreshed, results) }));
     } catch (cause) {
       setOperationalRoundMessage((current) => ({
@@ -357,15 +362,20 @@ export default function QualifyingSessionsPage() {
                         <QualifyingResultsPanel
                           sessionId={session.id}
                           tournamentId={session.tournamentId}
-                          sessionStatus={session.status}
-                          autoLoad
+                           sessionStatus={session.status}
+                           autoLoad
+                           isVisible={activeTab === "Results"}
+                           initialResults={resultsBySession[session.id] ?? null}
                           operationalCurrentRoundId={foundation.configuredRounds?.find(
                             (round) => round.qualifyingRoundId === session.operationalCurrentQualifyingRoundId
                           )?.tournamentRoundId ?? null}
-                          onResultsLoaded={(results) => setRoundProgression((current) => ({
-                            ...current,
-                            [session.id]: buildQualifyingRoundProgressionState(foundation, results),
-                          }))}
+                          onResultsLoaded={(results) => {
+                            setResultsBySession((current) => ({ ...current, [session.id]: results }));
+                            setRoundProgression((current) => ({
+                              ...current,
+                              [session.id]: buildQualifyingRoundProgressionState(foundation, results),
+                            }));
+                          }}
                           onFinalized={() => {
                             setSessions((current) =>
                               current.map((foundation) =>

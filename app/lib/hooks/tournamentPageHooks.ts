@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import { toDataURL } from "qrcode";
-import { loadComparisonScores } from "../services/scoreService";
+import type { ScoreEntryRow } from "../repositories/scoreRepository";
 import {
   hydratePairingsWithPlayerIds,
   loadTournamentPageRoundHydration,
@@ -22,7 +22,6 @@ import { validatePairingIntegrity } from "../services/tournamentPageHelpers";
 type SetState<T> = (value: T | ((current: T) => T)) => void;
 
 type TournamentMeta = StoredTournament;
-type ComparisonScoreEntry = Awaited<ReturnType<typeof loadComparisonScores>>[number];
 type PersistedTournamentPageState = LegacyTournamentUiState;
 
 export type TournamentPageStateSnapshot = {
@@ -454,12 +453,12 @@ export const useTournamentStoragePolling = ({
   ]);
 };
 
-const mergeSharedScores = (
+export const mergeSharedScores = (
   rows: LegacyScorecardRow[],
-  entries: ComparisonScoreEntry[],
+  entries: ScoreEntryRow[],
   playerIdsByName: ReadonlyMap<string, string>
 ) => {
-  const entriesByPlayerId = new Map<string, ComparisonScoreEntry[]>();
+  const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
   entries.forEach((entry) => {
     entriesByPlayerId.set(String(entry.player_id), [...(entriesByPlayerId.get(String(entry.player_id)) ?? []), entry]);
   });
@@ -478,72 +477,6 @@ const mergeSharedScores = (
       scores: selectedEntry.hole_scores.map((score) => (Number.isFinite(Number(score)) ? Number(score) : 0)),
     };
   });
-};
-
-export const useSharedScoreSynchronization = ({
-  isClientMounted,
-  tournamentId,
-  sharedTournamentId,
-  scorecardsGenerated,
-  scorecardRowsLength,
-  roundNumber,
-  playerIdsByName,
-  setScorecardRows,
-}: {
-  isClientMounted: boolean;
-  tournamentId: string;
-  sharedTournamentId: string;
-  scorecardsGenerated: boolean;
-  scorecardRowsLength: number;
-  roundNumber: string;
-  playerIdsByName: ReadonlyMap<string, string>;
-  setScorecardRows: SetState<LegacyScorecardRow[]>;
-}) => {
-  useEffect(() => {
-    if (!isClientMounted || !tournamentId || !scorecardsGenerated || scorecardRowsLength === 0) {
-      return;
-    }
-
-    let isCancelled = false;
-    if (!sharedTournamentId) {
-      return;
-    }
-
-    const parsedRoundNumber = Number(roundNumber) || 1;
-
-    const refreshSharedScores = async () => {
-      try {
-        const sharedScores = await loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber: parsedRoundNumber });
-        if (isCancelled || sharedScores.length === 0) {
-          return;
-        }
-
-        setScorecardRows((currentRows) => {
-          const mergedRows = mergeSharedScores(currentRows, sharedScores, playerIdsByName);
-          return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
-        });
-      } catch (error) {
-        console.warn("[ScoreService] Unable to load shared tournament score entries.", error);
-      }
-    };
-
-    void refreshSharedScores();
-    const intervalId = window.setInterval(refreshSharedScores, 10000);
-
-    return () => {
-      isCancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [
-    isClientMounted,
-    playerIdsByName,
-    roundNumber,
-    scorecardRowsLength,
-    scorecardsGenerated,
-    setScorecardRows,
-    sharedTournamentId,
-    tournamentId,
-  ]);
 };
 
 export const useBodyOverflowLock = (isLocked: boolean) => {

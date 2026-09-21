@@ -454,6 +454,7 @@ test("coach operations page exposes read-only daily and combined results", async
 });
 
 test("active Qualifying results poll scoring changes without resetting leaderboard state", async ({ page }) => {
+  await page.clock.install();
   await page.addInitScript(() => {
     window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
       access_token: "header.payload.signature", refresh_token: "refresh", token_type: "bearer",
@@ -473,8 +474,43 @@ test("active Qualifying results poll scoring changes without resetting leaderboa
 
   await page.goto("/coach-dashboard/qualifying-manager");
   await page.getByRole("button", { name: "Results", exact: true }).click();
-  await expect.poll(() => requests, { timeout: 15_000 }).toBeGreaterThan(1);
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => requests).toBeGreaterThan(1);
   await expect(page.getByText("54", { exact: true }).first()).toBeVisible();
+});
+
+test("Qualifying Results has one poll owner and polls only while its workspace tab is visible", async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    window.localStorage.setItem("clubhouse-hq-coach-auth", JSON.stringify({
+      access_token: "header.payload.signature", refresh_token: "refresh", token_type: "bearer",
+      expires_at: 4102444800, user: { id: "coach", is_anonymous: false },
+    }));
+  });
+  await page.route("**/api/qualifying-sessions", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [{ session, days, rounds: [], scorerAssignments: [] }] }),
+  }));
+  const empty = buildQualifyingResults({ session, days, rounds, players, scorecards, scoreEntries: [], holeEntries: [], reviewStatuses: [] });
+  let requests = 0;
+  await page.route("**/api/qualifying-sessions/session/results", (route) => {
+    requests += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(empty) });
+  });
+  await page.route("**/api/qualifying-access-codes**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ codeHint: "ABC234", active: true }) }));
+
+  await page.goto("/coach-dashboard/qualifying-manager");
+  await expect.poll(() => requests).toBe(1);
+  await page.clock.fastForward(60_000);
+  expect(requests).toBe(1);
+
+  await page.getByRole("button", { name: "Results", exact: true }).click();
+  expect(requests).toBe(1);
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => requests).toBe(2);
+
+  await page.getByRole("button", { name: "Players", exact: true }).click();
+  await page.clock.fastForward(60_000);
+  expect(requests).toBe(2);
 });
 
 test("designated scorer sessions remain blocked by the certified Q5 access boundary", async ({ page }) => {

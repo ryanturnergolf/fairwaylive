@@ -9,6 +9,20 @@ import {
   type ShareTokenLeaderboardReadModel,
 } from "../lib/services/shareTokenLeaderboardService";
 import MultiRoundTournamentLeaderboard from "../components/leaderboards/MultiRoundTournamentLeaderboard";
+import { useVisibilityAwarePolling } from "../lib/hooks/useVisibilityAwarePolling";
+
+const shareTokenResolutionRequests = new Map<
+  string,
+  ReturnType<typeof resolveShareToken>
+>();
+
+const resolveShareTokenOnce = (shareToken: string) => {
+  const existing = shareTokenResolutionRequests.get(shareToken);
+  if (existing) return existing;
+  const request = resolveShareToken(shareToken);
+  shareTokenResolutionRequests.set(shareToken, request);
+  return request;
+};
 
 const invalidLinkMessage =
   "This secure scoring link is invalid or expired. Please request a new QR code.";
@@ -83,19 +97,17 @@ function ShareTokenLeaderboardContent() {
   const [model, setModel] = useState<ShareTokenLeaderboardReadModel | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [resolvedTournamentId, setResolvedTournamentId] = useState("");
   const requestSequence = useRef(0);
 
   const load = useCallback(async (initial = false) => {
+      if (!resolvedTournamentId) return;
       const requestId = ++requestSequence.current;
       if (initial) setIsLoading(true);
       setError("");
       try {
-        const resolution = await resolveShareToken(shareToken);
-        if (!resolution) {
-          throw new Error(invalidLinkMessage);
-        }
         const nextModel = await loadShareTokenLeaderboard({
-          tournamentId: resolution.tournamentId,
+          tournamentId: resolvedTournamentId,
           roundNumber,
           shareToken,
         });
@@ -110,13 +122,47 @@ function ShareTokenLeaderboardContent() {
       } finally {
         if (requestId === requestSequence.current) setIsLoading(false);
       }
-  }, [roundNumber, shareToken]);
+  }, [resolvedTournamentId, roundNumber, shareToken]);
 
   useEffect(() => {
-    void load(true);
-    const intervalId = window.setInterval(() => void load(false), 10_000);
-    return () => { window.clearInterval(intervalId); requestSequence.current += 1; };
-  }, [load]);
+    let cancelled = false;
+    setResolvedTournamentId("");
+    setIsLoading(true);
+    setError("");
+    void resolveShareTokenOnce(shareToken)
+      .then((resolution) => {
+        if (cancelled) return;
+        if (!resolution) {
+          setError(invalidLinkMessage);
+          setIsLoading(false);
+          return;
+        }
+        setResolvedTournamentId(resolution.tournamentId);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(invalidLinkMessage);
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      requestSequence.current += 1;
+    };
+  }, [shareToken]);
+
+  const hasActiveScoring = Boolean(model?.individualLeaderboard.some((row) =>
+    row.through !== "Not started" && row.through !== "F"
+  ));
+  useEffect(() => {
+    if (resolvedTournamentId) void load(true);
+  }, [load, resolvedTournamentId]);
+  useVisibilityAwarePolling({
+    enabled: Boolean(resolvedTournamentId) && !model?.isFinalized,
+    intervalMs: hasActiveScoring ? 10_000 : 30_000,
+    poll: () => load(false),
+    refreshImmediately: false,
+  });
 
   return (
     <main className="min-h-screen bg-[#F6F1E6] px-4 py-5 text-[#0B3D2E]">

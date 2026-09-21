@@ -68,12 +68,13 @@ import {
 import {
   useClientMounted,
   useLatestTournamentPageState,
-  useSharedScoreSynchronization,
+  mergeSharedScores,
   useTournamentMetadata,
   useTournamentPageLoading,
   useTournamentPagePersistence,
   useTournamentStoragePolling,
 } from "../../lib/hooks/tournamentPageHooks";
+import { useVisibilityAwarePolling } from "../../lib/hooks/useVisibilityAwarePolling";
 import TeamPlayerManagement, {
   type ImportedPlayerPreview,
   type Player,
@@ -573,17 +574,9 @@ export default function TournamentPage() {
     }
 
     const roundNumber = Number(normalizedRoundSetup.roundNumber) || 1;
-    const [scores, allScores, holes, allHoles, durablePlayers, dynamicFoundation, canonicalQualifyingResults] = await Promise.all([
-      loadComparisonScores({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
-        console.warn("[ScoreService] Unable to load review score entries.", error);
-        return [];
-      }),
+    const [allScores, allHoles, durablePlayers, dynamicFoundation, canonicalQualifyingResults] = await Promise.all([
       loadComparisonScores({ tournamentId: sharedTournamentId }).catch((error) => {
         console.warn("[ScoreService] Unable to load multi-round score entries.", error);
-        return [];
-      }),
-      loadTournamentHoleStatistics({ tournamentId: sharedTournamentId, roundNumber }).catch((error) => {
-        console.warn("[StatisticsService] Unable to load review hole entries.", error);
         return [];
       }),
       loadTournamentHoleStatistics({ tournamentId: sharedTournamentId }).catch((error) => {
@@ -605,6 +598,8 @@ export default function TournamentPage() {
           })
         : Promise.resolve(null),
     ]);
+    const scores = allScores.filter((entry) => Number(entry.round_number) === roundNumber);
+    const holes = allHoles.filter((entry) => Number(entry.round_number) === roundNumber);
 
     setSharedScoreEntries(scores);
     setMultiRoundScoreEntries(allScores);
@@ -613,17 +608,25 @@ export default function TournamentPage() {
     setDurableLeaderboardPlayers(durablePlayers);
     setDynamicReviewFoundation(dynamicFoundation);
     setQualifyingResults(canonicalQualifyingResults);
-  }, [normalizedRoundSetup.roundNumber, qualifyingContext?.sessionId, sharedTournamentId]);
+    setScorecardRows((currentRows) => {
+      const mergedRows = mergeSharedScores(currentRows, scores, playerIdsByName);
+      return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
+    });
+  }, [normalizedRoundSetup.roundNumber, playerIdsByName, qualifyingContext?.sessionId, sharedTournamentId]);
 
-  useEffect(() => {
-    if (!isClientMounted || activeTab !== "Live Scoring") {
-      return;
-    }
-
-    void refreshReviewResolutionData();
-    const intervalId = window.setInterval(() => void refreshReviewResolutionData(), 10_000);
-    return () => window.clearInterval(intervalId);
-  }, [activeTab, isClientMounted, refreshReviewResolutionData]);
+  const liveScoringInProgress = useMemo(() => {
+    const holeCount = normalizedRoundSetup.numberOfHoles;
+    const visibleRows = isQualifyingTournament ? qualifyingScorecardRows : leaderboardScorecardRows;
+    return visibleRows.some((row) => {
+      const played = row.scores.slice(0, holeCount).filter((score) => Number(score) > 0).length;
+      return played > 0 && played < holeCount;
+    });
+  }, [isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingScorecardRows]);
+  useVisibilityAwarePolling({
+    enabled: isClientMounted && activeTab === "Live Scoring" && !isTournamentFinalized,
+    intervalMs: liveScoringInProgress ? 10_000 : 30_000,
+    poll: refreshReviewResolutionData,
+  });
 
   useEffect(() => {
     if (!isClientMounted || !tournamentId) {
@@ -732,17 +735,6 @@ export default function TournamentPage() {
       isCancelled = true;
     };
   }, [isClientMounted, sharedTournamentId, tournamentId]);
-  useSharedScoreSynchronization({
-    isClientMounted,
-    tournamentId,
-    sharedTournamentId,
-    scorecardsGenerated,
-    scorecardRowsLength: scorecardRows.length,
-    roundNumber: roundSetup.roundNumber,
-    playerIdsByName,
-    setScorecardRows,
-  });
-
   useEffect(() => {
     if (!isClientMounted || !tournamentId) {
       return;

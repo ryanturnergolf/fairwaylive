@@ -14,6 +14,7 @@ import {
   loadQualifyingResults,
 } from "../../lib/services/qualifyingSessionService";
 import MultiRoundQualifyingLeaderboard from "../../components/leaderboards/MultiRoundQualifyingLeaderboard";
+import { useVisibilityAwarePolling } from "../../lib/hooks/useVisibilityAwarePolling";
 
 const formatToPar = (value: number | null) => {
   if (value === null) return "—";
@@ -83,6 +84,8 @@ export default function QualifyingResultsPanel({
   onResultsLoaded,
   operationalCurrentRoundId = null,
   autoLoad = false,
+  isVisible = true,
+  initialResults = null,
 }: {
   sessionId: string;
   tournamentId: string;
@@ -92,8 +95,10 @@ export default function QualifyingResultsPanel({
   onResultsLoaded?: (results: QualifyingResultsReadModel) => void;
   operationalCurrentRoundId?: string | null;
   autoLoad?: boolean;
+  isVisible?: boolean;
+  initialResults?: QualifyingResultsReadModel | null;
 }) {
-  const [results, setResults] = useState<QualifyingResultsReadModel | null>(null);
+  const [results, setResults] = useState<QualifyingResultsReadModel | null>(initialResults);
   const [activeTab, setActiveTab] = useState("combined");
   const [isLoading, setIsLoading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -101,13 +106,16 @@ export default function QualifyingResultsPanel({
   const requestSequence = useRef(0);
   const onResultsLoadedRef = useRef(onResultsLoaded);
   useEffect(() => { onResultsLoadedRef.current = onResultsLoaded; }, [onResultsLoaded]);
+  useEffect(() => {
+    if (initialResults) setResults(initialResults);
+  }, [initialResults]);
 
   const refresh = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
     const requestId = ++requestSequence.current;
     setError("");
     if (!background) setIsLoading(true);
     try {
-      const nextResults = await loadQualifyingResults(sessionId);
+      const nextResults = await loadQualifyingResults(sessionId, { fresh: true });
       if (requestId === requestSequence.current) {
         setResults(nextResults);
         onResultsLoadedRef.current?.(nextResults);
@@ -122,14 +130,27 @@ export default function QualifyingResultsPanel({
   }, [sessionId]);
 
   useEffect(() => {
-    if (historyMode || autoLoad) void refresh();
-  }, [autoLoad, historyMode, refresh]);
+    if (historyMode) void refresh();
+  }, [historyMode, refresh]);
 
-  useEffect(() => {
-    if (!results || historyMode || sessionStatus === "finalized" || results.sessionStatus === "finalized") return;
-    const interval = window.setInterval(() => void refresh({ background: true }), 10_000);
-    return () => window.clearInterval(interval);
-  }, [historyMode, refresh, results, sessionStatus]);
+  const hasActiveScoring = Boolean(results?.combined.some((player) =>
+    player.segments.some((segment) =>
+      segment.completionStatus !== "complete" && segment.through !== "Not started"
+    )
+  ));
+  const pollingEnabled = Boolean(
+    autoLoad &&
+    isVisible &&
+    !historyMode &&
+    sessionStatus !== "finalized" &&
+    results?.sessionStatus !== "finalized"
+  );
+  useVisibilityAwarePolling({
+    enabled: pollingEnabled,
+    intervalMs: hasActiveScoring ? 10_000 : 30_000,
+    poll: () => refresh({ background: true }),
+    refreshImmediately: !results,
+  });
 
   const handleFinalize = async () => {
     setError("");

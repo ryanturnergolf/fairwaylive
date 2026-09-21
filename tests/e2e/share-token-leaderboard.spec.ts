@@ -147,9 +147,12 @@ const scoreEntries = [
   },
 ];
 
-const routeLeaderboardBackend = async (page: Page) => {
+const routeLeaderboardBackend = async (page: Page, { finalized = true }: { finalized?: boolean } = {}) => {
   let writes = 0;
+  let tokenResolutions = 0;
+  let scoreReads = 0;
   await page.route("**/api/share-tokens/resolve", async (route) => {
+    tokenResolutions += 1;
     const body = route.request().postDataJSON() as { token?: string };
     if (body.token !== shareToken) {
       await route.fulfill({
@@ -165,7 +168,7 @@ const routeLeaderboardBackend = async (page: Page) => {
       body: JSON.stringify({
         tournamentId,
         purpose: "mobile_scoring",
-        expiresAt: "2026-08-20T12:00:00.000Z",
+        expiresAt: "2099-08-20T12:00:00.000Z",
       }),
     });
   });
@@ -174,7 +177,11 @@ const routeLeaderboardBackend = async (page: Page) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(tournamentRow),
+      body: JSON.stringify({
+        ...tournamentRow,
+        status: finalized ? "finalized" : "active",
+        finalized_at: finalized ? tournamentRow.finalized_at : null,
+      }),
     });
   });
   await page.route("**/rest/v1/tournament_players**", async (route) => {
@@ -187,6 +194,14 @@ const routeLeaderboardBackend = async (page: Page) => {
   });
   await page.route("**/rest/v1/tournament_state_snapshots**", async (route) => {
     if (route.request().method() !== "GET") writes += 1;
+    const stateSnapshot = finalized ? envelope : {
+      ...envelope,
+      tournament: {
+        ...envelope.tournament,
+        settings: { ...envelope.tournament.settings, status: "Active", finalization: undefined },
+        rounds: envelope.tournament.rounds.map((round) => ({ ...round, status: "active" })),
+      },
+    };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -194,7 +209,7 @@ const routeLeaderboardBackend = async (page: Page) => {
         tournament_id: tournamentId,
         local_tournament_id: tournamentId,
         schema_version: 2,
-        state_snapshot: envelope,
+        state_snapshot: stateSnapshot,
         aggregate_version: 3,
         created_at: "2026-07-20T12:00:00.000Z",
         updated_at: "2026-07-20T18:00:00.000Z",
@@ -203,6 +218,7 @@ const routeLeaderboardBackend = async (page: Page) => {
   });
   await page.route("**/rest/v1/score_entries**", async (route) => {
     if (route.request().method() !== "GET") writes += 1;
+    scoreReads += 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -220,11 +236,15 @@ const routeLeaderboardBackend = async (page: Page) => {
     writes += 1;
     await route.fulfill({ status: 500, body: "{}" });
   });
-  return () => writes;
+  return {
+    getWriteCount: () => writes,
+    getTokenResolutionCount: () => tokenResolutions,
+    getScoreReadCount: () => scoreReads,
+  };
 };
 
 test("valid signed-out share token loads the authoritative read-only leaderboard and survives refresh", async ({ page }) => {
-  const getWriteCount = await routeLeaderboardBackend(page);
+  const { getWriteCount } = await routeLeaderboardBackend(page);
   await page.goto(`/leaderboard?shareToken=${shareToken}&round=1`, { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: tournamentRow.name })).toBeVisible();
@@ -251,7 +271,7 @@ test("valid signed-out share token loads the authoritative read-only leaderboard
 });
 
 test("invalid share token displays the secure invalid-link experience", async ({ page }) => {
-  const getWriteCount = await routeLeaderboardBackend(page);
+  const { getWriteCount } = await routeLeaderboardBackend(page);
   await page.goto("/leaderboard?shareToken=invalid-token&round=1", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Leaderboard Link Unavailable" })).toBeVisible();
@@ -260,4 +280,39 @@ test("invalid share token displays the secure invalid-link experience", async ({
   ).toBeVisible();
   await expect(page.getByText(tournamentRow.name)).toHaveCount(0);
   expect(getWriteCount()).toBe(0);
+});
+
+test("public leaderboard resolves its token once and suspends polling while hidden", async ({ page }) => {
+  await page.clock.install();
+  const counters = await routeLeaderboardBackend(page, { finalized: false });
+  await page.goto(`/leaderboard?shareToken=${shareToken}&round=1`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: tournamentRow.name })).toBeVisible();
+  expect(counters.getTokenResolutionCount()).toBe(1);
+  const initialReads = counters.getScoreReadCount();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.fastForward(60_000);
+  expect(counters.getScoreReadCount()).toBe(initialReads);
+  expect(counters.getTokenResolutionCount()).toBe(1);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(counters.getScoreReadCount).toBe(initialReads + 1);
+  expect(counters.getTokenResolutionCount()).toBe(1);
+});
+
+test("finalized public leaderboard does not continue polling", async ({ page }) => {
+  await page.clock.install();
+  const counters = await routeLeaderboardBackend(page);
+  await page.goto(`/leaderboard?shareToken=${shareToken}&round=1`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Final Results")).toBeVisible();
+  const initialReads = counters.getScoreReadCount();
+  await page.clock.fastForward(60_000);
+  expect(counters.getScoreReadCount()).toBe(initialReads);
+  expect(counters.getTokenResolutionCount()).toBe(1);
 });

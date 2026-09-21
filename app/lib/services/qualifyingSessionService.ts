@@ -88,22 +88,42 @@ export const createQualifyingSessionDraft = async (
   return { id: body.id };
 };
 
-export const loadQualifyingResults = async (
-  sessionId: string
+const qualifyingResultsRequests = new Map<string, Promise<QualifyingResultsReadModel>>();
+const qualifyingResultsCache = new Map<string, { loadedAt: number; results: QualifyingResultsReadModel }>();
+
+export const loadQualifyingResults = (
+  sessionId: string,
+  { fresh = false }: { fresh?: boolean } = {}
 ): Promise<QualifyingResultsReadModel> => {
-  const accessToken = await getSupabaseAuthAccessToken();
-  if (!accessToken) throw new Error("Coach authentication is required.");
-  const response = await fetch(`/api/qualifying-sessions/${sessionId}/results`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const inFlight = qualifyingResultsRequests.get(sessionId);
+  if (inFlight) return inFlight;
+  const cached = qualifyingResultsCache.get(sessionId);
+  if (!fresh && cached && Date.now() - cached.loadedAt < 2_000) return Promise.resolve(cached.results);
+
+  let request: Promise<QualifyingResultsReadModel>;
+  request = (async () => {
+    const accessToken = await getSupabaseAuthAccessToken();
+    if (!accessToken) throw new Error("Coach authentication is required.");
+    const response = await fetch(`/api/qualifying-sessions/${sessionId}/results`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const body = (await response.json().catch(() => null)) as
+      | QualifyingResultsReadModel
+      | { error?: string }
+      | null;
+    if (!response.ok) {
+      throw new Error((body as { error?: string } | null)?.error || "Unable to load qualifying results.");
+    }
+    const results = body as QualifyingResultsReadModel;
+    qualifyingResultsCache.set(sessionId, { loadedAt: Date.now(), results });
+    return results;
+  })().finally(() => {
+    if (qualifyingResultsRequests.get(sessionId) === request) {
+      qualifyingResultsRequests.delete(sessionId);
+    }
   });
-  const body = (await response.json().catch(() => null)) as
-    | QualifyingResultsReadModel
-    | { error?: string }
-    | null;
-  if (!response.ok) {
-    throw new Error((body as { error?: string } | null)?.error || "Unable to load qualifying results.");
-  }
-  return body as QualifyingResultsReadModel;
+  qualifyingResultsRequests.set(sessionId, request);
+  return request;
 };
 
 export const saveQualifyingScorerAssignments = async (

@@ -145,6 +145,10 @@ test("Tournament workspace uses canonical Qualifying results and exact durable r
   expect(workspace).toContain("segment?.markerHoleScores");
   expect(liveScoring).toContain("isQualifyingTournament && qualifyingResults");
   expect(liveScoring).toContain("<MultiRoundQualifyingLeaderboard");
+  expect(workspace).toContain("useVisibilityAwarePolling");
+  expect(workspace).toContain("const scores = allScores.filter");
+  expect(workspace).toContain("const holes = allHoles.filter");
+  expect(workspace).not.toContain("useSharedScoreSynchronization({");
 });
 
 test("Qualifying workspace writes admin marker scores through both canonical durable boundaries", () => {
@@ -206,9 +210,15 @@ test("shared controls are accessible, touch-friendly, and independently keyed", 
 
 test("polling keeps child selection and expansion state while stale responses are rejected", () => {
   const publicPage = source("app/leaderboard/page.tsx");
+  const pollingHook = source("app/lib/hooks/useVisibilityAwarePolling.ts");
   expect(publicPage).toContain("requestSequence");
   expect(publicPage).toContain("requestId === requestSequence.current");
-  expect(publicPage).toContain("window.setInterval");
+  expect(publicPage).toContain("useVisibilityAwarePolling");
+  expect(publicPage).toContain("setResolvedTournamentId(resolution.tournamentId)");
+  expect(publicPage).toContain("resolveShareTokenOnce(shareToken)");
+  expect(publicPage).toContain("shareTokenResolutionRequests.get(shareToken)");
+  expect(pollingHook).toContain('document.visibilityState !== "visible"');
+  expect(pollingHook).toContain('document.addEventListener("visibilitychange"');
   expect(publicPage).not.toContain("setModel(null)");
 });
 
