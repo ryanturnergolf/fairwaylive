@@ -203,7 +203,7 @@ test("Q6 aggregates 27/36-hole days, multiple days, competition ties, and player
   expect(results.combined.find((player) => player.playerId === "sam")?.position).toBe("T2");
   expect(results.combined.find((player) => player.playerId === "casey")?.position).toBe("4");
   expect(results.combined.find((player) => player.playerId === "alex")?.segments[0].markerHoleScores)
-    .toEqual(Array(9).fill(3));
+    .toEqual(Array(18).fill(3));
   expect(results.combined.find((player) => player.playerId === "alex")?.statistics).toMatchObject({
     greensAvailable: 63,
     totalPutts: 126,
