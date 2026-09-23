@@ -1133,7 +1133,10 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 
 const asString = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
 
-const toStoredTournamentFromSnapshot = (snapshot: TournamentStateSnapshotResult): StoredTournament => {
+const toStoredTournamentFromSnapshot = (
+  snapshot: TournamentStateSnapshotResult,
+  tournamentRow: TournamentRow | null
+): StoredTournament => {
   const { tournament } = snapshot.envelope;
   const settings = asRecord(tournament.settings);
   const roundCount = asPositiveInteger(settings?.rounds) ?? (tournament.rounds.length || 1);
@@ -1148,6 +1151,7 @@ const toStoredTournamentFromSnapshot = (snapshot: TournamentStateSnapshotResult)
     rounds: String(roundCount),
     scoringFormat: asString(settings?.scoringFormat),
     status: asString(settings?.status, tournament.rounds[0]?.status ?? "upcoming"),
+    archivedAt: tournamentRow?.archived_at ?? null,
     settings: tournament.settings,
   };
 };
@@ -1158,26 +1162,29 @@ const getAggregateRoundNumber = (snapshot: TournamentStateSnapshotResult | null)
   1;
 
 const loadTournamentAggregate = async (
-  sharedTournamentUuidOrId: string
+  sharedTournamentUuidOrId: string,
+  suppliedTournamentRow?: TournamentRow | null
 ): Promise<TournamentAggregate | null> => {
   if (!sharedTournamentUuidOrId) {
     return null;
   }
 
-  const snapshot = await loadTournamentStateSnapshot(sharedTournamentUuidOrId).catch(() => null);
-  const tournamentRow = snapshot
-    ? null
-    : await getTournamentRow(sharedTournamentUuidOrId).catch(() => null);
+  const [snapshot, tournamentRow] = await Promise.all([
+    loadTournamentStateSnapshot(sharedTournamentUuidOrId).catch(() => null),
+    suppliedTournamentRow !== undefined
+      ? Promise.resolve(suppliedTournamentRow)
+      : getTournamentRow(sharedTournamentUuidOrId).catch(() => null),
+  ]);
 
   if (!tournamentRow && !snapshot) {
     return null;
   }
 
   const snapshotRoundNumber = getAggregateRoundNumber(snapshot);
-  const tournament = tournamentRow
-    ? toStoredTournament(tournamentRow)
-    : snapshot
-      ? toStoredTournamentFromSnapshot(snapshot)
+  const tournament = snapshot
+    ? toStoredTournamentFromSnapshot(snapshot, tournamentRow)
+    : tournamentRow
+      ? toStoredTournament(tournamentRow)
       : null;
 
   if (!tournament) {
@@ -1250,7 +1257,7 @@ export const loadSharedTournamentAggregates = async (
   const rows = suppliedRows ?? await listTournamentRows();
   return Promise.all(
     rows.map(async (row) => {
-      const aggregate = await loadTournamentAggregate(row.id).catch((error) => {
+      const aggregate = await loadTournamentAggregate(row.id, row).catch((error) => {
         console.warn("[TournamentService] Unable to load tournament aggregate; using shared row fallback.", error);
         return null;
       });
@@ -1262,7 +1269,8 @@ export const loadSharedTournamentAggregates = async (
 
 export const loadTournamentList = async <T extends StoredTournament>(
   localTournaments: T[],
-  mapSharedTournament: (tournament: StoredTournament) => T
+  mapSharedTournament: (tournament: StoredTournament) => T,
+  options: { includeLocalOnly?: boolean } = {}
 ): Promise<T[]> => {
   const sharedAggregates = await loadSharedTournamentAggregates();
   const tournamentsById = new Map<string, T>();
@@ -1271,13 +1279,15 @@ export const loadTournamentList = async <T extends StoredTournament>(
     const tournament = mapSharedTournament(aggregate.tournament);
     tournamentsById.set(tournament.id, tournament);
   });
-  localTournaments.forEach((tournament) => {
-    const aggregate = sharedAggregates.find((candidate) => candidate.localTournamentId === tournament.id);
-    const canonicalId = aggregate?.sharedTournamentId || tournament.id;
-    if (!tournamentsById.has(canonicalId)) {
-      tournamentsById.set(canonicalId, canonicalId === tournament.id ? tournament : { ...tournament, id: canonicalId } as T);
-    }
-  });
+  if (options.includeLocalOnly !== false) {
+    localTournaments.forEach((tournament) => {
+      const aggregate = sharedAggregates.find((candidate) => candidate.localTournamentId === tournament.id);
+      const canonicalId = aggregate?.sharedTournamentId || tournament.id;
+      if (!tournamentsById.has(canonicalId)) {
+        tournamentsById.set(canonicalId, canonicalId === tournament.id ? tournament : { ...tournament, id: canonicalId } as T);
+      }
+    });
+  }
 
   return Array.from(tournamentsById.values());
 };

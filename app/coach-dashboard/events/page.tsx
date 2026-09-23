@@ -127,7 +127,11 @@ export default function EventsPage() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      loadTournamentList(loadTournamentsFromStorage(), (tournament) => tournament),
+      loadTournamentList(
+        loadTournamentsFromStorage(),
+        (tournament) => tournament,
+        { includeLocalOnly: false }
+      ),
       listQualifyingSessionFoundations(),
     ]).then(([loadedTournaments, loadedQualifying]) => {
       if (cancelled) return;

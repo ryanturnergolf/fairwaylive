@@ -132,6 +132,20 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
       },
     ]));
   });
+  await page.route("**/rest/v1/tournaments?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify([
+      {
+        id: "tournament-1", name: "Fall Invitational", course: "Hidden Creek", tournament_date: "2026-09-20",
+        number_of_rounds: 2, status: "Upcoming", archived_at: null, course_hole_snapshot: [],
+      },
+      {
+        id: "tournament-history", name: "Spring Classic", course: "Bluffton Golf Club", tournament_date: "2026-04-12",
+        number_of_rounds: 1, status: "Finalized", archived_at: "2026-08-01T12:00:00.000Z", course_hole_snapshot: [],
+      },
+    ]),
+  }));
   await page.unroute("**/api/qualifying-sessions**");
   await page.route("**/api/qualifying-sessions**", (route) => route.fulfill({
     status: 200,
@@ -216,6 +230,93 @@ test("Events presents Tournaments and Qualifying Sessions in one coach-facing su
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+test("Events trusts durable archive state and excludes local-only Tournament fallbacks", async ({ page }) => {
+  await routeValidCoachSession(page);
+  await installCoachSession(page);
+  const archivedTournamentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const archivedAt = "2026-09-22T12:00:00.000Z";
+  const tournamentRow = {
+    id: archivedTournamentId,
+    created_by: coachId,
+    owner_id: coachId,
+    name: "Archived Snapshot Tournament",
+    course: "Legacy Links",
+    tournament_date: "2026-09-01",
+    number_of_rounds: 1,
+    status: "live",
+    finalized_at: null,
+    archived_at: archivedAt,
+    aggregate_version: 1,
+    created_at: "2026-09-01T12:00:00.000Z",
+    updated_at: archivedAt,
+    course_id: null,
+    tee_set_id: null,
+    saved_course_setup_id: null,
+    course_setup_name: null,
+    course_hole_snapshot: [],
+    operational_current_round_id: null,
+  };
+  const snapshot = {
+    version: 2,
+    tournament: {
+      id: archivedTournamentId,
+      name: tournamentRow.name,
+      course: tournamentRow.course,
+      settings: { date: tournamentRow.tournament_date, rounds: "1", status: "Live" },
+      teams: [],
+      players: [],
+      pairings: [],
+      scores: [],
+      rounds: [],
+    },
+    uiState: {
+      teams: [],
+      players: [],
+      pairings: [],
+      scorecards: {
+        scorecardsGenerated: false,
+        scorecardRows: [],
+        roundSetup: { roundNumber: "1", startingHole: "1", numberOfHoles: "18", teeTime: "", countingScores: "1" },
+      },
+      clippdExportState: { tournamentId: "", tournamentKey: "", exportFormat: "Final Results CSV" },
+      scoreboardImportState: { tournamentId: "", tournamentKey: "", options: {} },
+      autoRepairState: { sourceRound: "Round 1", targetRound: "Round 2", pairingOrder: "Worst to Best", teeTimeInterval: "8 minutes" },
+    },
+  };
+
+  await page.addInitScript(({ durableId }) => {
+    window.localStorage.setItem("clubhouse-hq-tournaments", JSON.stringify([
+      { id: durableId, name: "Stale Local Copy", course: "Legacy Links", date: "2026-09-01", rounds: "1", scoringFormat: "Stroke Play", status: "Live", settings: {} },
+      { id: "local-demo-only", name: "Local Demo Only", course: "Demo Course", date: "2026-09-02", rounds: "1", scoringFormat: "Stroke Play", status: "Live", settings: {} },
+    ]));
+  }, { durableId: archivedTournamentId });
+  await page.route("**/rest/v1/tournaments?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify([tournamentRow]),
+  }));
+  await page.route("**/rest/v1/tournament_state_snapshots?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      tournament_id: archivedTournamentId,
+      local_tournament_id: archivedTournamentId,
+      schema_version: 2,
+      state_snapshot: snapshot,
+      aggregate_version: 1,
+      created_at: "2026-09-01T12:00:00.000Z",
+      updated_at: archivedAt,
+    }),
+  }));
+
+  await page.goto("/coach-dashboard/events");
+  await expect(page.getByRole("button", { name: "Current Events (0)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Local Demo Only" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Archived Events (1)" }).click();
+  await expect(page.getByRole("heading", { name: tournamentRow.name })).toBeVisible();
+  await expect(page.getByText(/^Archived · Live$/)).toBeVisible();
+});
+
 test("Events safely bulk-archives eligible Tournaments and Qualifying without hiding protected events", async ({ page }) => {
   await routeValidCoachSession(page);
   await installCoachSession(page);
@@ -225,6 +326,20 @@ test("Events safely bulk-archives eligible Tournaments and Qualifying without hi
       { id: "active-backing", name: "Active Qualifying Backing", course: "Current Course", date: "2026-09-17", city: "", state: "", rounds: "1", scoringFormat: "Stroke Play", status: "Active", settings: {} },
     ]));
   });
+  await page.route("**/rest/v1/tournaments?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify([
+      {
+        id: "old-tournament", name: "Old Tournament", course: "Legacy Course", tournament_date: "2026-06-01",
+        number_of_rounds: 1, status: "Finalized", archived_at: null, course_hole_snapshot: [],
+      },
+      {
+        id: "active-backing", name: "Active Qualifying Backing", course: "Current Course", tournament_date: "2026-09-17",
+        number_of_rounds: 1, status: "Active", archived_at: null, course_hole_snapshot: [],
+      },
+    ]),
+  }));
   await page.unroute("**/api/qualifying-sessions**");
   await page.route("**/api/qualifying-sessions**", (route) => route.fulfill({
     status: 200,
