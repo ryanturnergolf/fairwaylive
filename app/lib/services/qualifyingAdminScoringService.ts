@@ -1,10 +1,54 @@
 import type { SaveScoreEntryInput } from "../repositories/scoreRepository";
 import type { SaveScoreHoleEntryInput } from "../repositories/statisticsRepository";
+import type { QualifyingResultsReadModel } from "../qualifyingModel";
+import type { TournamentPlayerRow } from "../repositories/tournamentRepository";
+import type { LegacyScorecardRow } from "../tournamentModel";
 
 export type QualifyingAdminMarkerMutation = {
   scoreEntry: SaveScoreEntryInput;
   holeEntry: SaveScoreHoleEntryInput;
 };
+
+export const projectQualifyingAdminScorecardRows = ({
+  scorecardRows,
+  durablePlayers,
+  results,
+  selectedRoundNumber,
+  scoringMode,
+  holeCount,
+}: {
+  scorecardRows: LegacyScorecardRow[];
+  durablePlayers: TournamentPlayerRow[];
+  results: QualifyingResultsReadModel;
+  selectedRoundNumber: number;
+  scoringMode: "reciprocal" | "designated_scorer";
+  holeCount: number;
+}): LegacyScorecardRow[] => scorecardRows.map((row) => {
+  const matchingDurablePlayers = durablePlayers.filter(
+    (candidate) => candidate.player_name === row.playerName
+  );
+  const playerId = matchingDurablePlayers.length === 1
+    ? matchingDurablePlayers[0].player_id
+    : null;
+  const player = playerId
+    ? results.combined.find((candidate) => String(candidate.playerId) === String(playerId))
+    : null;
+  const segment = player?.segments.find(
+    (candidate) => candidate.roundNumber === selectedRoundNumber
+  );
+  const canonicalScores = scoringMode === "reciprocal"
+    ? segment?.markerHoleScores
+    : segment?.holeScores;
+  return segment
+    ? {
+        ...row,
+        scores: Array.from(
+          { length: holeCount },
+          (_, index) => Number(canonicalScores?.[index]) || 0
+        ),
+      }
+    : { ...row, scores: Array.from({ length: holeCount }, () => 0) };
+});
 
 export const buildQualifyingAdminMarkerMutation = ({
   tournamentId,

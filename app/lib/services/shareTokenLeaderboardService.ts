@@ -33,14 +33,28 @@ export const bindSnapshotPlayersToDurableRoster = (
   tournament: Tournament,
   scorecardRows: Array<Pick<LegacyScorecardRow, "playerName" | "team"> & { id: string | number }>
 ) => {
-  const stableIdByIdentity = new Map(
-    scorecardRows.map((row) => [`${row.playerName}\u0000${row.team}`, String(row.id)])
-  );
+  const durableRowsByName = new Map<string, typeof scorecardRows>();
+  scorecardRows.forEach((row) => {
+    durableRowsByName.set(row.playerName, [...(durableRowsByName.get(row.playerName) ?? []), row]);
+  });
+  const teamById = new Map(tournament.teams.map((team) => [team.id, team.name]));
   const stableIdBySnapshotId = new Map(
     tournament.players.map((player) => {
       const playerName = `${player.firstName} ${player.lastName}`.trim();
-      const teamName = tournament.teams.find((team) => team.id === player.teamId)?.name ?? "";
-      return [player.id, stableIdByIdentity.get(`${playerName}\u0000${teamName}`) ?? player.id];
+      const statisticTeamName = typeof player.statistics.teamName === "string"
+        ? player.statistics.teamName
+        : "";
+      const teamName = teamById.get(player.teamId) ?? statisticTeamName;
+      const candidates = durableRowsByName.get(playerName) ?? [];
+      const exactTeamCandidates = teamName
+        ? candidates.filter((candidate) => candidate.team === teamName)
+        : [];
+      const resolved = exactTeamCandidates.length === 1
+        ? exactTeamCandidates[0]
+        : candidates.length === 1
+          ? candidates[0]
+          : null;
+      return [player.id, resolved ? String(resolved.id) : player.id];
     })
   );
   return {

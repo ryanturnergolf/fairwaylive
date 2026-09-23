@@ -2268,7 +2268,7 @@ function ReciprocalPlayerScorecardPage() {
                   </button>
                 ) : hasFutureQualifyingRound ? (
                   <p className="rounded-2xl border border-[#D8C9AE] bg-[#FCFAF5] p-4 text-sm font-semibold text-[#51635C]">
-                    The next round will become available when your coach advances the Qualifying session. Use the same scoring code when it opens.
+                    Your next round is available as soon as you submit this round. Use the same scoring code to continue.
                   </p>
                 ) : null}
                 <button

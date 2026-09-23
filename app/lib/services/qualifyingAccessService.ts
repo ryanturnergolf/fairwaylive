@@ -31,9 +31,14 @@ export type QualifyingAccessibleRound = {
   segmentNumber: number;
   displayLabel: string;
   status: "not_started" | "in_progress" | "submitted" | "verified";
+  accessState?: "available" | "locked" | "submitted";
   score: number | null;
   toPar: number | null;
 };
+
+export const getQualifyingRoundAccessState = (round: QualifyingAccessibleRound) =>
+  round.accessState ??
+  (round.status === "submitted" || round.status === "verified" ? "submitted" : "available");
 
 export type QualifyingAccessibleRounds = {
   qualifyingSessionId: string;

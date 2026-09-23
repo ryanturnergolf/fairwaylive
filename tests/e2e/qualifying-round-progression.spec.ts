@@ -66,21 +66,105 @@ test("coach UI no longer calls the unsafe one-pointer repository mutation", () =
   expect(page).not.toContain("setQualifyingOperationalRound");
 });
 
-test("player access requires explicit same-day round selection through bounded RPCs", () => {
-  const migration = source("supabase/migrations/20260902000000_add_qualifying_round_progression.sql");
-  expect(migration).toContain("qualifying_day_id = operational_round.qualifying_day_id");
+test("player access unlocks each next round from that player's prior submitted scorecard", () => {
+  const migration = source("supabase/migrations/20260923000000_add_player_scoped_qualifying_round_access.sql");
+  expect(migration).toContain("private.qualifying_player_round_submitted");
+  expect(migration).toContain("score.player_id = input_player_id");
+  expect(migration).toContain("score.entered_by_player_id = case");
+  expect(migration).toContain("score.entry_status in ('submitted', 'verified', 'official')");
+  expect(migration).toContain("(prior_day.day_number, prior_round.round_order)");
+  expect(migration).toContain("then 'available'");
+  expect(migration).toContain("else 'locked'");
+  expect(migration).not.toContain("qualifying_day_id = operational_round.qualifying_day_id");
   expect(migration).toContain("input_qualifying_round_id");
   expect(migration).toContain("grant execute on function public.exchange_qualifying_player_round_access");
-  expect(migration).toContain("revoke all on function public.advance_qualifying_operational_round");
   expect(migration).toContain("record_qualifying_access_failure");
   expect(migration).toContain("qualifying-access-rate-code:");
-  expect(migration).toContain("revoke all on function private.record_qualifying_access_failure");
+  expect(migration).toContain("revoke all on function private.qualifying_player_round_submitted");
 });
 
 test("round picker and summary CTA preserve explicit Qualifying round identity", () => {
   expect(source("app/components/PlayerScoringCodeEntry.tsx")).toContain("Choose a Round");
+  expect(source("app/components/PlayerScoringCodeEntry.tsx")).toContain('getQualifyingRoundAccessState(round) === "locked"');
   expect(source("app/lib/services/qualifyingAccessService.ts")).toContain('searchParams.set("qualifyingRoundId"');
-  expect(source("app/scorecard/[playerId]/page.tsx")).toContain("The next round will become available when your coach advances");
+  expect(source("app/scorecard/[playerId]/page.tsx")).toContain("Your next round is available as soon as you submit this round");
+});
+
+test("player round picker unlocks independently from each player's submitted rounds", async ({ page }) => {
+  await page.route("**/api/player-scoring-code/resolve", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      eventType: "qualifying",
+      resolution: {
+        qualifyingSessionId: "session",
+        qualifyingName: "Three Round Qualifying",
+        scoringMode: "reciprocal",
+        players: [
+          { playerId: "player-a", playerName: "Player A" },
+          { playerId: "player-b", playerName: "Player B" },
+          { playerId: "player-c", playerName: "Player C" },
+        ],
+      },
+    }),
+  }));
+  await page.route("**/api/qualifying-access/rounds", async (route) => {
+    const { playerId } = route.request().postDataJSON() as { playerId: string };
+    const states = playerId === "player-a"
+      ? ["submitted", "available", "locked"]
+      : playerId === "player-c"
+        ? ["submitted", "submitted", "available"]
+        : ["available", "locked", "locked"];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        qualifyingSessionId: "session",
+        qualifyingName: "Three Round Qualifying",
+        scoringMode: "reciprocal",
+        dayNumber: 1,
+        hasFutureRounds: true,
+        rounds: states.map((accessState, index) => ({
+          qualifyingRoundId: `q-r${index + 1}`,
+          tournamentRoundId: `t-r${index + 1}`,
+          roundNumber: index + 1,
+          dayNumber: index + 1,
+          segmentNumber: 1,
+          displayLabel: `Round ${index + 1}`,
+          status: accessState === "submitted" ? "submitted" : "not_started",
+          accessState,
+          score: accessState === "submitted" ? 36 : null,
+          toPar: accessState === "submitted" ? 0 : null,
+        })),
+      }),
+    });
+  });
+
+  const openRoundsFor = async (playerName: string, firstVisit = false) => {
+    if (firstVisit) {
+      await page.goto("/player-tournament-login", { waitUntil: "domcontentloaded" });
+    } else {
+      await page.getByRole("button", { name: "Change Code" }).click();
+    }
+    await page.getByLabel("Live scoring code").fill("ABC234");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("button", { name: playerName })).toBeVisible();
+    await page.getByRole("button", { name: playerName }).click();
+    await expect(page.getByRole("heading", { name: "Choose a Round" })).toBeVisible();
+  };
+
+  await openRoundsFor("Player A", true);
+  await expect(page.getByRole("button", { name: /Round 1 Submitted/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Round 2 Available/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Round 3 Locked/ })).toBeDisabled();
+
+  await openRoundsFor("Player B");
+  await expect(page.getByRole("button", { name: /Round 1 Available/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Round 2 Locked/ })).toBeDisabled();
+
+  await openRoundsFor("Player C");
+  await expect(page.getByRole("button", { name: /Round 2 Submitted/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Round 3 Available/ })).toBeEnabled();
 });
 
 test("canonical reciprocal leaderboard authority does not prefer an in-progress marker over submitted self", () => {

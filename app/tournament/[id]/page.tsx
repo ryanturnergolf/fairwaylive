@@ -104,7 +104,10 @@ import { buildCourseHoleSequence } from "../../lib/services/courseService";
 import { buildMultiRoundTournamentLeaderboard } from "../../lib/services/multiRoundLeaderboardService";
 import { bindSnapshotPlayersToDurableRoster } from "../../lib/services/shareTokenLeaderboardService";
 import TournamentTeamInvitationManager from "./components/TournamentTeamInvitationManager";
-import { buildQualifyingAdminMarkerMutation } from "../../lib/services/qualifyingAdminScoringService";
+import {
+  buildQualifyingAdminMarkerMutation,
+  projectQualifyingAdminScorecardRows,
+} from "../../lib/services/qualifyingAdminScoringService";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
 const officialResultsTab = "Official Results";
@@ -446,27 +449,15 @@ export default function TournamentPage() {
       return leaderboardScorecardRows;
     }
 
-    return scorecardRows.map((row) => {
-      const matchingDurablePlayers = durableLeaderboardPlayers.filter(
-        (candidate) => candidate.player_name === row.playerName
-      );
-      const playerId = matchingDurablePlayers.length === 1
-        ? matchingDurablePlayers[0].player_id
-        : null;
-      const player = playerId
-        ? qualifyingResults.combined.find((candidate) => String(candidate.playerId) === String(playerId))
-        : null;
-      const segment = player?.segments.find(
-        (candidate) => candidate.tournamentRoundId === selectedRoundOption.roundId
-      );
-      const canonicalScores = qualifyingScoringMode === "reciprocal"
-        ? segment?.markerHoleScores
-        : segment?.holeScores;
-      return segment
-        ? { ...row, scores: (canonicalScores ?? []).map((score) => Number(score) || 0) }
-        : { ...row, scores: Array.from({ length: normalizedRoundSetup.numberOfHoles }, () => 0) };
+    return projectQualifyingAdminScorecardRows({
+      scorecardRows,
+      durablePlayers: durableLeaderboardPlayers,
+      results: qualifyingResults,
+      selectedRoundNumber: selectedRoundOption.roundNumber,
+      scoringMode: qualifyingScoringMode,
+      holeCount: normalizedRoundSetup.numberOfHoles,
     });
-  }, [durableLeaderboardPlayers, isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingResults, qualifyingScoringMode, scorecardRows, selectedRoundOption?.roundId]);
+  }, [durableLeaderboardPlayers, isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingResults, qualifyingScoringMode, scorecardRows, selectedRoundOption?.roundNumber]);
   const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
     const displayHoleNumbers = buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles);
     const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();

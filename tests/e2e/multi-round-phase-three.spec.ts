@@ -134,15 +134,34 @@ test("durable player UUIDs bind submitted Qualifying scores to legacy snapshot p
   expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r2"].through).toBe("Not started");
 });
 
+test("Qualifying leaderboard binds durable UUIDs when legacy snapshot team keys do not match team ids", () => {
+  const snapshot = tournamentFixture(2);
+  snapshot.players = snapshot.players.map((player) => ({
+    ...player,
+    teamId: `team:${snapshot.teams.find((team) => team.id === player.teamId)?.name ?? ""}`,
+    statistics: {
+      ...player.statistics,
+      teamName: snapshot.teams.find((team) => team.players.includes(player.id))?.name ?? "",
+    },
+  }));
+  const rebound = bindSnapshotPlayersToDurableRoster(snapshot, [
+    { id: "aj-uuid", playerName: "AJ Gerber", team: "Bluffton", scores: [] },
+    { id: "colin-uuid", playerName: "Colin King", team: "Bluffton", scores: [] },
+    { id: "evan-uuid", playerName: "Evan Kindred", team: "Visitors", scores: [] },
+  ]);
+  expect(rebound.players.map((player) => player.id)).toEqual(["aj-uuid", "colin-uuid", "evan-uuid"]);
+});
+
 test("Tournament workspace uses canonical Qualifying results and exact durable roster identities", () => {
   const workspace = source("app/tournament/[id]/page.tsx");
   const liveScoring = source("app/tournament/[id]/components/LiveScoringLeaderboard.tsx");
   expect(workspace).toContain("getTournamentPlayers(sharedTournamentId, roundNumber)");
   expect(workspace).toContain("loadQualifyingResults(qualifyingContext.sessionId)");
-  expect(workspace).toContain("candidate.tournamentRoundId === selectedRoundOption.roundId");
-  expect(workspace).toContain("candidate.player_name === row.playerName");
-  expect(workspace).toContain('qualifyingScoringMode === "reciprocal"');
-  expect(workspace).toContain("segment?.markerHoleScores");
+  expect(workspace).toContain("projectQualifyingAdminScorecardRows");
+  const adminProjection = source("app/lib/services/qualifyingAdminScoringService.ts");
+  expect(adminProjection).toContain("candidate.roundNumber === selectedRoundNumber");
+  expect(adminProjection).toContain('scoringMode === "reciprocal"');
+  expect(adminProjection).toContain("segment?.markerHoleScores");
   expect(liveScoring).toContain("isQualifyingTournament && qualifyingResults");
   expect(liveScoring).toContain("<MultiRoundQualifyingLeaderboard");
   expect(workspace).toContain("useVisibilityAwarePolling");

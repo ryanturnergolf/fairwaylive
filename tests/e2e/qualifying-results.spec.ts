@@ -12,7 +12,52 @@ import {
   type QualifyingEngineScorecard,
 } from "../../app/lib/services/qualifyingResultsService";
 import { routeValidCoachSession } from "./authSessionTestHelper";
-import { buildQualifyingAdminMarkerMutation } from "../../app/lib/services/qualifyingAdminScoringService";
+import {
+  buildQualifyingAdminMarkerMutation,
+  projectQualifyingAdminScorecardRows,
+} from "../../app/lib/services/qualifyingAdminScoringService";
+
+test("mobile-entered canonical scores hydrate the admin grid by durable player and round identity", () => {
+  const rows = projectQualifyingAdminScorecardRows({
+    scorecardRows: [
+      { id: 1, playerName: "AJ Gerber", team: "Bluffton University", scores: Array(9).fill(0) },
+      { id: 2, playerName: "Evan Kindred", team: "Bluffton University", scores: Array(9).fill(0) },
+    ],
+    durablePlayers: [
+      { player_id: "aj-uuid", player_name: "AJ Gerber" },
+      { player_id: "evan-uuid", player_name: "Evan Kindred" },
+    ] as Parameters<typeof projectQualifyingAdminScorecardRows>[0]["durablePlayers"],
+    results: {
+      combined: [
+        { playerId: "aj-uuid", segments: [{ roundNumber: 1, markerHoleScores: Array(9).fill(4) }, { roundNumber: 2, markerHoleScores: [] }] },
+        { playerId: "evan-uuid", segments: [{ roundNumber: 1, markerHoleScores: Array(9).fill(5) }, { roundNumber: 2, markerHoleScores: [] }] },
+      ],
+    } as Parameters<typeof projectQualifyingAdminScorecardRows>[0]["results"],
+    selectedRoundNumber: 1,
+    scoringMode: "reciprocal",
+    holeCount: 9,
+  });
+
+  expect(rows.map((row) => row.scores)).toEqual([Array(9).fill(4), Array(9).fill(5)]);
+
+  const r2Rows = projectQualifyingAdminScorecardRows({
+    scorecardRows: rows,
+    durablePlayers: [
+      { player_id: "aj-uuid", player_name: "AJ Gerber" },
+      { player_id: "evan-uuid", player_name: "Evan Kindred" },
+    ] as Parameters<typeof projectQualifyingAdminScorecardRows>[0]["durablePlayers"],
+    results: {
+      combined: [
+        { playerId: "aj-uuid", segments: [{ roundNumber: 1, markerHoleScores: Array(9).fill(4) }, { roundNumber: 2, markerHoleScores: [] }] },
+        { playerId: "evan-uuid", segments: [{ roundNumber: 1, markerHoleScores: Array(9).fill(5) }, { roundNumber: 2, markerHoleScores: [] }] },
+      ],
+    } as Parameters<typeof projectQualifyingAdminScorecardRows>[0]["results"],
+    selectedRoundNumber: 2,
+    scoringMode: "reciprocal",
+    holeCount: 9,
+  });
+  expect(r2Rows.map((row) => row.scores)).toEqual([Array(9).fill(0), Array(9).fill(0)]);
+});
 
 test.beforeEach(async ({ page }) => {
   await routeValidCoachSession(page);

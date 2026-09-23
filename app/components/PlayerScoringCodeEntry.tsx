@@ -11,6 +11,7 @@ import {
 } from "../lib/services/universalPlayerAccessService";
 import {
   exchangeQualifyingPlayerAccess,
+  getQualifyingRoundAccessState,
   loadQualifyingPlayerAccessibleRounds,
   type QualifyingAccessibleRound,
 } from "../lib/services/qualifyingAccessService";
@@ -93,7 +94,11 @@ export default function PlayerScoringCodeEntry({ compact = false }: PlayerScorin
   };
 
   const selectRound = async (round: QualifyingAccessibleRound) => {
-    if (!selectedPlayerId || status === "opening") return;
+    if (
+      !selectedPlayerId ||
+      status === "opening" ||
+      getQualifyingRoundAccessState(round) === "locked"
+    ) return;
     setStatus("opening");
     const destination = await exchangeQualifyingPlayerAccess(code, selectedPlayerId, round.qualifyingRoundId);
     if (!destination) {
@@ -122,21 +127,24 @@ export default function PlayerScoringCodeEntry({ compact = false }: PlayerScorin
         <div aria-live="polite">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-[#B8892D]">{eventName}</p>
           <h2 className={`mt-2 font-black tracking-[-0.03em] ${compact ? "text-2xl" : "text-3xl"}`}>Choose a Round</h2>
-          <p className="mt-3 text-[#51635C]">Choose any round available on the current Qualifying day.</p>
+          <p className="mt-3 text-[#51635C]">Your next round unlocks as soon as you submit the round before it.</p>
           <div className="mt-6 space-y-3">
-            {accessibleRounds.map((round) => (
-              <button key={round.qualifyingRoundId} type="button" disabled={status === "opening"}
+            {accessibleRounds.map((round) => {
+              const accessState = getQualifyingRoundAccessState(round);
+              return <button key={round.qualifyingRoundId} type="button" disabled={status === "opening" || accessState === "locked"}
                 onClick={() => void selectRound(round)}
-                className="min-h-16 w-full rounded-2xl border-2 border-[#D8C9AE] bg-[#FCFAF5] px-5 py-4 text-left shadow-sm">
+                className="min-h-16 w-full rounded-2xl border-2 border-[#D8C9AE] bg-[#FCFAF5] px-5 py-4 text-left shadow-sm disabled:cursor-not-allowed disabled:opacity-55">
                 <span className="block text-lg font-black">{round.displayLabel}</span>
                 <span className="mt-1 block text-sm font-semibold text-[#51635C]">
-                  {round.status === "verified" || round.status === "submitted"
-                    ? `Completed${round.score === null ? "" : ` — ${round.score}${round.toPar === null ? "" : ` (${round.toPar === 0 ? "E" : round.toPar > 0 ? `+${round.toPar}` : round.toPar})`}`}`
-                    : round.status === "in_progress" ? "Resume round" : "Not started"}
+                  {accessState === "locked"
+                    ? "Locked"
+                    : accessState === "submitted"
+                      ? `Submitted${round.score === null ? "" : ` — ${round.score}${round.toPar === null ? "" : ` (${round.toPar === 0 ? "E" : round.toPar > 0 ? `+${round.toPar}` : round.toPar})`}`}`
+                      : round.status === "in_progress" ? "Available — resume round" : "Available"}
                 </span>
-                <span className="mt-2 block font-black">{round.status === "not_started" ? `Begin ${round.displayLabel}` : `View ${round.displayLabel}`}</span>
+                <span className="mt-2 block font-black">{accessState === "locked" ? "Complete the prior round first" : round.status === "not_started" ? `Begin ${round.displayLabel}` : `View ${round.displayLabel}`}</span>
               </button>
-            ))}
+            })}
           </div>
           <button className="mt-6 min-h-12 w-full rounded-full border-2 border-[#0B3D2E] px-6 py-3 font-black" type="button" onClick={changeCode}>Change Code</button>
         </div>
