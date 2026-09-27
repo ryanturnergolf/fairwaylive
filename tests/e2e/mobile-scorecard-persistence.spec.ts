@@ -2980,7 +2980,7 @@ test("tournament QR scorecard link does not use hardcoded localhost", async ({ p
   });
   await gotoApp(page, `${baseUrl}/tournament/${tournamentId}`);
   await page.getByRole("button", { name: "Live Scoring" }).click();
-  await expect(page.getByText("Shared tournament data is ready for coaches and players to use on mobile scorecards.")).toBeVisible();
+  await expect(page.getByText("Tournament Readiness")).toHaveCount(0);
   await page.getByRole("button", { name: "Live Scoring" }).click();
   await expect(page.getByRole("button", { name: "Open QR code for Ava Green" })).toBeVisible();
   await page.getByRole("button", { name: "Open QR code for Ava Green" }).click();
