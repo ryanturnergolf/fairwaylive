@@ -6,7 +6,7 @@ import type { LegacyScorecardRow } from "../tournamentModel";
 
 export type QualifyingAdminMarkerMutation = {
   scoreEntry: SaveScoreEntryInput;
-  holeEntry: SaveScoreHoleEntryInput;
+  holeEntries: SaveScoreHoleEntryInput[];
 };
 
 export const projectQualifyingAdminScorecardRows = ({
@@ -75,6 +75,21 @@ export const buildQualifyingAdminMarkerMutation = ({
   }
 
   const entryStatus = normalizedScores.every((score) => score > 0) ? "complete" : "in_progress";
+  const holeEntries = normalizedScores.flatMap((score, index) => {
+    const authoritativeHoleNumber = Number(holeNumbers[index]) || 0;
+    if (score <= 0 || authoritativeHoleNumber <= 0) return [];
+    return [{
+      tournamentId,
+      roundNumber,
+      playerId: subjectPlayerId,
+      enteredByPlayerId: assignedMarkerPlayerId,
+      markerForPlayerId: subjectPlayerId,
+      holeNumber: authoritativeHoleNumber,
+      strokes: score,
+      entrySource: "marker",
+      entryStatus,
+    } satisfies SaveScoreHoleEntryInput];
+  });
   return {
     scoreEntry: {
       tournamentId,
@@ -85,16 +100,6 @@ export const buildQualifyingAdminMarkerMutation = ({
       total: normalizedScores.reduce((sum, score) => sum + score, 0),
       entryStatus,
     },
-    holeEntry: {
-      tournamentId,
-      roundNumber,
-      playerId: subjectPlayerId,
-      enteredByPlayerId: assignedMarkerPlayerId,
-      markerForPlayerId: subjectPlayerId,
-      holeNumber,
-      strokes,
-      entrySource: "marker",
-      entryStatus,
-    },
+    holeEntries,
   };
 };

@@ -81,7 +81,9 @@ test("admin Qualifying entry preserves marker identity and exact configured R2 h
     total: 45,
     entryStatus: "complete",
   });
-  expect(mutation?.holeEntry).toMatchObject({
+  expect(mutation?.holeEntries).toHaveLength(9);
+  expect(mutation?.holeEntries.map((entry) => entry.holeNumber)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  expect(mutation?.holeEntries[7]).toMatchObject({
     playerId: "dylan",
     enteredByPlayerId: "grayson",
     markerForPlayerId: "dylan",
@@ -104,8 +106,42 @@ test("admin Qualifying entry stays incomplete until every configured hole is sco
   });
 
   expect(mutation?.scoreEntry.entryStatus).toBe("in_progress");
-  expect(mutation?.holeEntry.holeNumber).toBe(4);
-  expect(mutation?.holeEntry.entryStatus).toBe("in_progress");
+  expect(mutation?.holeEntries).toHaveLength(4);
+  expect(mutation?.holeEntries.map((entry) => entry.holeNumber)).toEqual([1, 2, 3, 4]);
+  expect(mutation?.holeEntries.every((entry) => entry.entryStatus === "in_progress")).toBe(true);
+});
+
+test("completed admin card uses one canonical batch containing every configured hole", () => {
+  const mutation = buildQualifyingAdminMarkerMutation({
+    tournamentId: "tournament",
+    roundNumber: 1,
+    subjectPlayerId: "aj",
+    assignedMarkerPlayerId: "colin",
+    holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    holeScores: [4, 4, 4, 4, 4, 4, 4, 4, 4],
+    holeIndex: 8,
+  });
+
+  expect(mutation?.scoreEntry).toMatchObject({
+    playerId: "aj",
+    enteredByPlayerId: "colin",
+    roundNumber: 1,
+    holeScores: [4, 4, 4, 4, 4, 4, 4, 4, 4],
+    total: 36,
+    entryStatus: "complete",
+  });
+  expect(mutation?.holeEntries).toEqual(
+    [1, 2, 3, 4, 5, 6, 7, 8, 9].map((holeNumber) => expect.objectContaining({
+      tournamentId: "tournament",
+      roundNumber: 1,
+      playerId: "aj",
+      enteredByPlayerId: "colin",
+      markerForPlayerId: "aj",
+      holeNumber,
+      strokes: 4,
+      entryStatus: "complete",
+    }))
+  );
 });
 
 const session: QualifyingSession = {

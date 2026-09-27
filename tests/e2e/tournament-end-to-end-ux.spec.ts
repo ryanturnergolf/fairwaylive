@@ -151,7 +151,7 @@ test.describe("Tournament end-to-end presentation contract", () => {
     const scorecard = source("app/scorecard/[playerId]/page.tsx");
 
     expect(workspace).toContain('<nav aria-label="Tournament workspace sections"');
-    expect(workspace).toContain('aria-labelledby="tournament-readiness-title"');
+    expect(workspace).not.toContain('aria-labelledby="tournament-readiness-title"');
     expect(sharing).toContain('aria-labelledby="mobile-score-entry-title"');
     expect(sharing).toContain("max-h-[calc(100dvh-2rem)]");
     expect(scorecard).toContain("pb-[calc(7rem+env(safe-area-inset-bottom))]");

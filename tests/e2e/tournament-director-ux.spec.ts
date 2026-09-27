@@ -12,7 +12,7 @@ test.describe("Tournament Director presentation contract", () => {
     expect(page).toContain('aria-label="Tournament workspace sections"');
     expect(page).toContain("aria-pressed={activeTab === tab}");
     expect(page).toContain('aria-label={`${activeTab} workspace`}');
-    expect(page).toContain('aria-labelledby="tournament-readiness-title"');
+    expect(page).not.toContain('aria-labelledby="tournament-readiness-title"');
   });
 
   test("workspace shell and tabs remain contained on mobile", () => {
@@ -24,12 +24,11 @@ test.describe("Tournament Director presentation contract", () => {
     expect(page).toContain("break-words text-3xl");
   });
 
-  test("readiness distinguishes passing and open checklist states", () => {
+  test("routine workspace does not expose the internal readiness checklist", () => {
     const page = source("app/tournament/[id]/page.tsx");
 
-    expect(page).toContain("border-[#B9D8C3] bg-[#ECF8EF]");
-    expect(page).toContain("border-[#E2D2B5] bg-[#FFF9ED]");
-    expect(page).toContain('{hasPassed ? "Pass" : "Open"}');
+    expect(page).not.toContain("Tournament Readiness");
+    expect(page).not.toContain('{hasPassed ? "Pass" : "Open"}');
   });
 
   test("director dialogs are labeled, viewport bounded, and scrollable", () => {

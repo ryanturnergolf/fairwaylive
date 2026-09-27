@@ -389,6 +389,10 @@ export const saveHoleStatistics = async (
   return saveScoreHoleEntry(input);
 };
 
+export const saveHoleStatisticsBatch = async (
+  inputs: SaveHoleStatisticsInput[]
+): Promise<ScoreHoleEntryRow[]> => saveScoreHoleEntries(inputs);
+
 export const resolveOfficialScore = async ({
   tournamentId,
   roundNumber,

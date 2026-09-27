@@ -16,8 +16,18 @@ import {
 import { getSupabaseAuthAccessToken } from "../supabaseClient";
 import { resolveQualifyingParticipantGroupConfiguration } from "./qualifyingParticipantGroupService";
 
-export const getQualifyingTournamentWorkspaceHref = (backingTournamentId: string) =>
-  `/tournament/${encodeURIComponent(backingTournamentId)}`;
+export const getQualifyingTournamentWorkspaceHref = (
+  backingTournamentId: string,
+  options: { roundNumber?: number; tab?: string } = {}
+) => {
+  const path = `/tournament/${encodeURIComponent(backingTournamentId)}`;
+  const parameters = new URLSearchParams();
+  if (Number.isInteger(options.roundNumber) && Number(options.roundNumber) > 0) {
+    parameters.set("round", String(options.roundNumber));
+  }
+  if (options.tab) parameters.set("tab", options.tab);
+  return parameters.size > 0 ? `${path}?${parameters.toString()}` : path;
+};
 
 export const loadQualifyingSessionFoundation = async (
   sessionId: string

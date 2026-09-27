@@ -176,7 +176,8 @@ test("Qualifying workspace writes admin marker scores through both canonical dur
   const statistics = source("app/lib/services/statisticsService.ts");
   expect(workspace).toContain("buildQualifyingAdminMarkerMutation");
   expect(workspace).toContain("saveHole(mutation.scoreEntry)");
-  expect(workspace).toContain("saveHoleStatistics(mutation.holeEntry)");
+  expect(workspace).toContain("saveHoleStatisticsBatch(mutation.holeEntries)");
+  expect(workspace).toContain("savedHoleEntries.length !== mutation.holeEntries.length");
   expect(workspace).toContain("durablePlayer.marker_player_id");
   expect(workspace).toContain("qualifyingAdminSaveQueueRef.current = qualifyingAdminSaveQueueRef.current");
   expect(workspace).toContain("const holeNumber = displayHoleNumbers[index] ?? index + 1");

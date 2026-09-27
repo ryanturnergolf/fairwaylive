@@ -15,9 +15,10 @@ import {
 import { advanceQualifyingOperationalRound, buildQualifyingRoundProgressionState, type QualifyingRoundProgressionState } from "../../lib/services/qualifyingRoundProgressionService";
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
+import QualifyingLeaderboardPanel from "./QualifyingLeaderboardPanel";
 import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
 
-const workspaceTabs = ["Overview", "Players", "Rounds", "Groups", "Scoring", "Results"] as const;
+const workspaceTabs = ["Overview", "Players", "Rounds", "Groups", "Scoring", "Results", "Leaderboard"] as const;
 type WorkspaceTab = typeof workspaceTabs[number];
 
 export default function QualifyingSessionsPage() {
@@ -312,8 +313,11 @@ export default function QualifyingSessionsPage() {
                   {activeTab === "Rounds" ? (
                     <section aria-label="Qualifying rounds">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        {(foundation.configuredRounds ?? []).map((round) => <div key={round.qualifyingRoundId} className="rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="font-black">{round.displayLabel}</p><p className="mt-1 text-sm font-semibold text-[#51635C]">Day {round.qualifyingDay} · Segment {round.qualifyingSegment}</p></div>)}
+                        {(foundation.configuredRounds ?? []).map((round) => <div key={round.qualifyingRoundId} className="rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="font-black">{round.displayLabel}</p><p className="mt-1 text-sm font-semibold text-[#51635C]">Day {round.qualifyingDay} · Segment {round.qualifyingSegment}</p>{session.tournamentId ? <Link href={getQualifyingTournamentWorkspaceHref(session.tournamentId, { roundNumber: round.roundNumber, tab: "Live Scoring" })} className="mt-3 inline-flex min-h-11 items-center rounded-full border border-[#0B3D2E] px-4 py-2 text-xs font-black">Open {round.displayLabel}</Link> : null}</div>)}
                       </div>
+                      <p className="mt-4 rounded-xl border border-[#D6E0D8] bg-[#F8FBF8] p-4 text-sm font-semibold text-[#51635C]">
+                        Coaches can open and edit any configured round. Completing a round records administrative progress; it does not control coach access or unlock player rounds.
+                      </p>
                   {session.status === "active" && (foundation.configuredRounds?.length ?? 0) > 1 ? (
                     <div className="mt-4 rounded-lg border border-[#D6E0D8] bg-white p-4">
                       <div aria-label="Current scoring round" className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">
@@ -390,6 +394,13 @@ export default function QualifyingSessionsPage() {
                           }}
                         />
                         </div>
+                      ) : null}
+                      {session.tournamentId && activeTab === "Leaderboard" ? (
+                        <QualifyingLeaderboardPanel
+                          tournamentId={session.tournamentId}
+                          sessionName={session.name}
+                          isVisible
+                        />
                       ) : null}
                     </>
                   ) : null}

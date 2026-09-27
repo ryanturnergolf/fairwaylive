@@ -14,7 +14,6 @@ import {
   loadTournamentReadiness,
   type TournamentReadiness,
   type TournamentReadinessChecks,
-  type TournamentReadinessStatus,
 } from "../../lib/services/tournamentReadinessService";
 import {
   getTournamentFinalizationRecord,
@@ -25,7 +24,7 @@ import { loadComparisonScores, saveHole } from "../../lib/services/scoreService"
 import {
   loadTournamentHoleStatistics,
   resolveOfficialScore,
-  saveHoleStatistics,
+  saveHoleStatisticsBatch,
   type OfficialScoreResolutionChoice,
 } from "../../lib/services/statisticsService";
 import {
@@ -152,28 +151,7 @@ const readinessCheckLabels: Record<keyof TournamentReadinessChecks, string> = {
   latestSnapshotAvailable: "Shared state snapshot available",
 };
 
-const readinessStatusStyles: Record<TournamentReadinessStatus, string> = {
-  Draft: "border-[#D8C8AA] bg-[#F6F1E6] text-[#725D37]",
-  Syncing: "border-[#7DA7BE] bg-[#EDF6FA] text-[#255D78]",
-  Ready: "border-[#77B98E] bg-[#ECF8EF] text-[#146233]",
-  Warning: "border-[#E0B14F] bg-[#FFF7E3] text-[#7A5610]",
-  Error: "border-[#D9857F] bg-[#FFF0EE] text-[#8D2D24]",
-};
-
 const readinessCheckEntries = Object.entries(readinessCheckLabels) as [keyof TournamentReadinessChecks, string][];
-
-const formatReadinessCheckedAt = (checkedAt: string) => {
-  const checkedDate = new Date(checkedAt);
-
-  if (Number.isNaN(checkedDate.getTime())) {
-    return "Not checked yet";
-  }
-
-  return checkedDate.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
 
 type TournamentMeta = {
   id: string;
@@ -789,7 +767,6 @@ export default function TournamentPage() {
     tournamentId,
   ]);
 
-  const readinessOpenItems = tournamentReadiness?.reasons.filter((reason) => reason.severity !== "pass") ?? [];
   const readinessBlockingReasons = tournamentReadiness?.reasons.filter((reason) => reason.severity === "error" || reason.severity === "warning") ?? [];
   const qrSharedTournamentId =
     sharedTournamentId ||
@@ -1057,6 +1034,7 @@ export default function TournamentPage() {
   };
 
   const roundHydrationRequestRef = useRef(0);
+  const requestedWorkspaceStateAppliedRef = useRef(false);
 
   const applyRoundHydration = useCallback(
     (roundNumber: number) => {
@@ -1094,6 +1072,24 @@ export default function TournamentPage() {
     if (requestId !== roundHydrationRequestRef.current) return;
     applyRoundHydration(nextRoundNumber);
   };
+
+  useEffect(() => {
+    if (!isClientMounted || requestedWorkspaceStateAppliedRef.current || roundManager.roundOptions.length === 0) {
+      return;
+    }
+    const parameters = new URLSearchParams(window.location.search);
+    const requestedRound = Number(parameters.get("round"));
+    const requestedTab = parameters.get("tab") ?? "";
+    const configuredRound = roundManager.roundOptions.find((round) => round.roundNumber === requestedRound);
+    if (requestedRound > 0 && !configuredRound) return;
+    if (configuredRound && requestedRound !== normalizedRoundSetup.roundNumber) {
+      applyRoundHydration(requestedRound);
+    }
+    if (requestedTab && visibleTabs.includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+    requestedWorkspaceStateAppliedRef.current = true;
+  }, [applyRoundHydration, isClientMounted, normalizedRoundSetup.roundNumber, roundManager.roundOptions, visibleTabs]);
 
   const handleMakeSelectedRoundOperational = async () => {
     if (!sharedTournamentId || !selectedRoundOption || isTournamentFinalized) return;
@@ -1214,10 +1210,13 @@ export default function TournamentPage() {
 
     qualifyingAdminSaveQueueRef.current = qualifyingAdminSaveQueueRef.current
       .then(async () => {
-        await Promise.all([
+        const [, savedHoleEntries] = await Promise.all([
           saveHole(mutation.scoreEntry),
-          saveHoleStatistics(mutation.holeEntry),
+          saveHoleStatisticsBatch(mutation.holeEntries),
         ]);
+        if (savedHoleEntries.length !== mutation.holeEntries.length) {
+          throw new Error("The complete Qualifying card was not durably saved.");
+        }
         await refreshReviewResolutionData();
       })
       .catch((error) => {
@@ -1669,7 +1668,7 @@ export default function TournamentPage() {
                     <p className="mt-1 text-sm font-black text-[#0B3D2E]">
                       {operationalRoundOption?.name ?? "Not set"}
                     </p>
-                    {!isTournamentFinalized && selectedRoundOption && selectedRoundOption.roundId !== operationalCurrentRoundId ? (
+                    {!isQualifyingTournament && !isTournamentFinalized && selectedRoundOption && selectedRoundOption.roundId !== operationalCurrentRoundId ? (
                       <button
                         type="button"
                         onClick={handleMakeSelectedRoundOperational}
@@ -1677,6 +1676,11 @@ export default function TournamentPage() {
                       >
                         Make {selectedRoundOption.name} Current
                       </button>
+                    ) : null}
+                    {isQualifyingTournament ? (
+                      <p className="mt-2 max-w-xs text-xs font-semibold leading-5 text-[#51635C]">
+                        Coach round selection is independent of player access and event completion.
+                      </p>
                     ) : null}
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
@@ -1707,82 +1711,6 @@ export default function TournamentPage() {
               ) : null}
             </section>
 
-            <section aria-labelledby="tournament-readiness-title" className="mt-4 rounded-[24px] border border-[#E8DCC8] bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h3 id="tournament-readiness-title" className="text-[10px] font-black uppercase tracking-[0.3em] text-[#B8892D]">
-                      Tournament Readiness
-                    </h3>
-                    <span className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] ${tournamentReadiness ? readinessStatusStyles[tournamentReadiness.status] : readinessStatusStyles.Syncing}`}>
-                      {tournamentReadiness?.status ?? "Syncing"}
-                    </span>
-                    {tournamentReadiness?.isSafeToShare ? (
-                      <span className="rounded-full border border-[#77B98E] bg-[#ECF8EF] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#146233]">
-                        Ready for Mobile Scoring
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-[#51635C]">
-                    Last checked: {tournamentReadiness ? formatReadinessCheckedAt(tournamentReadiness.checkedAt) : "Checking..."}
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-[#51635C]">
-                    {tournamentReadiness?.isSafeToShare
-                      ? "Shared tournament data is ready for coaches and players to use on mobile scorecards."
-                      : readinessOpenItems.length > 0
-                        ? `Remaining: ${readinessOpenItems.map((reason) => reason.message).join(" ")}`
-                        : "Checking tournament data before mobile scoring is shared."}
-                  </p>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 xl:w-[560px]">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
-                      Checklist
-                    </p>
-                    <div className="mt-2 grid gap-2">
-                      {readinessCheckEntries.map(([checkKey, label]) => {
-                        const hasPassed = Boolean(tournamentReadiness?.checks[checkKey]);
-
-                        return (
-                          <div key={checkKey} className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 ${hasPassed ? "border-[#B9D8C3] bg-[#ECF8EF]" : "border-[#E2D2B5] bg-[#FFF9ED]"}`}>
-                            <span className="text-xs font-bold text-[#0B3D2E]">{label}</span>
-                            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${hasPassed ? "bg-[#ECF8EF] text-[#146233]" : "bg-[#F6F1E6] text-[#725D37]"}`}>
-                              {hasPassed ? "Pass" : "Open"}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#0B3D2E]/65">
-                      Blocking Reasons
-                    </p>
-                    <div className="mt-2 space-y-2">
-                      {readinessBlockingReasons.length > 0 ? (
-                        readinessBlockingReasons.map((reason) => (
-                          <div key={reason.code} className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
-                            <p className="text-xs font-bold leading-5 text-[#51635C]">
-                              {reason.message}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2">
-                          <p className="text-xs font-bold leading-5 text-[#51635C]">
-                            {tournamentReadiness?.isSafeToShare
-                              ? "No blockers found."
-                              : "No hard blockers found. Complete the open checklist items before sharing."}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
             {isCoachAuthenticated ? (
               <QualifyingAccessContext
                 backingTournamentId={sharedTournamentId || tournamentId}

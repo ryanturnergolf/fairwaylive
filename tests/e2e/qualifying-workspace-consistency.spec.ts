@@ -9,6 +9,8 @@ const source = (relativePath: string) =>
 test("every Qualifying workspace action uses the canonical backing Tournament route", () => {
   const tournamentId = "11ddab64-36fa-4522-b9b5-cb07372bd214";
   expect(getQualifyingTournamentWorkspaceHref(tournamentId)).toBe(`/tournament/${tournamentId}`);
+  expect(getQualifyingTournamentWorkspaceHref(tournamentId, { roundNumber: 2, tab: "Live Scoring" }))
+    .toBe(`/tournament/${tournamentId}?round=2&tab=Live+Scoring`);
   expect(source("app/coach-dashboard/qualifying-manager/page.tsx"))
     .toContain("getQualifyingTournamentWorkspaceHref(");
   expect(source("app/coach-dashboard/qualifying-manager/QualifyingResultsPanel.tsx"))
@@ -18,15 +20,38 @@ test("every Qualifying workspace action uses the canonical backing Tournament ro
 test("Qualifying management uses the shared Event Workspace hierarchy with progressive sections", () => {
   const manager = source("app/coach-dashboard/qualifying-manager/page.tsx");
   const events = source("app/coach-dashboard/events/page.tsx");
-  expect(manager).toContain('["Overview", "Players", "Rounds", "Groups", "Scoring", "Results"]');
+  expect(manager).toContain('["Overview", "Players", "Rounds", "Groups", "Scoring", "Results", "Leaderboard"]');
   expect(manager).toContain("Back to Events");
   expect(manager).toContain("workspace sections");
   expect(manager).toContain('activeTab === "Rounds"');
   expect(manager).toContain('activeTab === "Scoring"');
   expect(manager).toContain('activeTab === "Results"');
+  expect(manager).toContain('activeTab === "Leaderboard"');
   expect(manager).toContain("<QualifyingAccessPanel");
   expect(manager).toContain("<QualifyingResultsPanel");
+  expect(manager).toContain("<QualifyingLeaderboardPanel");
   expect(events).toContain("qualifyingWorkspace");
+});
+
+test("coach round selection is independent from operational progression and routine readiness UI is hidden", () => {
+  const tournamentWorkspace = source("app/tournament/[id]/page.tsx");
+  const qualifyingWorkspace = source("app/coach-dashboard/qualifying-manager/page.tsx");
+  expect(tournamentWorkspace).toContain("requestedWorkspaceStateAppliedRef");
+  expect(tournamentWorkspace).toContain("applyRoundHydration(requestedRound)");
+  expect(tournamentWorkspace).toContain("!isQualifyingTournament && !isTournamentFinalized");
+  expect(qualifyingWorkspace).toContain("Coaches can open and edit any configured round");
+  expect(tournamentWorkspace).not.toContain('aria-labelledby="tournament-readiness-title"');
+  expect(tournamentWorkspace).not.toContain("Tournament Readiness");
+});
+
+test("Qualifying Leaderboard reuses public authority and exposes the shareable URL actions", () => {
+  const leaderboard = source("app/coach-dashboard/qualifying-manager/QualifyingLeaderboardPanel.tsx");
+  expect(leaderboard).toContain('createShareToken(tournamentId, "live_leaderboard")');
+  expect(leaderboard).toContain("resolveShareToken(cachedToken)");
+  expect(leaderboard).toContain("loadShareTokenLeaderboard");
+  expect(leaderboard).toContain("Copy Leaderboard Link");
+  expect(leaderboard).toContain("View Public Leaderboard");
+  expect(leaderboard).toContain("/leaderboard?");
 });
 
 test("Tournament hydration always verifies durable round and scorecard coverage", () => {
