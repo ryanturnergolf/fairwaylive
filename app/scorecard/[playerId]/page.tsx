@@ -1112,6 +1112,12 @@ function ReciprocalPlayerScorecardPage() {
           loadedMarkerScores = normalizeHoleScores(stableMarkerEntry.hole_scores, holeCount);
         }
 
+        const stableReviewMarkerEntry = sharedScores.find(
+          (entry) =>
+            resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&
+            resolvedPlayerIds.assignedMarkerPlayerIds.includes(String(entry.entered_by_player_id))
+        );
+
         const getSharedScore = (playerIds: string[], enteredByPlayerIds?: string[], preferMarkerEntry = false) => {
           const matchingScores = sharedScores
             .filter((entry) => playerIds.includes(String(entry.player_id)) && hasAnyHoleScore(entry.hole_scores))
@@ -1182,7 +1188,13 @@ function ReciprocalPlayerScorecardPage() {
             SAVE_FINALIZATION_CHECK_TIMEOUT_MS
           );
           if (!statisticEntries) throw new Error("Statistics hydration timed out.");
-          const projectCanonicalHoleScores = (playerIds: string[], enteredByPlayerIds: string[]) => {
+          const canOverlayLiveHoles = (entry: (typeof sharedScores)[number] | undefined) =>
+            !entry || (!entry.submitted_at && !["complete", "submitted", "verified", "official"].includes(entry.entry_status));
+          const projectCanonicalHoleScores = (
+            baseScores: number[] | null,
+            playerIds: string[],
+            enteredByPlayerIds: string[]
+          ) => {
             const matchingEntries = statisticEntries.filter(
               (entry) =>
                 !entry.is_official &&
@@ -1194,29 +1206,35 @@ function ReciprocalPlayerScorecardPage() {
             const scoresByHole = new Map(
               matchingEntries.map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
             );
-            return scorecard.holes.map((hole) => scoresByHole.get(hole.holeNumber) ?? 0);
+            const normalizedBaseScores = normalizeHoleScores(baseScores ?? undefined, holeCount);
+            return scorecard.holes.map((hole, index) =>
+              scoresByHole.get(hole.holeNumber) ?? normalizedBaseScores[index] ?? 0
+            );
           };
-          const canonicalSelfScores = projectCanonicalHoleScores(
+          const canonicalSelfScores = canOverlayLiveHoles(stableSelfEntry) ? projectCanonicalHoleScores(
+            loadedSelfScores,
             resolvedPlayerIds.selectedPlayerIds,
             resolvedPlayerIds.selectedPlayerIds
-          );
+          ) : null;
           if (canonicalSelfScores) {
             loadedSelfScores = canonicalSelfScores;
             loadedReviewSelfScores = canonicalSelfScores;
             stableSelfRowExists = true;
           }
-          const canonicalMarkedPlayerScores = projectCanonicalHoleScores(
+          const canonicalMarkedPlayerScores = canOverlayLiveHoles(stableMarkerEntry) ? projectCanonicalHoleScores(
+            loadedMarkerScores,
             resolvedPlayerIds.markedPlayerIds,
             resolvedPlayerIds.selectedPlayerIds
-          );
+          ) : null;
           if (canonicalMarkedPlayerScores) {
             loadedMarkerScores = canonicalMarkedPlayerScores;
             stableMarkerRowExists = true;
           }
-          const canonicalReviewMarkerScores = projectCanonicalHoleScores(
+          const canonicalReviewMarkerScores = canOverlayLiveHoles(stableReviewMarkerEntry) ? projectCanonicalHoleScores(
+            loadedReviewMarkerScores,
             resolvedPlayerIds.selectedPlayerIds,
             resolvedPlayerIds.assignedMarkerPlayerIds
-          );
+          ) : null;
           if (canonicalReviewMarkerScores) {
             loadedReviewMarkerScores = canonicalReviewMarkerScores;
           }

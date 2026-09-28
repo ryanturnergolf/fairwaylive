@@ -2564,6 +2564,9 @@ test("current-player statistics hydrate into editable controls without writes", 
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
   await waitForMobileScorecardControls(page);
   await waitForSharedScoreHydration(sharedStore);
+  await expect(page.getByText("Hole 2", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect(page.getByText("Hole 1", { exact: true })).toBeVisible();
 
   await expect(page.getByRole("group", { name: "Fairway Hit" }).getByRole("button", { name: "Yes" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("group", { name: "Green in Regulation" }).getByRole("button", { name: "No" })).toHaveAttribute("aria-pressed", "true");
@@ -3350,22 +3353,15 @@ test("desktop mobile scorecard hydrates phone shared scores", async ({ page }) =
   await expect
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-1" && row.entered_by_player_id === "player-1")?.hole_scores[3])
     .toBe(4);
-  holeStatsStore.savedHoleRows.push(...[1, 2, 3, 4].map((holeNumber) => buildScoreHoleEntry({
-    tournament_id: sharedTournamentId,
-    round_number: 1,
-    player_id: "player-1",
-    entered_by_player_id: "player-1",
-    hole_number: holeNumber,
-    strokes: sharedStore.savedScoreRows.find((row) => row.player_id === "player-1")?.hole_scores[holeNumber - 1],
-    fairway_hit: holeNumber === 3 ? null : true,
-    green_in_regulation: true,
-    putts: 2,
-    entry_source: "self",
-    entry_status: "live",
-  })));
   await expect
     .poll(() => sharedStore.savedScoreRows.find((row) => row.player_id === "player-2" && row.entered_by_player_id === "player-1")?.hole_scores[3])
     .toBe(4);
+  await expect.poll(() => holeStatsStore.savedHoleRows.filter((row) =>
+    row.round_number === 1 &&
+    row.entered_by_player_id === "player-1" &&
+    ["player-1", "player-2"].includes(row.player_id) &&
+    row.hole_number <= 4
+  ).length).toBe(8);
 
   await page.evaluate(() => window.localStorage.clear());
   await gotoApp(page, `${baseUrl}/scorecard/player-1?tournamentId=${sharedTournamentId}&pairing=1`);
@@ -3616,6 +3612,11 @@ test("secure shared scorecard ignores a stale local Tournament snapshot and hydr
       (row) => row.player_id === "player-1" && row.entered_by_player_id === "player-1"
     )?.hole_scores[0]
   ).toBe(4);
+  await expect.poll(() => holeStatsStore.savedHoleRows.find((row) =>
+    row.player_id === "player-1" &&
+    row.entered_by_player_id === "player-1" &&
+    row.hole_number === 1
+  )?.strokes).toBe(4);
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByText("Hole 4", { exact: true })).toBeVisible();

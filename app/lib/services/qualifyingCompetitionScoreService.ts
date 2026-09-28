@@ -26,7 +26,14 @@ export const selectQualifyingCompetitionScore = ({
     : undefined;
   const marker = assigned ?? playerRows.find((entry) => String(entry.entered_by_player_id) !== playerId);
   const primary = scoringMode === "designated_scorer" ? (assigned ?? marker ?? self) : (self ?? marker);
+  const primaryIsFinal = Boolean(
+    primary && (
+      primary.submitted_at ||
+      ["complete", "submitted", "verified", "official"].includes(primary.entry_status)
+    )
+  );
   const liveRows = officialEntries.filter((entry) =>
+    !primaryIsFinal &&
     !entry.is_official &&
     String(entry.player_id) === playerId &&
     Number(entry.strokes) > 0
