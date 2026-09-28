@@ -16,6 +16,7 @@ import { advanceQualifyingOperationalRound, buildQualifyingRoundProgressionState
 import QualifyingAccessPanel from "./QualifyingAccessPanel";
 import QualifyingResultsPanel from "./QualifyingResultsPanel";
 import QualifyingLeaderboardPanel from "./QualifyingLeaderboardPanel";
+import QualifyingPairingsPanel from "./QualifyingPairingsPanel";
 import DesignatedScorerAssignments from "./DesignatedScorerAssignments";
 
 const workspaceTabs = ["Overview", "Players", "Rounds", "Groups", "Scoring", "Results", "Leaderboard"] as const;
@@ -301,7 +302,21 @@ export default function QualifyingSessionsPage() {
                       {session.selectedPlayers.map((player, index) => <div key={player.id} className="flex min-h-12 items-center gap-3 rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] px-3 py-2"><span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[#D9D0C0] text-xs font-black">{index + 1}</span><span><span className="block font-black">{player.name}</span><span className="block text-xs font-semibold text-[#51635C]">{player.classYear || "Roster player"}</span></span></div>)}
                     </section>
                   ) : null}
-                  {activeTab === "Groups" ? <section aria-label="Qualifying groups" className="grid gap-3 sm:grid-cols-2">{session.groups.map((group) => <div key={group.id} className="rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-4"><p className="font-black">{group.name}</p><p className="mt-2 text-sm text-[#51635C]">{group.playerIds.map((id) => session.selectedPlayers.find((player) => player.id === id)?.name).filter(Boolean).join(", ") || "No players assigned"}</p></div>)}</section> : null}
+                  {activeTab === "Groups" ? (
+                    <QualifyingPairingsPanel
+                      foundation={foundation}
+                      onSaved={(roundNumber, groups) => setSessions((current) => current.map((item) => item.session.id === session.id
+                        ? {
+                            ...item,
+                            roundPairings: [
+                              ...(item.roundPairings ?? []).filter((group) => group.roundNumber !== roundNumber),
+                              ...groups,
+                            ],
+                          }
+                        : item
+                      ))}
+                    />
+                  ) : null}
                   {activeTab === "Groups" && session.scoringMode === "designated_scorer" && session.status === "provisioned" ? (
                     <DesignatedScorerAssignments
                       foundation={foundation}

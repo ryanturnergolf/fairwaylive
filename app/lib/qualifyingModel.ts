@@ -126,6 +126,20 @@ export type ConfiguredQualifyingRound = {
   qualifyingSegment: number;
 };
 
+export type QualifyingRoundPairingPlayer = {
+  playerId: string;
+  playerName: string;
+  position: number;
+  markerPlayerId: string | null;
+};
+
+export type QualifyingRoundPairingGroup = {
+  roundNumber: number;
+  groupNumber: number;
+  startingHole: number;
+  players: QualifyingRoundPairingPlayer[];
+};
+
 export type QualifyingScorerAssignment = {
   id: string;
   qualifyingSessionId: string;
@@ -142,6 +156,7 @@ export type QualifyingSessionFoundation = {
   rounds: QualifyingRoundMapping[];
   scorerAssignments: QualifyingScorerAssignment[];
   configuredRounds?: ConfiguredQualifyingRound[];
+  roundPairings?: QualifyingRoundPairingGroup[];
 };
 
 export type CreateQualifyingSessionInput = {

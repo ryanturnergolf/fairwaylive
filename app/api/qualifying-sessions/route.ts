@@ -45,7 +45,8 @@ export async function GET(request: Request) {
     if (sessionError) throw sessionError;
 
     const sessionIds = (sessions ?? []).map((session) => String(session.id));
-    const [{ data: days, error: dayError }, { data: configuredRounds, error: roundError }, { data: tournamentRounds, error: tournamentRoundError }, { data: participants, error: participantError }, { data: groups, error: groupError }] = sessionIds.length > 0
+    const tournamentIds = (sessions ?? []).map((session) => session.tournament_id).filter((id): id is string => Boolean(id));
+    const [{ data: days, error: dayError }, { data: configuredRounds, error: roundError }, { data: tournamentRounds, error: tournamentRoundError }, { data: participants, error: participantError }, { data: groups, error: groupError }, { data: tournamentPlayers, error: tournamentPlayerError }] = sessionIds.length > 0
       ? await Promise.all([
         supabase
           .from("qualifying_days")
@@ -71,17 +72,27 @@ export async function GET(request: Request) {
           .select("id,qualifying_session_id,group_number,display_order")
           .in("qualifying_session_id", sessionIds)
           .order("display_order"),
+        tournamentIds.length > 0
+          ? supabase
+              .from("tournament_players")
+              .select("tournament_id,player_id,player_name,round_number,group_number,starting_hole,marker_player_id,position")
+              .in("tournament_id", tournamentIds)
+              .order("round_number")
+              .order("group_number")
+              .order("position")
+          : Promise.resolve({ data: [], error: null }),
       ])
       : [
         { data: [], error: null }, { data: [], error: null },
         { data: [], error: null }, { data: [], error: null },
-        { data: [], error: null },
+        { data: [], error: null }, { data: [], error: null },
       ];
     if (dayError) throw dayError;
     if (roundError) throw roundError;
     if (tournamentRoundError) throw tournamentRoundError;
     if (participantError) throw participantError;
     if (groupError) throw groupError;
+    if (tournamentPlayerError) throw tournamentPlayerError;
 
     const groupIds = (groups ?? []).map((group) => String(group.id));
     const { data: members, error: memberError } = groupIds.length > 0
@@ -139,6 +150,29 @@ export async function GET(request: Request) {
             return [round.id, mappedTournamentRound?.id ?? null];
           })
         );
+        const sessionRoundPairings = orderedConfiguredRounds.flatMap((round, roundIndex) => {
+          const roundNumber = roundIndex + 1;
+          const roundPlayers = (tournamentPlayers ?? []).filter((player) =>
+            player.tournament_id === session.tournament_id &&
+            Number(player.round_number) === roundNumber &&
+            player.group_number !== null
+          );
+          const groupNumbers = [...new Set(roundPlayers.map((player) => Number(player.group_number)))].sort((left, right) => left - right);
+          return groupNumbers.map((groupNumber) => ({
+            roundNumber,
+            groupNumber,
+            startingHole: Number(roundPlayers.find((player) => Number(player.group_number) === groupNumber)?.starting_hole) || Number(round.starting_hole) || 1,
+            players: roundPlayers
+              .filter((player) => Number(player.group_number) === groupNumber)
+              .sort((left, right) => Number(left.position) - Number(right.position) || String(left.player_id).localeCompare(String(right.player_id)))
+              .map((player, position) => ({
+                playerId: String(player.player_id),
+                playerName: String(player.player_name),
+                position: Number(player.position) || position + 1,
+                markerPlayerId: player.marker_player_id ? String(player.marker_player_id) : null,
+              })),
+          }));
+        });
         return {
         session: {
           id: session.id,
@@ -195,6 +229,7 @@ export async function GET(request: Request) {
           qualifyingDay: (days ?? []).find((day) => day.id === round.qualifying_day_id)?.day_number ?? 0,
           qualifyingSegment: round.round_order,
         })),
+        roundPairings: sessionRoundPairings,
       };
       }),
     });
