@@ -41,7 +41,7 @@ import type { ScoreHoleEntryRow } from "../../lib/repositories/statisticsReposit
 import {
   buildTournamentRoundManagerReadModel,
   isValidPairingMutation,
-  loadTournamentPageRoundHydration,
+  loadAuthoritativeTournamentPageRoundHydration,
   normalizePairings,
   snapshotPairings,
   type TournamentRoundManagerReadModel,
@@ -1037,8 +1037,10 @@ export default function TournamentPage() {
   const requestedWorkspaceStateAppliedRef = useRef(false);
 
   const applyRoundHydration = useCallback(
-    (roundNumber: number) => {
-      const roundHydration = loadTournamentPageRoundHydration(tournamentId, roundNumber);
+    async (roundNumber: number) => {
+      const requestId = ++roundHydrationRequestRef.current;
+      const roundHydration = await loadAuthoritativeTournamentPageRoundHydration(tournamentId, roundNumber);
+      if (requestId !== roundHydrationRequestRef.current) return;
       if (!roundHydration) {
         return;
       }
@@ -1067,10 +1069,8 @@ export default function TournamentPage() {
       return;
     }
 
-    const requestId = ++roundHydrationRequestRef.current;
     await flushPendingSaves();
-    if (requestId !== roundHydrationRequestRef.current) return;
-    applyRoundHydration(nextRoundNumber);
+    await applyRoundHydration(nextRoundNumber);
   };
 
   useEffect(() => {
@@ -1083,7 +1083,7 @@ export default function TournamentPage() {
     const configuredRound = roundManager.roundOptions.find((round) => round.roundNumber === requestedRound);
     if (requestedRound > 0 && !configuredRound) return;
     if (configuredRound && requestedRound !== normalizedRoundSetup.roundNumber) {
-      applyRoundHydration(requestedRound);
+      void applyRoundHydration(requestedRound);
     }
     if (requestedTab && visibleTabs.includes(requestedTab)) {
       setActiveTab(requestedTab);

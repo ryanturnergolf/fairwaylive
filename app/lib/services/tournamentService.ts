@@ -1161,9 +1161,36 @@ const getAggregateRoundNumber = (snapshot: TournamentStateSnapshotResult | null)
   asPositiveInteger(snapshot?.envelope.uiState.scorecards.roundSetup.roundNumber) ??
   1;
 
+export const resolveTournamentAggregateRoundNumber = ({
+  durableRounds,
+  operationalCurrentRoundId,
+  snapshotRoundNumber,
+  requestedRoundNumber,
+}: {
+  durableRounds: TournamentRoundReadRow[];
+  operationalCurrentRoundId?: string | null;
+  snapshotRoundNumber: number;
+  requestedRoundNumber?: number | null;
+}) => {
+  const requested = asPositiveInteger(requestedRoundNumber);
+  if (requested && durableRounds.some((round) => round.round_number === requested)) {
+    return requested;
+  }
+
+  const operationalRoundNumber = durableRounds.find(
+    (round) => round.id === operationalCurrentRoundId
+  )?.round_number;
+  return durableRounds.length > 0
+    ? operationalRoundNumber ?? (durableRounds.some((round) => round.round_number === snapshotRoundNumber)
+      ? snapshotRoundNumber
+      : durableRounds[0].round_number)
+    : snapshotRoundNumber;
+};
+
 const loadTournamentAggregate = async (
   sharedTournamentUuidOrId: string,
-  suppliedTournamentRow?: TournamentRow | null
+  suppliedTournamentRow?: TournamentRow | null,
+  requestedRoundNumber?: number
 ): Promise<TournamentAggregate | null> => {
   if (!sharedTournamentUuidOrId) {
     return null;
@@ -1192,14 +1219,12 @@ const loadTournamentAggregate = async (
   }
 
   const durableRounds = await getTournamentRounds(sharedTournamentUuidOrId).catch(() => []);
-  const operationalRoundNumber = durableRounds.find(
-    (round) => round.id === tournamentRow?.operational_current_round_id
-  )?.round_number;
-  const roundNumber = durableRounds.length > 0
-    ? operationalRoundNumber ?? (durableRounds.some((round) => round.round_number === snapshotRoundNumber)
-      ? snapshotRoundNumber
-      : durableRounds[0].round_number)
-    : snapshotRoundNumber;
+  const roundNumber = resolveTournamentAggregateRoundNumber({
+    durableRounds,
+    operationalCurrentRoundId: tournamentRow?.operational_current_round_id,
+    snapshotRoundNumber,
+    requestedRoundNumber,
+  });
 
   const tournamentPlayers = await getTournamentPlayers(
     sharedTournamentUuidOrId,
@@ -1316,8 +1341,6 @@ const tournamentPageMetaFromSnapshotEnvelope = (
   };
 };
 
-const hydrateTournamentPageEnvelope = hydrateTournamentPageEnvelopeForRound;
-
 export const loadTournamentPageRoundHydration = (
   tournamentId: string,
   roundNumber: number
@@ -1334,27 +1357,33 @@ export const loadTournamentPageRoundHydration = (
   };
 };
 
-const loadLocalTournamentPageState = (tournamentId: string): TournamentPageLoadResult | null => {
+const loadLocalTournamentPageState = (
+  tournamentId: string,
+  requestedRoundNumber?: number
+): TournamentPageLoadResult | null => {
   const storedEnvelope = loadTournamentStorageEnvelope(tournamentId);
   if (!storedEnvelope) return null;
   return {
     status: "hydrated",
     envelope: storedEnvelope,
-    hydration: hydrateTournamentPageEnvelope(storedEnvelope),
+    hydration: hydrateTournamentPageEnvelopeForRound(storedEnvelope, requestedRoundNumber),
     tournament: null,
     sharedTournamentId: loadSharedTournamentIdFromStorage(tournamentId),
     hydrationPending: true,
   };
 };
 
-export const loadTournamentPageState = async (tournamentId: string): Promise<TournamentPageLoadResult> => {
+export const loadTournamentPageState = async (
+  tournamentId: string,
+  requestedRoundNumber?: number
+): Promise<TournamentPageLoadResult> => {
   if (typeof window === "undefined" || !tournamentId) {
     return { status: "empty", hydrationPending: false };
   }
 
-  const localResult = loadLocalTournamentPageState(tournamentId);
+  const localResult = loadLocalTournamentPageState(tournamentId, requestedRoundNumber);
   if (!localResult) {
-    const aggregate = await loadTournamentAggregate(tournamentId).catch(() => null);
+    const aggregate = await loadTournamentAggregate(tournamentId, undefined, requestedRoundNumber).catch(() => null);
     if (!aggregate?.envelope) {
       return aggregate
         ? { status: "metadata", tournament: aggregate.tournament, sharedTournamentId: aggregate.sharedTournamentId, hydrationPending: false }
@@ -1365,7 +1394,7 @@ export const loadTournamentPageState = async (tournamentId: string): Promise<Tou
     return {
       status: "hydrated",
       envelope: aggregate.envelope,
-      hydration: hydrateTournamentPageEnvelope(aggregate.envelope),
+      hydration: hydrateTournamentPageEnvelopeForRound(aggregate.envelope, requestedRoundNumber),
       tournament: tournamentPageMetaFromSnapshotEnvelope(tournamentId, aggregate.envelope),
       sharedTournamentId: aggregate.sharedTournamentId,
       hydrationPending: true,
@@ -1376,7 +1405,7 @@ export const loadTournamentPageState = async (tournamentId: string): Promise<Tou
   if (!accessToken) return localResult;
 
   const remoteTournamentId = loadSharedTournamentIdFromStorage(tournamentId) || tournamentId;
-  const aggregate = await loadTournamentAggregate(remoteTournamentId).catch(() => null);
+  const aggregate = await loadTournamentAggregate(remoteTournamentId, undefined, requestedRoundNumber).catch(() => null);
   if (!aggregate?.envelope) {
     if (localResult) return { ...localResult, authenticated: true };
     if (!aggregate) {
@@ -1400,12 +1429,24 @@ export const loadTournamentPageState = async (tournamentId: string): Promise<Tou
     return {
       status: "hydrated",
       envelope: aggregate.envelope,
-      hydration: hydrateTournamentPageEnvelope(aggregate.envelope),
+      hydration: hydrateTournamentPageEnvelopeForRound(aggregate.envelope, requestedRoundNumber),
       tournament: tournamentPageMetaFromSnapshotEnvelope(tournamentId, aggregate.envelope),
       sharedTournamentId: aggregate.sharedTournamentId,
       hydrationPending: true,
       authenticated: true,
     };
+};
+
+export const loadAuthoritativeTournamentPageRoundHydration = async (
+  tournamentId: string,
+  roundNumber: number
+): Promise<{ hydration: TournamentPageHydration; roundManager: TournamentRoundManagerReadModel } | null> => {
+  const result = await loadTournamentPageState(tournamentId, roundNumber);
+  if (result.status !== "hydrated") return null;
+  return {
+    hydration: result.hydration,
+    roundManager: buildTournamentRoundManagerReadModel(result.envelope, roundNumber),
+  };
 };
 
 export const buildStableRosterPlayerIdMap = (roster: LegacyPlayer[]) =>

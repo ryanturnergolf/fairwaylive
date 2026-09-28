@@ -135,7 +135,11 @@ export const useTournamentPageLoading = ({
 
     const loadStoredOrRemoteSnapshot = async () => {
       try {
-        const loadResult: TournamentPageLoadResult = await loadTournamentPageState(tournamentId);
+        const requestedRound = Number(new URLSearchParams(window.location.search).get("round"));
+        const loadResult: TournamentPageLoadResult = await loadTournamentPageState(
+          tournamentId,
+          Number.isInteger(requestedRound) && requestedRound > 0 ? requestedRound : undefined
+        );
         if (isCancelled) {
           return;
         }

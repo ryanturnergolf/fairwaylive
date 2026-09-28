@@ -21,6 +21,7 @@ import {
 } from "../../app/lib/services/qualifyingRoundIdentityService";
 import {
   hydrateTournamentPageEnvelopeForRound,
+  resolveTournamentAggregateRoundNumber,
 } from "../../app/lib/services/tournamentService";
 import { validateQualifyingCreation } from "../../app/lib/services/qualifyingCreationService";
 import { parseTournamentStorageEnvelope } from "../../app/lib/tournamentStorage";
@@ -111,6 +112,32 @@ test("operational current round is independent from selected workspace round", (
   envelope.tournament.settings.selectedRoundId = stableRoundId(10);
   expect(envelope.tournament.settings.operationalCurrentRoundId).toBe(stableRoundId(4));
   expect(hydrateTournamentPageEnvelopeForRound(envelope, 10).roundSetup.roundNumber).toBe("10");
+});
+
+test("an explicit coach-selected round wins over the operational round during durable hydration", () => {
+  const durableRounds = [1, 2, 3].map((roundNumber) => ({
+    id: `stable-r${roundNumber}`,
+    tournament_id: "tournament",
+    round_number: roundNumber,
+    name: `Round ${roundNumber}`,
+    hole_count: 9,
+    qualifying_session_id: "qualifying",
+    starting_hole: 1,
+    ending_hole: 9,
+    hole_sequence: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  }));
+
+  expect(resolveTournamentAggregateRoundNumber({
+    durableRounds,
+    operationalCurrentRoundId: "stable-r1",
+    snapshotRoundNumber: 1,
+    requestedRoundNumber: 2,
+  })).toBe(2);
+  expect(resolveTournamentAggregateRoundNumber({
+    durableRounds,
+    operationalCurrentRoundId: "stable-r1",
+    snapshotRoundNumber: 2,
+  })).toBe(1);
 });
 
 test("Qualifying supports 1 through 10 total rounds across days and rejects 0 or 11", () => {

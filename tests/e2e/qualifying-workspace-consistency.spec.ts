@@ -35,9 +35,13 @@ test("Qualifying management uses the shared Event Workspace hierarchy with progr
 
 test("coach round selection is independent from operational progression and routine readiness UI is hidden", () => {
   const tournamentWorkspace = source("app/tournament/[id]/page.tsx");
+  const tournamentHooks = source("app/lib/hooks/tournamentPageHooks.ts");
   const qualifyingWorkspace = source("app/coach-dashboard/qualifying-manager/page.tsx");
   expect(tournamentWorkspace).toContain("requestedWorkspaceStateAppliedRef");
-  expect(tournamentWorkspace).toContain("applyRoundHydration(requestedRound)");
+  expect(tournamentWorkspace).toContain("loadAuthoritativeTournamentPageRoundHydration(tournamentId, roundNumber)");
+  expect(tournamentWorkspace).toContain("void applyRoundHydration(requestedRound)");
+  expect(tournamentHooks).toContain('new URLSearchParams(window.location.search).get("round")');
+  expect(tournamentHooks).toContain("loadTournamentPageState(");
   expect(tournamentWorkspace).toContain("!isQualifyingTournament && !isTournamentFinalized");
   expect(qualifyingWorkspace).toContain("Coaches can open and edit any configured round");
   expect(tournamentWorkspace).not.toContain('aria-labelledby="tournament-readiness-title"');
