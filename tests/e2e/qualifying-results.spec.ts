@@ -16,6 +16,7 @@ import {
   buildQualifyingAdminMarkerMutation,
   projectQualifyingAdminScorecardRows,
 } from "../../app/lib/services/qualifyingAdminScoringService";
+import { selectQualifyingCompetitionScore } from "../../app/lib/services/qualifyingCompetitionScoreService";
 
 test("mobile-entered canonical scores hydrate the admin grid by durable player and round identity", () => {
   const rows = projectQualifyingAdminScorecardRows({
@@ -71,7 +72,6 @@ test("admin Qualifying entry preserves marker identity and exact configured R2 h
     assignedMarkerPlayerId: "grayson",
     holeNumbers: [10, 11, 12, 13, 14, 15, 16, 17, 18],
     holeScores: [5, 5, 5, 5, 5, 5, 5, 5, 5],
-    holeIndex: 7,
   });
 
   expect(mutation?.scoreEntry).toMatchObject({
@@ -102,7 +102,6 @@ test("admin Qualifying entry stays incomplete until every configured hole is sco
     assignedMarkerPlayerId: "dylan",
     holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
     holeScores: [4, 4, 4, 4, 0, 0, 0, 0, 0],
-    holeIndex: 3,
   });
 
   expect(mutation?.scoreEntry.entryStatus).toBe("in_progress");
@@ -119,7 +118,6 @@ test("completed admin card uses one canonical batch containing every configured 
     assignedMarkerPlayerId: "colin",
     holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
     holeScores: [4, 4, 4, 4, 4, 4, 4, 4, 4],
-    holeIndex: 8,
   });
 
   expect(mutation?.scoreEntry).toMatchObject({
@@ -142,6 +140,102 @@ test("completed admin card uses one canonical batch containing every configured 
       entryStatus: "complete",
     }))
   );
+});
+
+test("one admin save preserves exactly eight entered holes while the ninth remains blank", () => {
+  const mutation = buildQualifyingAdminMarkerMutation({
+    tournamentId: "tournament",
+    roundNumber: 1,
+    subjectPlayerId: "evan",
+    assignedMarkerPlayerId: "drew",
+    holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    holeScores: [5, 5, 5, 5, 5, 5, 5, 5, 0],
+  });
+
+  expect(mutation?.scoreEntry).toMatchObject({
+    playerId: "evan",
+    enteredByPlayerId: "drew",
+    holeScores: [5, 5, 5, 5, 5, 5, 5, 5, 0],
+    total: 40,
+    entryStatus: "in_progress",
+  });
+  expect(mutation?.holeEntries).toHaveLength(8);
+  expect(mutation?.holeEntries.map((entry) => entry.holeNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  expect(new Set(mutation?.holeEntries.map((entry) => entry.holeNumber)).size).toBe(8);
+});
+
+test("canonical exact-round hole rows supersede a stale aggregate marker card", () => {
+  const staleMarkerEntry = {
+    id: "marker-entry",
+    tournament_id: "tournament",
+    round_number: 1,
+    player_id: "evan",
+    entered_by_player_id: "drew",
+    hole_scores: [5, 0, 5, 0, 5, 5, 5, 5, 0],
+    total: 30,
+    entry_status: "in_progress",
+    submitted_at: null,
+    created_at: null,
+    updated_at: null,
+  } satisfies ScoreEntryRow;
+  const canonicalHoles = Array.from({ length: 8 }, (_, index) => ({
+    id: `hole-${index + 1}`,
+    tournament_id: "tournament",
+    round_number: 1,
+    player_id: "evan",
+    entered_by_player_id: "drew",
+    marker_for_player_id: "evan",
+    hole_number: index + 1,
+    strokes: 5,
+    fairway_hit: null,
+    green_in_regulation: null,
+    putts: null,
+    penalty_strokes: null,
+    entry_source: "marker",
+    entry_status: "in_progress",
+    review_status: "pending",
+    is_official: false,
+    official_at: null,
+    official_by: null,
+    created_at: null,
+    updated_at: null,
+  } satisfies ScoreHoleEntryRow));
+
+  const selected = selectQualifyingCompetitionScore({
+    playerId: "evan",
+    scoringMode: "reciprocal",
+    scoreEntries: [staleMarkerEntry],
+    officialEntries: canonicalHoles,
+    holeCount: 9,
+    holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  });
+
+  expect(selected?.entry).toBe(staleMarkerEntry);
+  expect(selected?.holeScores).toEqual([5, 5, 5, 5, 5, 5, 5, 5, 0]);
+});
+
+test("admin card builder preserves authoritative back-nine and full-round hole identities", () => {
+  const backNine = buildQualifyingAdminMarkerMutation({
+    tournamentId: "tournament",
+    roundNumber: 2,
+    subjectPlayerId: "evan",
+    assignedMarkerPlayerId: "drew",
+    holeNumbers: [10, 11, 12, 13, 14, 15, 16, 17, 18],
+    holeScores: [4, 4, 4, 4, 4, 4, 4, 4, 0],
+  });
+  const fullRound = buildQualifyingAdminMarkerMutation({
+    tournamentId: "tournament",
+    roundNumber: 3,
+    subjectPlayerId: "evan",
+    assignedMarkerPlayerId: "drew",
+    holeNumbers: Array.from({ length: 18 }, (_, index) => index + 1),
+    holeScores: Array(18).fill(4),
+  });
+
+  expect(backNine?.holeEntries.map((entry) => entry.holeNumber)).toEqual([10, 11, 12, 13, 14, 15, 16, 17]);
+  expect(fullRound?.holeEntries).toHaveLength(18);
+  expect(fullRound?.scoreEntry.total).toBe(72);
+  expect(fullRound?.scoreEntry.entryStatus).toBe("complete");
 });
 
 const session: QualifyingSession = {

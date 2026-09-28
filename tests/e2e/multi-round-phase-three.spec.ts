@@ -5,6 +5,7 @@ import { buildMultiRoundTournamentLeaderboard } from "../../app/lib/services/mul
 import { bindSnapshotPlayersToDurableRoster } from "../../app/lib/services/shareTokenLeaderboardService";
 import { getLeaderboardFavoritesKey, partitionLeaderboardFavorites } from "../../app/lib/services/leaderboardFavoritesService";
 import type { Tournament } from "../../app/lib/tournamentModel";
+import type { ScoreHoleEntryRow } from "../../app/lib/repositories/statisticsRepository";
 
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
@@ -134,6 +135,70 @@ test("durable player UUIDs bind submitted Qualifying scores to legacy snapshot p
   expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r2"].through).toBe("Not started");
 });
 
+test("Qualifying public leaderboard projects partial exact-round hole rows over a stale aggregate", () => {
+  const snapshot = tournamentFixture(2);
+  const tournament = bindSnapshotPlayersToDurableRoster(snapshot, [
+    { id: "stable-a", playerName: "AJ Gerber", team: "Bluffton", scores: [] },
+    { id: "stable-b", playerName: "Colin King", team: "Bluffton", scores: [] },
+    { id: "stable-c", playerName: "Evan Kindred", team: "Visitors", scores: [] },
+  ]);
+  const durableScoreEntries = [{
+    id: "stale-marker",
+    tournament_id: "event-a",
+    round_number: 1,
+    player_id: "stable-a",
+    entered_by_player_id: "stable-b",
+    hole_scores: [4, 0, 4, 0, 4, 4, 4, 4, 0],
+    total: 24,
+    entry_status: "in_progress",
+    submitted_at: null,
+    created_at: null,
+    updated_at: null,
+  }];
+  const canonicalHoles = Array.from({ length: 8 }, (_, index): ScoreHoleEntryRow => ({
+    id: `canonical-${index + 1}`,
+    tournament_id: "event-a",
+    round_number: 1,
+    player_id: "stable-a",
+    entered_by_player_id: "stable-b",
+    marker_for_player_id: "stable-a",
+    hole_number: index + 1,
+    strokes: 4,
+    fairway_hit: null,
+    green_in_regulation: null,
+    putts: null,
+    penalty_strokes: null,
+    entry_source: "marker",
+    entry_status: "in_progress",
+    review_status: "pending",
+    is_official: false,
+    official_at: null,
+    official_by: null,
+    created_at: null,
+    updated_at: null,
+  }));
+  const model = buildMultiRoundTournamentLeaderboard({
+    tournament,
+    roundConfigurationById: {
+      "stable-r1": { holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9], pars: Array(9).fill(4) },
+      "stable-r2": { holeNumbers: [10, 11, 12, 13, 14, 15, 16, 17, 18], pars: Array(9).fill(4) },
+    },
+    durableScoreEntries: durableScoreEntries as Parameters<typeof buildMultiRoundTournamentLeaderboard>[0]["durableScoreEntries"],
+    officialEntries: canonicalHoles,
+    scoringMode: "reciprocal",
+    allowLegacyScoreFallback: false,
+  });
+
+  expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r1"]).toMatchObject({
+    total: 32,
+    toPar: "E",
+    through: "8/9",
+  });
+  expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r1"].holes.map((hole) => hole.score))
+    .toEqual([4, 4, 4, 4, 4, 4, 4, 4, null]);
+  expect(model.players.find((player) => player.id === "stable-a")?.rounds["stable-r2"].through).toBe("Not started");
+});
+
 test("Qualifying leaderboard binds durable UUIDs when legacy snapshot team keys do not match team ids", () => {
   const snapshot = tournamentFixture(2);
   snapshot.players = snapshot.players.map((player) => ({
@@ -172,16 +237,21 @@ test("Tournament workspace uses canonical Qualifying results and exact durable r
 
 test("Qualifying workspace writes admin marker scores through both canonical durable boundaries", () => {
   const workspace = source("app/tournament/[id]/page.tsx");
+  const liveScoring = source("app/tournament/[id]/components/LiveScoringLeaderboard.tsx");
+  const mutationRoute = source("app/api/score-mutations/route.ts");
   const scorecard = source("app/scorecard/[playerId]/page.tsx");
   const statistics = source("app/lib/services/statisticsService.ts");
   expect(workspace).toContain("buildQualifyingAdminMarkerMutation");
-  expect(workspace).toContain("saveHole(mutation.scoreEntry)");
-  expect(workspace).toContain("saveHoleStatisticsBatch(mutation.holeEntries)");
-  expect(workspace).toContain("savedHoleEntries.length !== mutation.holeEntries.length");
+  expect(workspace).toContain("saveQualifyingAdminScorecard(mutation)");
+  expect(workspace).not.toContain("qualifyingAdminSaveQueueRef");
   expect(workspace).toContain("durablePlayer.marker_player_id");
-  expect(workspace).toContain("qualifyingAdminSaveQueueRef.current = qualifyingAdminSaveQueueRef.current");
+  expect(liveScoring).toContain("Save Scores");
+  expect(liveScoring).toContain("Not saved — retry");
+  expect(mutationRoute).toContain('action: "saveQualifyingAdminScorecard"');
+  expect(mutationRoute).toContain("The complete Qualifying card was not durably saved.");
   expect(workspace).toContain("const holeNumber = displayHoleNumbers[index] ?? index + 1");
   expect(scorecard).toContain("holeNumbers: scorecard.holes.map((hole) => hole.holeNumber)");
+  expect(scorecard).toContain("projectCanonicalHoleScores");
   expect(statistics).toContain("holeNumber: Number(holeNumbers[index]) || 0");
   expect(statistics).not.toContain("holeNumber: index + 1");
 });

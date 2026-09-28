@@ -164,21 +164,22 @@ const buildSegment = ({
   const official = buildOfficialScoreResolutionMap(
     holeEntries.filter((entry) => entry.round_number === round.roundNumber)
   );
+  const holeNumbers = round.holeSequence?.length
+    ? round.holeSequence.slice(0, round.holeCount)
+    : Array.from({ length: round.holeCount }, (_, index) => ((Number(round.startingHole ?? 1) - 1 + index) % 18) + 1);
   const selected = selectQualifyingCompetitionScore({
     playerId: player.playerId,
     scoringMode,
     scoreEntries: playerScores,
     officialEntries: holeEntries.filter((entry) => entry.round_number === round.roundNumber),
     holeCount: round.holeCount,
+    holeNumbers,
     assignedScorerPlayerId: scoringMode === "designated_scorer" ? assignedScorerPlayerId : player.assignedMarkerPlayerId,
   });
   const primary = selected?.entry;
   const expectedScorerPlayerId = scoringMode === "designated_scorer"
     ? (assignedScorerPlayerId ?? primary?.entered_by_player_id ?? null)
     : player.playerId;
-  const holeNumbers = round.holeSequence?.length
-    ? round.holeSequence.slice(0, round.holeCount)
-    : Array.from({ length: round.holeCount }, (_, index) => ((Number(round.startingHole ?? 1) - 1 + index) % 18) + 1);
   const liveHoleScores = new Map(
     holeEntries
       .filter((entry) =>

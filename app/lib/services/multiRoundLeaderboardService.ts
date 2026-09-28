@@ -71,7 +71,8 @@ const scoreForPlayerRound = (
   durableScoreEntries: ScoreEntryRow[],
   officialEntries: ScoreHoleEntryRow[],
   scoringMode: "reciprocal" | "designated_scorer",
-  allowLegacyScoreFallback: boolean
+  allowLegacyScoreFallback: boolean,
+  configuration: RoundConfiguration
 ) => {
   const durableRows = durableScoreEntries.filter(
     (score) => String(score.player_id) === playerId && Number(score.round_number) === roundNumber
@@ -81,7 +82,13 @@ const scoreForPlayerRound = (
     scoringMode,
     scoreEntries: durableRows,
     officialEntries: officialEntries.filter((entry) => Number(entry.round_number) === roundNumber),
-    holeCount: Math.max(...durableRows.map((entry) => entry.hole_scores.length), 0),
+    holeCount: Math.max(
+      configuration.holeNumbers?.length ?? 0,
+      configuration.pars?.length ?? 0,
+      ...durableRows.map((entry) => entry.hole_scores.length),
+      0
+    ),
+    holeNumbers: configuration.holeNumbers,
   });
   if (selected) return { holeScores: selected.holeScores };
   if (!allowLegacyScoreFallback) return null;
@@ -150,7 +157,8 @@ export const buildMultiRoundTournamentLeaderboard = ({
         durableScoreEntries,
         officialEntries,
         scoringMode,
-        allowLegacyScoreFallback
+        allowLegacyScoreFallback,
+        roundConfigurationById[round.id] ?? {}
       );
       return [round.id, buildRoundSummary(round.id, round.roundNumber, score?.holeScores ?? [], roundConfigurationById[round.id])];
     }));

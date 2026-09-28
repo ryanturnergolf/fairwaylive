@@ -16,6 +16,7 @@ import { isTournamentStorageEnvelope } from "../tournamentModel";
 import { buildMultiRoundTournamentLeaderboard, type MultiRoundTournamentLeaderboardProjection } from "./multiRoundLeaderboardService";
 import { buildCourseHoleSequence } from "./courseService";
 import { loadTournamentHoleStatistics } from "./statisticsService";
+import { selectQualifyingCompetitionScore } from "./qualifyingCompetitionScoreService";
 
 export type ShareTokenLeaderboardReadModel = {
   tournamentId: string;
@@ -112,21 +113,40 @@ export const loadShareTokenLeaderboard = async ({
     const playerId = String(entry.player_id);
     entriesByPlayerId.set(playerId, [...(entriesByPlayerId.get(playerId) ?? []), entry]);
   });
+  const displayHoleCount = Number(sharedState.roundSetup.numberOfHoles) || 18;
+  const displayHoleNumbers = buildCourseHoleSequence(
+    Number(sharedState.roundSetup.startingHole) || 1,
+    displayHoleCount
+  );
 
   const scorecardRows: LegacyScorecardRow[] = sharedState.scorecardRows.map((row, index) => {
-    const markerEntry = (entriesByPlayerId.get(String(row.id)) ?? []).find(
+    const playerEntries = (entriesByPlayerId.get(String(row.id)) ?? []).filter(
+      (entry) => Number(entry.round_number) === roundNumber
+    );
+    const markerEntry = playerEntries.find(
       (entry) => String(entry.entered_by_player_id) !== String(entry.player_id)
     );
+    const qualifyingScore = isQualifying
+      ? selectQualifyingCompetitionScore({
+          playerId: String(row.id),
+          scoringMode: scoringMode ?? "reciprocal",
+          scoreEntries: playerEntries,
+          officialEntries: officialEntries.filter((entry) => Number(entry.round_number) === roundNumber),
+          holeCount: displayHoleCount,
+          holeNumbers: displayHoleNumbers,
+        })
+      : null;
     return {
       id: index + 1,
       playerName: row.playerName,
       team: row.team,
-      scores: markerEntry?.hole_scores?.length
+      scores: qualifyingScore?.holeScores?.length
+        ? qualifyingScore.holeScores
+        : markerEntry?.hole_scores?.length
         ? markerEntry.hole_scores.map((score) => Number(score) || 0)
         : row.scores,
     };
   });
-  const displayHoleCount = Number(sharedState.roundSetup.numberOfHoles) || 18;
   const roundPars = buildCourseRoundProjection(
     sharedState.courseHoles,
     Number(sharedState.roundSetup.startingHole) || 1,

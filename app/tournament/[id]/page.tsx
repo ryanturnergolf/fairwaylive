@@ -20,11 +20,10 @@ import {
   loadTournamentFinalizationStatus,
   type TournamentFinalizationRecord,
 } from "../../lib/services/tournamentFinalizationService";
-import { loadComparisonScores, saveHole } from "../../lib/services/scoreService";
+import { loadComparisonScores } from "../../lib/services/scoreService";
 import {
   loadTournamentHoleStatistics,
   resolveOfficialScore,
-  saveHoleStatisticsBatch,
   type OfficialScoreResolutionChoice,
 } from "../../lib/services/statisticsService";
 import {
@@ -86,7 +85,11 @@ import PairingsScorecardGeneration, {
   type PairingGroup,
   type RoundSetupState,
 } from "./components/PairingsScorecardGeneration";
-import LiveScoringLeaderboard, { type ReviewResolutionItem, type ScorecardRow } from "./components/LiveScoringLeaderboard";
+import LiveScoringLeaderboard, {
+  type QualifyingAdminScoreSaveState,
+  type ReviewResolutionItem,
+  type ScorecardRow,
+} from "./components/LiveScoringLeaderboard";
 import TournamentPrintExport, {
   type ClippdExportState,
   type ScoreboardImportState,
@@ -106,6 +109,7 @@ import TournamentTeamInvitationManager from "./components/TournamentTeamInvitati
 import {
   buildQualifyingAdminMarkerMutation,
   projectQualifyingAdminScorecardRows,
+  saveQualifyingAdminScorecard,
 } from "../../lib/services/qualifyingAdminScoringService";
 
 const baseTabs = ["Overview", "Teams", "Players", "Pairings", "Live Scoring", "Statistics", "Clippd Export"];
@@ -212,7 +216,9 @@ export default function TournamentPage() {
   const [scorecardsGenerated, setScorecardsGenerated] = useState(false);
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>([]);
   const scorecardRowsRef = useRef<ScorecardRow[]>([]);
-  const qualifyingAdminSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [qualifyingAdminSaveStates, setQualifyingAdminSaveStates] =
+    useState<Record<number, QualifyingAdminScoreSaveState>>({});
+  const qualifyingAdminSaveStatesRef = useRef<Record<number, QualifyingAdminScoreSaveState>>({});
   const [pairings, setPairings] = useState<PairingGroup[]>([]);
   const [pairingsMessage, setPairingsMessage] = useState("");
   const previousValidPairingsRef = useRef<PairingGroup[] | null>(null);
@@ -376,6 +382,9 @@ export default function TournamentPage() {
   useEffect(() => {
     scorecardRowsRef.current = scorecardRows;
   }, [scorecardRows]);
+  useEffect(() => {
+    qualifyingAdminSaveStatesRef.current = qualifyingAdminSaveStates;
+  }, [qualifyingAdminSaveStates]);
 
   const tournament = isClientMounted ? tournamentMeta : createFallbackTournamentMeta(tournamentId);
   const tournamentSettings =
@@ -427,7 +436,7 @@ export default function TournamentPage() {
       return leaderboardScorecardRows;
     }
 
-    return projectQualifyingAdminScorecardRows({
+    const projectedRows = projectQualifyingAdminScorecardRows({
       scorecardRows,
       durablePlayers: durableLeaderboardPlayers,
       results: qualifyingResults,
@@ -435,7 +444,18 @@ export default function TournamentPage() {
       scoringMode: qualifyingScoringMode,
       holeCount: normalizedRoundSetup.numberOfHoles,
     });
-  }, [durableLeaderboardPlayers, isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingResults, qualifyingScoringMode, scorecardRows, selectedRoundOption?.roundNumber]);
+    return projectedRows.map((row) => {
+      const saveState = qualifyingAdminSaveStates[row.id] ?? "clean";
+      if (!(["dirty", "saving", "error"] as QualifyingAdminScoreSaveState[]).includes(saveState)) {
+        return row;
+      }
+      const localRow = scorecardRows.find((candidate) => candidate.id === row.id);
+      return localRow ? { ...row, scores: [...localRow.scores] } : row;
+    });
+  }, [durableLeaderboardPlayers, isQualifyingTournament, leaderboardScorecardRows, normalizedRoundSetup.numberOfHoles, qualifyingAdminSaveStates, qualifyingResults, qualifyingScoringMode, scorecardRows, selectedRoundOption?.roundNumber]);
+  useEffect(() => {
+    setQualifyingAdminSaveStates({});
+  }, [selectedRoundOption?.roundId]);
   const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
     const displayHoleNumbers = buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles);
     const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
@@ -574,7 +594,17 @@ export default function TournamentPage() {
     setMultiRoundScoreEntries(allScores);
     setScorecardRows((currentRows) => {
       const mergedRows = mergeSharedScores(currentRows, scores, playerIdsByName);
-      return JSON.stringify(mergedRows) === JSON.stringify(currentRows) ? currentRows : mergedRows;
+      const protectedRowIds = new Set(
+        Object.entries(qualifyingAdminSaveStatesRef.current)
+          .filter(([, state]) => state === "dirty" || state === "saving" || state === "error")
+          .map(([rowId]) => Number(rowId))
+      );
+      const reconciledRows = mergedRows.map((row) =>
+        protectedRowIds.has(row.id)
+          ? currentRows.find((candidate) => candidate.id === row.id) ?? row
+          : row
+      );
+      return JSON.stringify(reconciledRows) === JSON.stringify(currentRows) ? currentRows : reconciledRows;
     });
 
     const [allHoles, durablePlayers, dynamicFoundation, canonicalQualifyingResults] = await Promise.all([
@@ -1168,7 +1198,12 @@ export default function TournamentPage() {
     window.location.assign(href);
   }, [flushPendingSaves]);
 
-  const handleScoreInputChange = (rowId: number, holeIndex: number, value: string) => {
+  const handleScoreInputChange = (
+    rowId: number,
+    holeIndex: number,
+    value: string,
+    displayedScores: number[]
+  ) => {
     if (isTournamentFinalized) {
       return;
     }
@@ -1178,11 +1213,22 @@ export default function TournamentPage() {
       return;
     }
 
-    const updatedRows = updateScorecardRows(scorecardRowsRef.current, rowId, holeIndex, value);
+    const editBaseRows = scorecardRowsRef.current.map((row) =>
+      row.id === rowId ? { ...row, scores: [...displayedScores] } : row
+    );
+    const updatedRows = updateScorecardRows(editBaseRows, rowId, holeIndex, value);
     scorecardRowsRef.current = updatedRows;
     setScorecardRows(updatedRows);
+    setQualifyingAdminSaveStates((current) => ({ ...current, [rowId]: "dirty" }));
+    setReviewResolutionMessage("");
+  };
 
-    const updatedRow = updatedRows.find((row) => row.id === rowId);
+  const handleSaveQualifyingAdminScorecard = async (rowId: number) => {
+    if (isTournamentFinalized || !isQualifyingTournament || qualifyingScoringMode !== "reciprocal" || !sharedTournamentId) {
+      return;
+    }
+
+    const updatedRow = scorecardRowsRef.current.find((row) => row.id === rowId);
     const matchingDurablePlayers = updatedRow
       ? durableLeaderboardPlayers.filter((player) => player.player_name === updatedRow.playerName)
       : [];
@@ -1199,31 +1245,30 @@ export default function TournamentPage() {
             normalizedRoundSetup.numberOfHoles
           ),
           holeScores: updatedRow.scores.slice(0, normalizedRoundSetup.numberOfHoles),
-          holeIndex,
         })
       : null;
 
     if (!mutation) {
       setReviewResolutionMessage("Qualifying score was not saved because its exact player, marker, round, or hole authority is unavailable.");
+      setQualifyingAdminSaveStates((current) => ({ ...current, [rowId]: "error" }));
       return;
     }
 
-    qualifyingAdminSaveQueueRef.current = qualifyingAdminSaveQueueRef.current
-      .then(async () => {
-        const [, savedHoleEntries] = await Promise.all([
-          saveHole(mutation.scoreEntry),
-          saveHoleStatisticsBatch(mutation.holeEntries),
-        ]);
-        if (savedHoleEntries.length !== mutation.holeEntries.length) {
-          throw new Error("The complete Qualifying card was not durably saved.");
-        }
-        await refreshReviewResolutionData();
-      })
-      .catch((error) => {
-        console.warn("[QualifyingScoring] Unable to persist authoritative marker score.", error);
-        setReviewResolutionMessage("Qualifying score was not saved. Refresh and try again.");
-        void refreshReviewResolutionData();
-      });
+    setQualifyingAdminSaveStates((current) => ({ ...current, [rowId]: "saving" }));
+    setReviewResolutionMessage("");
+    try {
+      const saved = await saveQualifyingAdminScorecard(mutation);
+      if (saved.holeEntries.length !== mutation.holeEntries.length) {
+        throw new Error("The complete Qualifying card was not durably saved.");
+      }
+      await refreshReviewResolutionData();
+      setQualifyingAdminSaveStates((current) => ({ ...current, [rowId]: "saved" }));
+      setReviewResolutionMessage(`${updatedRow?.playerName ?? "Player"}'s scores were saved.`);
+    } catch (error) {
+      console.warn("[QualifyingScoring] Unable to persist authoritative marker scorecard.", error);
+      setQualifyingAdminSaveStates((current) => ({ ...current, [rowId]: "error" }));
+      setReviewResolutionMessage("Qualifying scores were not saved. Review the card and retry.");
+    }
   };
 
   const handleResolveReviewItem = async (item: ReviewResolutionItem, choice: OfficialScoreResolutionChoice) => {
@@ -1851,6 +1896,10 @@ export default function TournamentPage() {
                       onGenerateScorecards={generateScorecards}
                       onRoundSetupChange={handleRoundSetupChange}
                       onScoreInputChange={handleScoreInputChange}
+                      onSaveScorecard={isQualifyingTournament && qualifyingScoringMode === "reciprocal"
+                        ? handleSaveQualifyingAdminScorecard
+                        : undefined}
+                      scoreSaveStates={qualifyingAdminSaveStates}
                        onOpenQrModal={onOpenQrModal}
                        onOpenPrintScorecardModal={onOpenPrintScorecardModal}
                        isReadOnly={isTournamentFinalized}

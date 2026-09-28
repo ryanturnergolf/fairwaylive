@@ -28,6 +28,8 @@ export type ScorecardRow = {
   scores: number[];
 };
 
+export type QualifyingAdminScoreSaveState = "clean" | "dirty" | "saving" | "saved" | "error";
+
 export type ReviewResolutionItem = {
   id: string;
   playerId: string;
@@ -53,7 +55,9 @@ type LiveScoringLeaderboardProps = {
   onPrintTournamentScorecards: () => void;
   onGenerateScorecards: () => void;
   onRoundSetupChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onScoreInputChange: (rowId: number, holeIndex: number, value: string) => void;
+  onScoreInputChange: (rowId: number, holeIndex: number, value: string, displayedScores: number[]) => void;
+  onSaveScorecard?: (rowId: number) => void;
+  scoreSaveStates?: Record<number, QualifyingAdminScoreSaveState>;
   onOpenQrModal: (player: ScorecardRow) => void;
   onOpenPrintScorecardModal: (player: ScorecardRow) => void;
   isReadOnly?: boolean;
@@ -102,6 +106,8 @@ export default function LiveScoringLeaderboard({
   onGenerateScorecards,
   onRoundSetupChange,
   onScoreInputChange,
+  onSaveScorecard,
+  scoreSaveStates = {},
   onOpenQrModal,
   onOpenPrintScorecardModal,
   isReadOnly = false,
@@ -501,6 +507,7 @@ export default function LiveScoringLeaderboard({
                     {leaderboardScorecardRows.map((row) => {
                       const total = calculateTotal(row.scores);
                       const playedHoles = row.scores.filter((score) => score > 0).length;
+                      const saveState = scoreSaveStates[row.id] ?? "clean";
                       const playedPar = row.scores.reduce(
                         (sum, score, index) => sum + (score > 0 ? roundPars[index] || 4 : 0),
                         0
@@ -530,8 +537,8 @@ export default function LiveScoringLeaderboard({
                                 min="1"
                                 max="12"
                                  value={score}
-                                 onChange={(event) => onScoreInputChange(row.id, holeIndex, event.target.value)}
-                                 disabled={isReadOnly}
+                                 onChange={(event) => onScoreInputChange(row.id, holeIndex, event.target.value, row.scores)}
+                                 disabled={isReadOnly || saveState === "saving"}
                                  className="h-9 w-12 rounded-full border border-[#E8DCC8] bg-[#FCFAF5] px-2 py-1 text-center text-sm font-semibold text-[#0B3D2E] outline-none"
                               />
                             </td>
@@ -539,13 +546,29 @@ export default function LiveScoringLeaderboard({
                           <td className="px-4 py-4 text-center font-black text-[#0B3D2E]">{total}</td>
                           <td className="px-4 py-4 text-center font-black text-[#B8892D]">{toPar}</td>
                           <td className="px-4 py-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => onOpenPrintScorecardModal(row)}
-                              className="rounded-full border border-[#B8892D] px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
-                            >
-                              Print Scorecard
-                            </button>
+                            <div className="flex min-w-36 flex-col items-end gap-2">
+                              {onSaveScorecard ? <>
+                                <button
+                                  type="button"
+                                  onClick={() => onSaveScorecard(row.id)}
+                                  disabled={isReadOnly || saveState === "saving" || saveState === "clean" || saveState === "saved"}
+                                  className="min-h-10 rounded-full bg-[#0B3D2E] px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-white disabled:opacity-50"
+                                  aria-label={`Save Scores for ${row.playerName}`}
+                                >
+                                  {saveState === "saving" ? "Saving…" : saveState === "error" ? "Retry Save" : "Save Scores"}
+                                </button>
+                                {saveState === "saved" ? <span className="text-xs font-bold text-[#26734D]">Saved</span> : null}
+                                {saveState === "dirty" ? <span className="text-xs font-bold text-[#8A6120]">Unsaved changes</span> : null}
+                                {saveState === "error" ? <span role="alert" className="text-xs font-bold text-[#8A2E2E]">Not saved — retry</span> : null}
+                              </> : null}
+                              <button
+                                type="button"
+                                onClick={() => onOpenPrintScorecardModal(row)}
+                                className="rounded-full border border-[#B8892D] px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-[#0B3D2E] transition duration-300 hover:bg-[#B8892D]/10"
+                              >
+                                Print Scorecard
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

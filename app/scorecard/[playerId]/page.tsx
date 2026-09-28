@@ -1182,6 +1182,44 @@ function ReciprocalPlayerScorecardPage() {
             SAVE_FINALIZATION_CHECK_TIMEOUT_MS
           );
           if (!statisticEntries) throw new Error("Statistics hydration timed out.");
+          const projectCanonicalHoleScores = (playerIds: string[], enteredByPlayerIds: string[]) => {
+            const matchingEntries = statisticEntries.filter(
+              (entry) =>
+                !entry.is_official &&
+                playerIds.includes(String(entry.player_id)) &&
+                enteredByPlayerIds.includes(String(entry.entered_by_player_id)) &&
+                Number(entry.strokes) > 0
+            );
+            if (matchingEntries.length === 0) return null;
+            const scoresByHole = new Map(
+              matchingEntries.map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
+            );
+            return scorecard.holes.map((hole) => scoresByHole.get(hole.holeNumber) ?? 0);
+          };
+          const canonicalSelfScores = projectCanonicalHoleScores(
+            resolvedPlayerIds.selectedPlayerIds,
+            resolvedPlayerIds.selectedPlayerIds
+          );
+          if (canonicalSelfScores) {
+            loadedSelfScores = canonicalSelfScores;
+            loadedReviewSelfScores = canonicalSelfScores;
+            stableSelfRowExists = true;
+          }
+          const canonicalMarkedPlayerScores = projectCanonicalHoleScores(
+            resolvedPlayerIds.markedPlayerIds,
+            resolvedPlayerIds.selectedPlayerIds
+          );
+          if (canonicalMarkedPlayerScores) {
+            loadedMarkerScores = canonicalMarkedPlayerScores;
+            stableMarkerRowExists = true;
+          }
+          const canonicalReviewMarkerScores = projectCanonicalHoleScores(
+            resolvedPlayerIds.selectedPlayerIds,
+            resolvedPlayerIds.assignedMarkerPlayerIds
+          );
+          if (canonicalReviewMarkerScores) {
+            loadedReviewMarkerScores = canonicalReviewMarkerScores;
+          }
           const currentPlayerEntries = statisticEntries.filter(
             (entry) =>
               resolvedPlayerIds.selectedPlayerIds.includes(String(entry.player_id)) &&

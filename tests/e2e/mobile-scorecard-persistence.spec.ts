@@ -3384,7 +3384,7 @@ test("stable score rows override more-complete snapshot presentation without ena
   snapshot.uiState.scorecards.scorecardRows[1].scores = Array.from({ length: 18 }, () => 5);
 
   const stableSelfScores = [...Array.from({ length: 8 }, () => 4), ...Array.from({ length: 10 }, () => 0)];
-  const stableMarkerScores = [...Array.from({ length: 8 }, () => 6), ...Array.from({ length: 10 }, () => 0)];
+  const stableMarkerScores = [6, 0, 6, 0, 6, 6, 0, 6, ...Array.from({ length: 10 }, () => 0)];
   const sharedStore = await routeSharedScoreEntriesStore(page);
   sharedStore.savedScoreRows.push(
     buildScoreEntry("player-1", "player-1", stableSelfScores),
@@ -3405,6 +3405,23 @@ test("stable score rows override more-complete snapshot presentation without ena
         green_in_regulation: true,
         putts: 2,
         entry_source: "self",
+        entry_status: "live",
+      });
+    }),
+    ...Array.from({ length: 8 }, (_, index) => {
+      const holeNumber = index + 1;
+      return buildScoreHoleEntry({
+        tournament_id: sharedTournamentId,
+        round_number: 1,
+        player_id: "player-2",
+        entered_by_player_id: "player-1",
+        marker_for_player_id: "player-2",
+        hole_number: holeNumber,
+        strokes: 6,
+        fairway_hit: null,
+        green_in_regulation: null,
+        putts: null,
+        entry_source: "marker",
         entry_status: "live",
       });
     })
@@ -3496,7 +3513,27 @@ test("secure shared scorecard ignores a stale local Tournament snapshot and hydr
     })
   );
   await page.route("**/api/score-mutations", async (route) => {
-    const body = route.request().postDataJSON() as { action: string; input: Record<string, unknown> };
+    const body = route.request().postDataJSON() as {
+      action: string;
+      input: Record<string, unknown>;
+      rows?: Array<Record<string, unknown>>;
+    };
+    if (body.action === "saveScoreHoleEntries") {
+      for (const row of body.rows ?? []) {
+        const entry = buildScoreHoleEntry(row);
+        const existingIndex = holeStatsStore.savedHoleRows.findIndex((candidate) =>
+          candidate.tournament_id === entry.tournament_id &&
+          candidate.round_number === entry.round_number &&
+          candidate.player_id === entry.player_id &&
+          candidate.entered_by_player_id === entry.entered_by_player_id &&
+          candidate.hole_number === entry.hole_number
+        );
+        if (existingIndex >= 0) holeStatsStore.savedHoleRows.splice(existingIndex, 1, entry);
+        else holeStatsStore.savedHoleRows.push(entry);
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body.rows ?? []) });
+      return;
+    }
     if (body.action !== "saveScoreEntry") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
       return;
