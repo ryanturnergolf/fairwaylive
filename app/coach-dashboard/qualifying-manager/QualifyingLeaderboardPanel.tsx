@@ -137,7 +137,7 @@ export default function QualifyingLeaderboardPanel({
       {error ? <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">{error}</p> : null}
       {model?.multiRoundProjection ? (
         <div className="mt-5">
-          <MultiRoundTournamentLeaderboard projection={model.multiRoundProjection} eventId={model.tournamentId} publicSurface hideTeams />
+          <MultiRoundTournamentLeaderboard projection={model.multiRoundProjection} eventId={model.tournamentId} publicSurface />
         </div>
       ) : model ? (
         <div className="mt-5 space-y-2">

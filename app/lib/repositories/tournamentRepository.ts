@@ -146,6 +146,15 @@ export type ShareTokenReadOptions = {
   shareToken?: string;
 };
 
+export type QualifyingLeaderboardRoundMetadataRow = {
+  tournament_round_id: string;
+  round_number: number;
+  course_name: string;
+  starting_hole: number;
+  hole_sequence: number[];
+  course_hole_snapshot: Array<{ holeNumber: number; par: number }>;
+};
+
 export const getQualifyingBackingTournamentStatus = async (
   tournamentId: string,
   options: ShareTokenReadOptions = {}
@@ -168,6 +177,18 @@ export const getQualifyingBackingScoringMode = async (
   });
   if (error) throw error;
   return data === "reciprocal" || data === "designated_scorer" ? data : null;
+};
+
+export const getQualifyingLeaderboardRoundMetadata = async (
+  tournamentId: string,
+  options: ShareTokenReadOptions = {}
+): Promise<QualifyingLeaderboardRoundMetadataRow[]> => {
+  const client = await getReadClient(options);
+  const { data, error } = await client.rpc("get_qualifying_leaderboard_round_metadata", {
+    target_tournament_id: tournamentId,
+  });
+  if (error) throw error;
+  return (data ?? []) as QualifyingLeaderboardRoundMetadataRow[];
 };
 
 const tournamentColumns =

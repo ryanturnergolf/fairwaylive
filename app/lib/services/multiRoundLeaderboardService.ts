@@ -9,6 +9,7 @@ import { selectQualifyingCompetitionScore } from "./qualifyingCompetitionScoreSe
 export type RoundLeaderboardSummary = {
   roundId: string;
   roundNumber: number;
+  courseName: string;
   total: number | null;
   toPar: string;
   through: string;
@@ -45,7 +46,12 @@ export type MultiRoundTournamentLeaderboardProjection = {
   teams: MultiRoundTeamLeaderboardRow[];
 };
 
-type RoundConfiguration = { holeNumbers?: number[]; pars?: Array<number | null>; countingScores?: number };
+export type RoundLeaderboardConfiguration = {
+  courseName?: string;
+  holeNumbers?: number[];
+  pars?: Array<number | null>;
+  countingScores?: number;
+};
 
 const rank = <T,>(rows: T[], score: (row: T) => number | null) => {
   const ranked = rows.filter((row) => score(row) !== null).sort((a, b) => Number(score(a)) - Number(score(b)));
@@ -72,7 +78,7 @@ const scoreForPlayerRound = (
   officialEntries: ScoreHoleEntryRow[],
   scoringMode: "reciprocal" | "designated_scorer",
   allowLegacyScoreFallback: boolean,
-  configuration: RoundConfiguration
+  configuration: RoundLeaderboardConfiguration
 ) => {
   const durableRows = durableScoreEntries.filter(
     (score) => String(score.player_id) === playerId && Number(score.round_number) === roundNumber
@@ -100,7 +106,7 @@ const buildRoundSummary = (
   roundId: string,
   roundNumber: number,
   scores: number[],
-  configuration: RoundConfiguration = {}
+  configuration: RoundLeaderboardConfiguration = {}
 ): RoundLeaderboardSummary => {
   const holeCount = Math.max(configuration.holeNumbers?.length ?? 0, configuration.pars?.length ?? 0, scores.length);
   const holes = Array.from({ length: holeCount }, (_, index) => ({
@@ -117,6 +123,7 @@ const buildRoundSummary = (
   return {
     roundId,
     roundNumber,
+    courseName: configuration.courseName ?? "Course not set",
     total,
     toPar,
     through: played.length === 0 ? "Not started" : played.length === holes.length ? "F" : `${played.length}/${holes.length}`,
@@ -134,7 +141,7 @@ export const buildMultiRoundTournamentLeaderboard = ({
   allowLegacyScoreFallback = true,
 }: {
   tournament: Tournament;
-  roundConfigurationById?: Record<string, RoundConfiguration>;
+  roundConfigurationById?: Record<string, RoundLeaderboardConfiguration>;
   operationalCurrentRoundId?: string | null;
   durableScoreEntries?: ScoreEntryRow[];
   officialEntries?: ScoreHoleEntryRow[];
@@ -184,7 +191,8 @@ export const buildMultiRoundTournamentLeaderboard = ({
   players.forEach((player) => { player.position = playerPositions.get(player) ?? "—"; });
 
   const teams = tournament.teams.map((team): MultiRoundTeamLeaderboardRow => {
-    const teamPlayers = players.filter((player) => player.teamId === team.id);
+    const eligiblePlayerIds = new Set(tournament.players.filter((player) => !player.isIndividual && player.teamId === team.id).map((player) => player.id));
+    const teamPlayers = players.filter((player) => eligiblePlayerIds.has(player.id));
     const summaries = Object.fromEntries(rounds.map((round) => {
       const complete = teamPlayers.map((player) => player.rounds[round.id]).filter((summary) => summary.through === "F" && summary.total !== null);
       const count = Math.max(1, roundConfigurationById[round.id]?.countingScores ?? 4);

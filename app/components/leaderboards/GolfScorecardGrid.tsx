@@ -1,5 +1,7 @@
 "use client";
 
+import GolfScoreCell from "./GolfScoreCell";
+
 export type GolfScorecardHole = { holeNumber: number; par: number | null; score: number | null };
 
 const total = (holes: GolfScorecardHole[], field: "par" | "score") =>
@@ -28,7 +30,7 @@ export default function GolfScorecardGrid({ holes, label }: { holes: GolfScoreca
             </tr>,
             <tr key={`score-${index}`} className="border-t border-[#E8DCC8]">
               <th className="sticky left-0 z-10 bg-white px-3 py-3 text-left font-black">Score</th>
-              {groups[index].map((hole) => <td key={hole.holeNumber} className="px-2 py-3 font-black text-[#0B3D2E]">{hole.score ?? "—"}</td>)}
+              {groups[index].map((hole) => <td key={hole.holeNumber} className="px-2 py-2 text-[#0B3D2E]"><GolfScoreCell score={hole.score} par={hole.par} /></td>)}
               <td className="px-3 py-3 font-black text-[#0B3D2E]">{total(groups[index], "score") || "—"}</td>
             </tr>,
           ])}

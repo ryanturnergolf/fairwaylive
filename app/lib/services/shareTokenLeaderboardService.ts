@@ -11,6 +11,7 @@ import type { LegacyScorecardRow, Tournament } from "../tournamentModel";
 import { buildCourseRoundProjection } from "./courseService";
 import { getQualifyingBackingTournamentStatus } from "../repositories/tournamentRepository";
 import { getQualifyingBackingScoringMode } from "../repositories/tournamentRepository";
+import { getQualifyingLeaderboardRoundMetadata } from "../repositories/tournamentRepository";
 import { getTournamentStateSnapshot } from "../repositories/tournamentRepository";
 import { isTournamentStorageEnvelope } from "../tournamentModel";
 import { buildMultiRoundTournamentLeaderboard, type MultiRoundTournamentLeaderboardProjection } from "./multiRoundLeaderboardService";
@@ -163,6 +164,9 @@ export const loadShareTokenLeaderboard = async ({
     roundPars,
   });
   const hasTeamScoring = scorecardRows.some((row) => row.team.trim().length > 0);
+  const qualifyingRoundMetadata = isQualifying
+    ? await getQualifyingLeaderboardRoundMetadata(tournamentId, { shareToken }).catch(() => [])
+    : [];
   const snapshotEnvelope = snapshot && isTournamentStorageEnvelope(snapshot.state_snapshot)
     ? snapshot.state_snapshot
     : null;
@@ -170,11 +174,21 @@ export const loadShareTokenLeaderboard = async ({
     const tournament = bindSnapshotPlayersToDurableRoster(snapshotEnvelope.tournament, sharedState.scorecardRows);
     const settings = tournament.settings;
     const roundSetups = settings.roundSetups ?? {};
+    const metadataByRoundId = new Map(qualifyingRoundMetadata.map((metadata) => [metadata.tournament_round_id, metadata]));
     const parsByHole = new Map(sharedState.courseHoles.map((hole) => [hole.holeNumber, hole.par]));
     const roundConfigurationById = Object.fromEntries(tournament.rounds.map((round) => {
       const setup = roundSetups[String(round.roundNumber)];
-      const holeNumbers = buildCourseHoleSequence(Math.max(1, Number(setup?.startingHole) || 1), Math.max(1, Number(setup?.numberOfHoles) || 18));
-      return [round.id, { holeNumbers, pars: holeNumbers.map((hole) => parsByHole.get(hole) ?? null), countingScores: Number(setup?.countingScores) || 4 }];
+      const metadata = metadataByRoundId.get(round.id);
+      const holeNumbers = metadata?.hole_sequence?.length
+        ? metadata.hole_sequence.map(Number)
+        : buildCourseHoleSequence(Math.max(1, Number(setup?.startingHole) || 1), Math.max(1, Number(setup?.numberOfHoles) || 18));
+      const roundPars = new Map((metadata?.course_hole_snapshot ?? []).map((hole) => [Number(hole.holeNumber), Number(hole.par)]));
+      return [round.id, {
+        courseName: metadata?.course_name ?? sharedState.tournament.course,
+        holeNumbers,
+        pars: holeNumbers.map((hole) => roundPars.get(hole) ?? parsByHole.get(hole) ?? null),
+        countingScores: Number(setup?.countingScores) || 4,
+      }];
     }));
     return buildMultiRoundTournamentLeaderboard({
       tournament,

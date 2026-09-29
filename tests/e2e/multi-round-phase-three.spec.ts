@@ -334,10 +334,9 @@ test("Qualifying projection carries exact round, hole, par, score, and through i
   expect(service).toContain("liveMarkerHoleScores");
   expect(service).toContain("markerHoleScores:");
   expect(service).not.toContain("holeCount * 4");
-  expect(component).toContain("segment.tournamentRoundId === globalRoundId");
+  expect(component).toContain("segment.tournamentRoundId === roundId");
   expect(component).toContain("expandedRounds");
-  expect(component).toContain("hasSelectedRoundRef");
-  expect(component).toContain("setGlobalRoundId(defaultRoundId)");
+  expect(component).toContain("latestStarted");
   expect(component).toContain("Course:");
   expect(component).toContain("Round:");
   expect(grid).not.toContain("if (played.length === 0) return");
@@ -356,13 +355,12 @@ test("Phase 3 is presentation-only and introduces no migration or scoring writes
   expect(componentSources).not.toContain("setTournamentOperationalRound");
 });
 
-test("public mobile leaderboard selects R10, expands independently, and persists favorites", async ({ page }) => {
+test("public mobile leaderboard switches views, expands rounds independently, and persists favorites", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routePublicFixture(page);
   await page.goto("/leaderboard?shareToken=phase-three-token&round=1", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("tab", { name: "R3" })).toHaveAttribute("aria-selected", "true", { timeout: 20_000 });
-  await page.getByRole("tab", { name: "R10" }).click();
-  await expect(page.locator("[data-selected-round='R10']")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Individual Leaderboard" })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("tab", { name: "Team" }).click();
   const teamButton = page.getByRole("button", { name: "▸ Bluffton", exact: true });
   await teamButton.click();
   const teamExpansion = page.getByLabel("Bluffton expanded round");
@@ -370,16 +368,15 @@ test("public mobile leaderboard selects R10, expands independently, and persists
   await expect(teamExpansion.getByRole("tab", { name: "R2" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "Add Bluffton to favorites" }).click();
   await expect(page.locator('button[aria-expanded="true"]').filter({ hasText: "Bluffton" })).toBeVisible();
-  await expect(page.locator("[data-selected-round='R10']")).toBeVisible();
+  await page.getByRole("tab", { name: "Individual" }).click();
   await page.locator('button[aria-expanded="false"]').filter({ hasText: "AJ Gerber" }).click();
   const expansion = page.getByLabel("AJ Gerber scorecard round");
   await expansion.getByRole("tab", { name: "R2" }).click();
   await expect(expansion.getByRole("tab", { name: "R2" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("[data-selected-round='R10']")).toBeVisible();
   await page.getByRole("button", { name: "Add AJ Gerber to favorites" }).click();
-  await expect(page.getByRole("heading", { name: "★ Favorites" })).toHaveCount(2);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("button", { name: "Remove AJ Gerber from favorites" })).toBeVisible();
+  await page.getByRole("tab", { name: "Team" }).click();
   const teamFavorite = page.getByRole("button", { name: "Remove Bluffton from favorites" });
   const teamRow = teamFavorite.locator("xpath=..");
   await expect(teamRow.locator(":scope > *").first()).toHaveAttribute("aria-pressed", "true");

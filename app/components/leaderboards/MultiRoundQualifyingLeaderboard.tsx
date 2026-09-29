@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { QualifyingPlayerResult } from "../../lib/qualifyingModel";
+import { useEffect, useMemo, useState } from "react";
+import type { QualifyingPlayerResult, QualifyingSegmentResult } from "../../lib/qualifyingModel";
 import { partitionLeaderboardFavorites, readLeaderboardFavorites, writeLeaderboardFavorites } from "../../lib/services/leaderboardFavoritesService";
 import FavoriteStar from "./FavoriteStar";
 import GolfScorecardGrid from "./GolfScorecardGrid";
 import RoundSelector from "./RoundSelector";
 
 const formatToPar = (value: number | null) => value === null ? "—" : value === 0 ? "E" : value > 0 ? `+${value}` : String(value);
+const displayThrough = (through?: string) => !through || through === "Not started" ? "—" : through.includes("/") ? through.split("/")[0] : through;
+const latestStarted = (segments: QualifyingSegmentResult[]) => [...segments].reverse().find((segment) => segment.score !== null) ?? null;
 
 export default function MultiRoundQualifyingLeaderboard({ eventId, players, operationalCurrentRoundId }: { eventId: string; players: QualifyingPlayerResult[]; operationalCurrentRoundId?: string | null }) {
   const rounds = useMemo(() => {
@@ -16,45 +18,30 @@ export default function MultiRoundQualifyingLeaderboard({ eventId, players, oper
     return [...byId.values()].sort((a, b) => a.roundNumber - b.roundNumber);
   }, [players]);
   const defaultRoundId = rounds.some((round) => round.id === operationalCurrentRoundId) ? String(operationalCurrentRoundId) : rounds[0]?.id ?? "";
-  const [globalRoundId, setGlobalRoundId] = useState(defaultRoundId);
-  const hasSelectedRoundRef = useRef(false);
-  const previousEventIdRef = useRef(eventId);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedRounds, setExpandedRounds] = useState<Record<string, string>>({});
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   useEffect(() => setFavorites(readLeaderboardFavorites("qualifying-player", eventId)), [eventId]);
-  useEffect(() => {
-    if (previousEventIdRef.current !== eventId) {
-      previousEventIdRef.current = eventId;
-      hasSelectedRoundRef.current = false;
-      setGlobalRoundId(defaultRoundId);
-    }
-  }, [defaultRoundId, eventId]);
-  useEffect(() => {
-    if (!hasSelectedRoundRef.current || !rounds.some((round) => round.id === globalRoundId)) {
-      setGlobalRoundId(defaultRoundId);
-    }
-  }, [defaultRoundId, globalRoundId, rounds]);
-  const toggleFavorite = (id: string) => setFavorites((current) => {
-    const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id);
-    writeLeaderboardFavorites("qualifying-player", eventId, next); return next;
-  });
+  const toggleFavorite = (id: string) => setFavorites((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); writeLeaderboardFavorites("qualifying-player", eventId, next); return next; });
   const partitioned = useMemo(() => partitionLeaderboardFavorites(players.map((player) => ({ ...player, id: player.playerId })), favorites), [favorites, players]);
-  const renderPlayer = (player: QualifyingPlayerResult & { id: string }) => {
-    const isExpanded = expanded.has(player.playerId);
-    const roundId = expandedRounds[player.playerId] ?? globalRoundId;
-    const selected = player.segments.find((segment) => segment.tournamentRoundId === globalRoundId);
-    const expandedSegment = player.segments.find((segment) => segment.tournamentRoundId === roundId);
-    return <div key={player.playerId} className="overflow-hidden rounded-2xl border border-[#E8DCC8] bg-[#FCFAF5]">
-      <div className="grid grid-cols-[48px_36px_minmax(0,1fr)] items-center gap-2 px-3 py-2 sm:grid-cols-[48px_42px_minmax(0,1fr)_72px_120px]">
-        <FavoriteStar selected={favorites.has(player.playerId)} label={player.playerName} onToggle={() => toggleFavorite(player.playerId)} />
-        <span className="font-black">{player.position ?? "—"}</span>
-        <button type="button" aria-expanded={isExpanded} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(player.playerId)) next.delete(player.playerId); else next.add(player.playerId); return next; })} className="min-h-12 truncate text-left font-black text-[#0B3D2E]">{isExpanded ? "▾" : "▸"} {player.playerName}</button>
-        <span className="hidden text-center font-black sm:block">{formatToPar(player.toPar)}</span>
-        <div className="col-span-3 row-start-2 grid grid-cols-3 gap-1 border-t border-[#E8DCC8] pt-2 text-center text-[10px] sm:col-auto sm:row-auto sm:border-0 sm:pt-0"><span><b className="block">{selected?.score ?? "—"}</b>Score</span><span><b className="block">{formatToPar(selected?.toPar ?? null)}</b>To Par</span><span><b className="block">{selected?.through ?? "Not started"}</b>Thru</span></div>
-      </div>
-      {isExpanded ? <div className="border-t border-[#E8DCC8] bg-white p-4"><RoundSelector rounds={rounds} selectedRoundId={roundId} onSelect={(id) => setExpandedRounds((current) => ({ ...current, [player.playerId]: id }))} label={`${player.playerName} Qualifying scorecard round`} /><div className="mt-3 rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-xs text-[#51635C]"><p><span className="font-black text-[#0B3D2E]">Course:</span> {expandedSegment?.courseName || "Course not set"}</p><p className="mt-1"><span className="font-black text-[#0B3D2E]">Round:</span> {expandedSegment?.score ?? "\u2014"} ({formatToPar(expandedSegment?.toPar ?? null)})</p></div><div className="mt-3"><GolfScorecardGrid holes={(expandedSegment?.holeNumbers ?? []).map((holeNumber, index) => ({ holeNumber, par: expandedSegment?.holePars[index] ?? null, score: expandedSegment?.holeScores[index] ?? null }))} label={`${player.playerName} Qualifying scorecard`} /></div></div> : null}
-    </div>;
-  };
-  return <div className="space-y-4"><div className="rounded-xl border border-[#E8DCC8] bg-[#F6F1E6] p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#51635C]">Selected round</p><RoundSelector rounds={rounds} selectedRoundId={globalRoundId} onSelect={(roundId) => { hasSelectedRoundRef.current = true; setGlobalRoundId(roundId); }} label="Qualifying leaderboard round" /></div>{partitioned.favorites.length > 0 ? <section><h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#B8892D]">★ Favorites</h4><div className="mt-2 space-y-2">{partitioned.favorites.map(renderPlayer)}</div></section> : null}<section><h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#51635C]">Standings</h4><div className="mt-2 space-y-2">{partitioned.standings.map(renderPlayer)}</div></section></div>;
+  const ordered = [...partitioned.favorites, ...partitioned.standings];
+
+  return <section className="rounded-[24px] border border-[#E8DCC8] bg-white shadow-[0_18px_45px_rgba(11,61,46,0.08)]">
+    <h3 className="px-4 pt-4 text-xl font-black text-[#0B3D2E] sm:px-6">Individual Leaderboard</h3>
+    <div className="mt-3 max-w-full overflow-x-auto" tabIndex={0} aria-label="Qualifying individual standings table">
+      <table className="min-w-max border-collapse text-sm">
+        <thead className="bg-[#F6F1E6] text-[10px] font-black uppercase tracking-wider text-[#51635C]"><tr><th className="sticky left-0 z-20 bg-[#F6F1E6] px-2 py-3" aria-label="Favorite">★</th><th className="px-3 py-3">Pos</th><th className="sticky left-14 z-20 bg-[#F6F1E6] px-3 py-3 text-left">Player</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Thru</th><th className="px-3 py-3">Today</th>{rounds.map((round) => <th key={round.id} className="px-3 py-3">{round.label}</th>)}<th className="px-3 py-3">Total Strokes</th></tr></thead>
+        {ordered.map((player) => {
+          const isExpanded = expanded.has(player.playerId);
+          const current = latestStarted(player.segments);
+          const roundId = expandedRounds[player.playerId] ?? defaultRoundId ?? current?.tournamentRoundId;
+          const selected = player.segments.find((segment) => segment.tournamentRoundId === roundId);
+          return <tbody key={player.playerId} className="border-t border-[#E8DCC8] first:border-t-0">
+            <tr className={favorites.has(player.playerId) ? "bg-[#FFF9E8]" : "bg-white"}><td className="sticky left-0 z-10 min-w-14 bg-inherit px-2 py-2"><FavoriteStar selected={favorites.has(player.playerId)} label={player.playerName} onToggle={() => toggleFavorite(player.playerId)} /></td><td className="px-3 py-3 text-center font-black">{player.position ?? "—"}</td><td className="sticky left-14 z-10 min-w-48 bg-inherit px-3 py-2"><button type="button" aria-expanded={isExpanded} onClick={() => setExpanded((currentSet) => { const next = new Set(currentSet); if (next.has(player.playerId)) next.delete(player.playerId); else next.add(player.playerId); return next; })} className="min-h-11 w-full text-left font-black text-[#0B3D2E]">{isExpanded ? "▾" : "▸"} {player.playerName}</button></td><td className="px-3 py-3 text-center font-black">{formatToPar(player.toPar)}</td><td className="px-3 py-3 text-center font-black">{displayThrough(current?.through)}</td><td className="px-3 py-3 text-center font-black">{formatToPar(current?.toPar ?? null)}</td>{rounds.map((round) => <td key={round.id} className="px-3 py-3 text-center font-black">{player.segments.find((segment) => segment.tournamentRoundId === round.id)?.score ?? "—"}</td>)}<td className="px-3 py-3 text-center font-black">{player.score ?? "—"}</td></tr>
+            {isExpanded ? <tr><td colSpan={7 + rounds.length} className="bg-white p-4"><RoundSelector rounds={rounds} selectedRoundId={roundId} onSelect={(id) => setExpandedRounds((currentRounds) => ({ ...currentRounds, [player.playerId]: id }))} label={`${player.playerName} Qualifying scorecard round`} /><div className="mt-3 rounded-xl border border-[#E8DCC8] bg-[#FCFAF5] p-3 text-xs text-[#51635C]"><p><strong className="text-[#0B3D2E]">Course:</strong> {selected?.courseName || "Course not set"}</p><p className="mt-1"><strong className="text-[#0B3D2E]">Round:</strong> {selected?.score ?? "—"} ({formatToPar(selected?.toPar ?? null)}) · THRU {displayThrough(selected?.through)}</p></div><div className="mt-3"><GolfScorecardGrid holes={(selected?.holeNumbers ?? []).map((holeNumber, index) => ({ holeNumber, par: selected?.holePars[index] ?? null, score: selected?.holeScores[index] ?? null }))} label={`${player.playerName} Qualifying scorecard`} /></div></td></tr> : null}
+          </tbody>;
+        })}
+      </table>
+    </div>
+  </section>;
 }
