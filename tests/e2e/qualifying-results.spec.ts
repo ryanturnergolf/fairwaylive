@@ -390,7 +390,7 @@ const holeEntries: ScoreHoleEntryRow[] = rounds.flatMap((round) =>
       entered_by_player_id: playerId,
       marker_for_player_id: null,
       hole_number: index + 1,
-      strokes: playerId === "alex" ? 3 : 4,
+      strokes: playerId === "alex" ? 3 : playerId === "casey" ? 5 : 4,
       fairway_hit: index % 3 === 0 ? null : index % 2 === 0,
       green_in_regulation: index % 2 === 0,
       putts: 2,
@@ -516,7 +516,10 @@ test("9-hole and 18-hole reciprocal segments preserve deterministic engine mappi
     players: [{ playerId: "alex", playerName: "Alex Morgan", roundNumber: 1, status: "active" }],
     scorecards: [{ playerId: "alex", roundNumber: 1, holeCount: 9 }],
     scoreEntries: [scoreRow("alex", "alex", { ...rounds[0], holeCount: 9, immutablePar: 36 }, 4), scoreRow("alex", "marker", { ...rounds[0], holeCount: 9, immutablePar: 36 }, 4)],
-    holeEntries: holeEntries.filter((entry) => entry.player_id === "alex" && entry.round_number === 1).slice(0, 9),
+    holeEntries: holeEntries
+      .filter((entry) => entry.player_id === "alex" && entry.round_number === 1)
+      .slice(0, 9)
+      .map((entry) => ({ ...entry, strokes: 4 })),
     reviewStatuses: [reviews[0]],
   });
   expect(nine.days[0].players[0]).toMatchObject({ score: 36, par: 36, toPar: 0 });
@@ -676,7 +679,7 @@ test("coach operations page exposes read-only daily and combined results", async
   await expect(page.getByText("T2", { exact: true }).first()).toBeVisible();
   await page.locator('button[aria-expanded="false"]').filter({ hasText: "Alex Morgan" }).click();
   await expect(page.getByText("Course: North", { exact: true })).toBeVisible();
-  await expect(page.getByText("Round: 54 (-18)", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Round:\s*54 \(-18\)/)).toBeVisible();
   await page.getByRole("tab", { name: "Day 1" }).click();
   await page.getByText("Alex Morgan round summaries").click();
   await expect(page.getByText("Day 1 · Segment 2").first()).toBeVisible();
@@ -710,7 +713,9 @@ test("active Qualifying results poll scoring changes without resetting leaderboa
   await page.goto("/coach-dashboard/qualifying-manager");
   await page.getByRole("button", { name: "Results", exact: true }).click();
   await expect.poll(() => requests).toBe(1);
-  await expect(page.getByText("Not started", { exact: true }).first()).toBeVisible();
+  const alexRow = page.getByRole("button", { name: /Alex Morgan/ }).locator("xpath=ancestor::tr[1]");
+  await expect(alexRow.locator("td").nth(3)).toHaveText("—");
+  await expect(alexRow.locator("td").nth(4)).toHaveText("—");
   await page.clock.runFor(30_000);
   await expect.poll(() => requests).toBe(2);
   await expect(page.getByText("54", { exact: true }).first()).toBeVisible();

@@ -331,7 +331,7 @@ test("Qualifying projection carries exact round, hole, par, score, and through i
   expect(service).toContain("tournamentRoundId: round.id");
   expect(service).toContain("round.immutableHolePars?.[index]");
   expect(service).toContain("liveHoleScores");
-  expect(service).toContain("liveMarkerHoleScores");
+  expect(service).toContain("projectCanonicalExactRoundHoleScores");
   expect(service).toContain("markerHoleScores:");
   expect(service).not.toContain("holeCount * 4");
   expect(component).toContain("segment.tournamentRoundId === roundId");
@@ -340,7 +340,7 @@ test("Qualifying projection carries exact round, hole, par, score, and through i
   expect(component).toContain("Course:");
   expect(component).toContain("Round:");
   expect(grid).not.toContain("if (played.length === 0) return");
-  expect(grid).toContain('hole.score ??');
+  expect(grid).toContain('<GolfScoreCell score={hole.score} par={hole.par} />');
   expect(grid).toContain('hole.par ??');
 });
 

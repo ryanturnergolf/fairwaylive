@@ -1598,17 +1598,8 @@ test("completed scorer and marker entries submit once and restore submitted stat
   });
 
   await gotoApp(page, `${baseUrl}/scorecard/1?tournamentId=${tournamentId}&pairing=1`);
-  await waitForMobileScorecardControls(page);
   await waitForSharedScoreHydration(sharedStore);
-
-  for (let hole = 1; hole <= 18; hole += 1) {
-    await expect(page.getByText(`Hole ${hole}`, { exact: true })).toBeVisible();
-    await page.getByLabel("Ava Green's Score").fill("4");
-    await page.getByLabel("Ben Marker's Score").fill("4");
-    await page.getByRole("button", { name: "Save Hole" }).click();
-  }
-
-  await page.getByRole("button", { name: "Review & Submit Round" }).click();
+  await expect(page.getByText("Verify Score", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Submit Verification" }).click();
   await page.getByRole("button", { name: "Confirm Submit" }).click();
   await expect(page.getByText("Round Submitted", { exact: true })).toBeVisible();
@@ -1733,9 +1724,14 @@ test("submitted post-round scorecard shows authoritative scores, statistics, nav
 
 test("legacy missing statistics remain blocked without synthetic rows", async ({ page }) => {
   const partialStatistics = [
-    buildCompleteReviewStatistics(sharedTournamentId, "player-1")[0],
-    buildCompleteReviewStatistics(sharedTournamentId, "player-2")[0],
-  ];
+    ...buildCompleteReviewStatistics(sharedTournamentId, "player-1"),
+    ...buildCompleteReviewStatistics(sharedTournamentId, "player-2"),
+  ].map((entry) => ({
+    ...entry,
+    fairway_hit: null,
+    green_in_regulation: null,
+    putts: null,
+  }));
   const sharedStore = await openSharedSnapshotReview(page, {
     snapshotMarkedSelfScores: Array.from({ length: 18 }, () => 4),
     markerEnteredScores: Array.from({ length: 18 }, () => 4),
@@ -1747,7 +1743,10 @@ test("legacy missing statistics remain blocked without synthetic rows", async ({
   await expect(page.getByRole("button", { name: "Complete Required Statistics to Submit" })).toBeDisabled();
   await expect(page.getByText(/opt.?out/i)).toHaveCount(0);
   expect(sharedStore.savedScoreRows.filter((row) => row.entry_status === "submitted")).toHaveLength(0);
-  expect(sharedStore.savedHoleRows).toHaveLength(2);
+  expect(sharedStore.savedHoleRows).toHaveLength(36);
+  expect(sharedStore.savedHoleRows.every((row) =>
+    row.fairway_hit === null && row.green_in_regulation === null && row.putts === null
+  )).toBe(true);
 });
 
 test("Review submission compares and submits only the current player's round", async ({ page }) => {
@@ -3486,6 +3485,21 @@ test("secure shared scorecard ignores a stale local Tournament snapshot and hydr
       penalty_strokes: null,
       entry_source: "self",
       entry_status: "live",
+    })),
+    ...[1, 2, 3].map((holeNumber) => buildScoreHoleEntry({
+      tournament_id: sharedTournamentId,
+      round_number: 1,
+      player_id: "player-2",
+      entered_by_player_id: "player-1",
+      marker_for_player_id: "player-2",
+      hole_number: holeNumber,
+      strokes: snapshotScores.uiState.scorecards.scorecardRows[1].scores[holeNumber - 1],
+      fairway_hit: null,
+      green_in_regulation: null,
+      putts: null,
+      penalty_strokes: null,
+      entry_source: "marker",
+      entry_status: "live",
     }))
   );
   await routeSharedTournamentRoster(page);
@@ -3582,11 +3596,14 @@ test("secure shared scorecard ignores a stale local Tournament snapshot and hydr
   });
   await gotoApp(page, `${baseUrl}/scorecard/player-1?pairing=1&round=1&shareToken=secure-e2e-token`);
 
+  await waitForSharedScoreHydration(sharedStore, 4);
   await expect(page.getByRole("heading", { name: storedTournament.name })).toBeVisible();
-  await expect(page.getByText("Hole 4", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Previous Hole" }).click();
-  await page.getByRole("button", { name: "Previous Hole" }).click();
-  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect(page.getByText("Through 3/18", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hole 4", { exact: true })).toBeVisible({ timeout: 10_000 });
+  for (const hole of [3, 2, 1]) {
+    await page.getByRole("button", { name: "Previous Hole" }).click();
+    await expect(page.getByText(`Hole ${hole}`, { exact: true })).toBeVisible();
+  }
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("3");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
   await expect(page.getByRole("group", { name: "Penalty Strokes" })).toHaveCount(0);
@@ -3616,11 +3633,15 @@ test("secure shared scorecard ignores a stale local Tournament snapshot and hydr
     row.hole_number === 1
   )?.strokes).toBe(4);
 
+  const readsBeforeReload = sharedStore.getScoreReadCount();
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Hole 4", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Previous Hole" }).click();
-  await page.getByRole("button", { name: "Previous Hole" }).click();
-  await page.getByRole("button", { name: "Previous Hole" }).click();
+  await expect.poll(() => sharedStore.getScoreReadCount()).toBeGreaterThanOrEqual(readsBeforeReload + 4);
+  await expect(page.getByText("Through 3/18", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hole 4", { exact: true })).toBeVisible({ timeout: 10_000 });
+  for (const hole of [3, 2, 1]) {
+    await page.getByRole("button", { name: "Previous Hole" }).click();
+    await expect(page.getByText(`Hole ${hole}`, { exact: true })).toBeVisible();
+  }
   await expect(page.getByLabel("Ava Green's Score")).toHaveValue("4");
   await expect(page.getByLabel("Ben Marker's Score")).toHaveValue("4");
   await expect(page.getByRole("heading", { name: "popcorn" })).toHaveCount(0);
