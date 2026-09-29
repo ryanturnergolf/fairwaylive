@@ -143,6 +143,18 @@ test("Qualifying public leaderboard projects partial exact-round hole rows over 
     { id: "stable-c", playerName: "Evan Kindred", team: "Visitors", scores: [] },
   ]);
   const durableScoreEntries = [{
+    id: "stale-self",
+    tournament_id: "event-a",
+    round_number: 1,
+    player_id: "stable-a",
+    entered_by_player_id: "stable-a",
+    hole_scores: Array(9).fill(7),
+    total: 63,
+    entry_status: "submitted",
+    submitted_at: "2026-09-28T12:00:00.000Z",
+    created_at: null,
+    updated_at: null,
+  }, {
     id: "stale-marker",
     tournament_id: "event-a",
     round_number: 1,

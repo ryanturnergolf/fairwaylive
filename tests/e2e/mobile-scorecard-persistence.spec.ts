@@ -3379,12 +3379,10 @@ test("stable score rows override more-complete snapshot presentation without ena
   snapshot.uiState.scorecards.scorecardRows[0].scores = Array.from({ length: 18 }, () => 7);
   snapshot.uiState.scorecards.scorecardRows[1].scores = Array.from({ length: 18 }, () => 5);
 
-  const stableSelfScores = [...Array.from({ length: 8 }, () => 4), ...Array.from({ length: 10 }, () => 0)];
-  const stableMarkerScores = [6, 0, 6, 0, 6, 6, 0, 6, ...Array.from({ length: 10 }, () => 0)];
   const sharedStore = await routeSharedScoreEntriesStore(page);
   sharedStore.savedScoreRows.push(
-    buildScoreEntry("player-1", "player-1", stableSelfScores),
-    buildScoreEntry("player-2", "player-1", stableMarkerScores)
+    buildScoreEntry("player-1", "player-1", Array.from({ length: 18 }, () => 7)),
+    buildScoreEntry("player-2", "player-1", Array.from({ length: 18 }, () => 7))
   );
   const holeStatsStore = await routeScoreHoleEntriesStore(page);
   holeStatsStore.savedHoleRows.push(

@@ -12,7 +12,10 @@ import type {
 import type { ScoreEntryRow, ScoreReviewStatusRow } from "../repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
 import { applyOfficialScoreResolutions, buildOfficialScoreResolutionMap } from "./officialScoreResolutionService";
-import { selectQualifyingCompetitionScore } from "./qualifyingCompetitionScoreService";
+import {
+  projectCanonicalExactRoundHoleScores,
+  selectQualifyingCompetitionScore,
+} from "./qualifyingCompetitionScoreService";
 import { resolveQualifyingPolicyReadiness } from "./qualifyingScoringPolicyService";
 
 export type QualifyingEnginePlayer = {
@@ -177,9 +180,11 @@ const buildSegment = ({
     assignedScorerPlayerId: scoringMode === "designated_scorer" ? assignedScorerPlayerId : player.assignedMarkerPlayerId,
   });
   const primary = selected?.entry;
-  const expectedScorerPlayerId = scoringMode === "designated_scorer"
-    ? (assignedScorerPlayerId ?? primary?.entered_by_player_id ?? null)
-    : player.playerId;
+  const expectedScorerPlayerId = selected?.scorerPlayerId ?? (
+    scoringMode === "designated_scorer"
+      ? (assignedScorerPlayerId ?? primary?.entered_by_player_id ?? null)
+      : player.playerId
+  );
   const liveHoleScores = new Map(
     holeEntries
       .filter((entry) =>
@@ -192,41 +197,29 @@ const buildSegment = ({
       )
       .map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
   );
-  const liveMarkerHoleScores = new Map(
-    holeEntries
-      .filter((entry) =>
-        !entry.is_official &&
-        entry.round_number === round.roundNumber &&
-        String(entry.player_id) === player.playerId &&
-        Boolean(player.assignedMarkerPlayerId) &&
-        String(entry.entered_by_player_id) === String(player.assignedMarkerPlayerId) &&
-        Number(entry.strokes) > 0
-      )
-      .map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
-  );
   const persistedScores = selected?.holeScores ?? [];
   const liveScores = holeNumbers.map((holeNumber, index) =>
     (isSubmitted(primary)
       ? Number(persistedScores[index])
       : (liveHoleScores.get(holeNumber) ?? Number(persistedScores[index]))) || 0
   );
-  const markerHoleScores = holeNumbers.map((holeNumber, index) =>
-    (isSubmitted(marker)
-      ? Number(marker?.hole_scores[index])
-      : (liveMarkerHoleScores.get(holeNumber) ?? Number(marker?.hole_scores[index]))) || 0
-  );
+  const markerHoleScores = player.assignedMarkerPlayerId
+    ? projectCanonicalExactRoundHoleScores({
+        playerId: player.playerId,
+        enteredByPlayerId: player.assignedMarkerPlayerId,
+        scoreEntry: marker,
+        holeEntries: holeEntries.filter((entry) => entry.round_number === round.roundNumber),
+        holeCount: round.holeCount,
+        holeNumbers,
+      })
+    : Array.from({ length: round.holeCount }, (_, index) => Number(marker?.hole_scores[index]) || 0);
   const resolvedSelf = applyOfficialScoreResolutions(liveScores, player.playerId, round.holeCount, official);
   const review = reviewStatuses.find((row) =>
     row.round_number === round.roundNumber && String(row.player_id) === player.playerId
   );
   const reviewComplete = Boolean(review?.self_review_complete && review?.marker_review_complete);
   const scoreComplete = resolvedSelf.length === round.holeCount && resolvedSelf.every((score) => score > 0);
-  const markerResolved = applyOfficialScoreResolutions(
-    marker?.hole_scores ?? [],
-    player.playerId,
-    round.holeCount,
-    official
-  );
+  const markerResolved = applyOfficialScoreResolutions(markerHoleScores, player.playerId, round.holeCount, official);
   const markerComplete = scoringMode === "designated_scorer" ||
     (markerResolved.length === round.holeCount && markerResolved.every((score) => score > 0));
   const submitted = isSubmitted(primary);

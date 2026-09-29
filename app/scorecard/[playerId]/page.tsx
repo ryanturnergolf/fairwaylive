@@ -26,6 +26,7 @@ import {
 } from "../../lib/services/reviewComparisonService";
 import { resolveReciprocalScoringAssignments } from "../../lib/services/reciprocalScoringAssignmentService";
 import { buildForwardScoringSummary } from "../../lib/services/reciprocalScoringSummaryService";
+import { projectCanonicalExactRoundHoleScores } from "../../lib/services/qualifyingCompetitionScoreService";
 import { loadSharedTournamentScorecardState } from "../../lib/services/tournamentService";
 import { findInitialScorecardHoleIndex } from "../../lib/services/scorecardResumeService";
 import { getTournamentFinalizationRecord } from "../../lib/services/tournamentFinalizationService";
@@ -1159,25 +1160,6 @@ function ReciprocalPlayerScorecardPage() {
           }
         }
 
-        const displayedCardsComplete =
-          normalizeHoleScores(loadedSelfScores ?? undefined, holeCount).every((score) => score > 0) &&
-          normalizeHoleScores(loadedMarkerScores ?? undefined, holeCount).every((score) => score > 0);
-        if (displayedCardsComplete) {
-          loadedReviewComparison = await loadReviewComparisonModel({
-            tournamentId: sharedScoreTournamentId,
-            roundNumber,
-            shareToken: requestedShareToken || undefined,
-            markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
-            markerEnteredByPlayerIds: resolvedPlayerIds.assignedMarkerPlayerIds,
-            statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
-            holes: scorecard.holes,
-            snapshotSelfScores: scorecard.initialPlayerScores,
-            snapshotMarkerScores: undefined,
-          });
-          loadedReviewSelfScores = loadedReviewComparison.selfScores;
-          loadedReviewMarkerScores = loadedReviewComparison.markerScores;
-        }
-
         try {
           const statisticEntries = await withTimeout(
             loadTournamentHoleStatistics({
@@ -1188,53 +1170,51 @@ function ReciprocalPlayerScorecardPage() {
             SAVE_FINALIZATION_CHECK_TIMEOUT_MS
           );
           if (!statisticEntries) throw new Error("Statistics hydration timed out.");
-          const canOverlayLiveHoles = (entry: (typeof sharedScores)[number] | undefined) =>
-            !entry || (!entry.submitted_at && !["complete", "submitted", "verified", "official"].includes(entry.entry_status));
           const projectCanonicalHoleScores = (
-            baseScores: number[] | null,
             playerIds: string[],
-            enteredByPlayerIds: string[]
+            enteredByPlayerIds: string[],
+            aggregateEntry: (typeof sharedScores)[number] | undefined
           ) => {
-            const matchingEntries = statisticEntries.filter(
-              (entry) =>
-                !entry.is_official &&
-                playerIds.includes(String(entry.player_id)) &&
-                enteredByPlayerIds.includes(String(entry.entered_by_player_id)) &&
-                Number(entry.strokes) > 0
+            const matchingEntry = statisticEntries.find((entry) =>
+              !entry.is_official &&
+              playerIds.includes(String(entry.player_id)) &&
+              enteredByPlayerIds.includes(String(entry.entered_by_player_id)) &&
+              Number(entry.strokes) > 0
             );
-            if (matchingEntries.length === 0) return null;
-            const scoresByHole = new Map(
-              matchingEntries.map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
-            );
-            const normalizedBaseScores = normalizeHoleScores(baseScores ?? undefined, holeCount);
-            return scorecard.holes.map((hole, index) =>
-              scoresByHole.get(hole.holeNumber) ?? normalizedBaseScores[index] ?? 0
-            );
+            if (!matchingEntry) return null;
+            return projectCanonicalExactRoundHoleScores({
+              playerId: String(matchingEntry.player_id),
+              enteredByPlayerId: String(matchingEntry.entered_by_player_id),
+              scoreEntry: aggregateEntry,
+              holeEntries: statisticEntries,
+              holeCount,
+              holeNumbers: scorecard.holes.map((hole) => hole.holeNumber),
+            });
           };
-          const canonicalSelfScores = canOverlayLiveHoles(stableSelfEntry) ? projectCanonicalHoleScores(
-            loadedSelfScores,
+          const canonicalSelfScores = projectCanonicalHoleScores(
             resolvedPlayerIds.selectedPlayerIds,
-            resolvedPlayerIds.selectedPlayerIds
-          ) : null;
+            resolvedPlayerIds.selectedPlayerIds,
+            stableSelfEntry
+          );
           if (canonicalSelfScores) {
             loadedSelfScores = canonicalSelfScores;
             loadedReviewSelfScores = canonicalSelfScores;
             stableSelfRowExists = true;
           }
-          const canonicalMarkedPlayerScores = canOverlayLiveHoles(stableMarkerEntry) ? projectCanonicalHoleScores(
-            loadedMarkerScores,
+          const canonicalMarkedPlayerScores = projectCanonicalHoleScores(
             resolvedPlayerIds.markedPlayerIds,
-            resolvedPlayerIds.selectedPlayerIds
-          ) : null;
+            resolvedPlayerIds.selectedPlayerIds,
+            stableMarkerEntry
+          );
           if (canonicalMarkedPlayerScores) {
             loadedMarkerScores = canonicalMarkedPlayerScores;
             stableMarkerRowExists = true;
           }
-          const canonicalReviewMarkerScores = canOverlayLiveHoles(stableReviewMarkerEntry) ? projectCanonicalHoleScores(
-            loadedReviewMarkerScores,
+          const canonicalReviewMarkerScores = projectCanonicalHoleScores(
             resolvedPlayerIds.selectedPlayerIds,
-            resolvedPlayerIds.assignedMarkerPlayerIds
-          ) : null;
+            resolvedPlayerIds.assignedMarkerPlayerIds,
+            stableReviewMarkerEntry
+          );
           if (canonicalReviewMarkerScores) {
             loadedReviewMarkerScores = canonicalReviewMarkerScores;
           }
@@ -1257,6 +1237,24 @@ function ReciprocalPlayerScorecardPage() {
           });
         } catch (error) {
           console.warn("[StatisticsService] Unable to hydrate editable hole statistics.", error);
+        }
+        const displayedCardsComplete =
+          normalizeHoleScores(loadedSelfScores ?? undefined, holeCount).every((score) => score > 0) &&
+          normalizeHoleScores(loadedMarkerScores ?? undefined, holeCount).every((score) => score > 0);
+        if (displayedCardsComplete) {
+          loadedReviewComparison = await loadReviewComparisonModel({
+            tournamentId: sharedScoreTournamentId,
+            roundNumber,
+            shareToken: requestedShareToken || undefined,
+            markedPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+            markerEnteredByPlayerIds: resolvedPlayerIds.assignedMarkerPlayerIds,
+            statisticsPlayerIds: resolvedPlayerIds.selectedPlayerIds,
+            holes: scorecard.holes,
+            snapshotSelfScores: scorecard.initialPlayerScores,
+            snapshotMarkerScores: undefined,
+          });
+          loadedReviewSelfScores = loadedReviewComparison.selfScores;
+          loadedReviewMarkerScores = loadedReviewComparison.markerScores;
         }
       } catch (error) {
         remoteLoadFailed = true;

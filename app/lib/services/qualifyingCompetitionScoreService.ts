@@ -2,6 +2,44 @@ import type { ScoreEntryRow } from "../repositories/scoreRepository";
 import type { ScoreHoleEntryRow } from "../repositories/statisticsRepository";
 import { applyOfficialScoreResolutions, buildOfficialScoreResolutionMap } from "./officialScoreResolutionService";
 
+export const projectCanonicalExactRoundHoleScores = ({
+  playerId,
+  enteredByPlayerId,
+  scoreEntry,
+  holeEntries = [],
+  holeCount,
+  holeNumbers,
+}: {
+  playerId: string;
+  enteredByPlayerId: string;
+  scoreEntry?: ScoreEntryRow;
+  holeEntries?: ScoreHoleEntryRow[];
+  holeCount: number;
+  holeNumbers?: number[];
+}) => {
+  const configuredHoleNumbers = holeNumbers?.length === holeCount
+    ? holeNumbers
+    : Array.from({ length: holeCount }, (_, index) => index + 1);
+  const canonicalRows = holeEntries.filter((entry) =>
+    !entry.is_official &&
+    String(entry.player_id) === playerId &&
+    String(entry.entered_by_player_id) === enteredByPlayerId &&
+    Number(entry.strokes) > 0
+  );
+  const canonicalByHole = new Map(
+    canonicalRows.map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
+  );
+  const scores = canonicalRows.length > 0
+    ? configuredHoleNumbers.map((holeNumber) => canonicalByHole.get(holeNumber) ?? 0)
+    : configuredHoleNumbers.map((_, index) => Number(scoreEntry?.hole_scores[index]) || 0);
+  return applyOfficialScoreResolutions(
+    scores,
+    playerId,
+    holeCount,
+    buildOfficialScoreResolutionMap(holeEntries)
+  );
+};
+
 export const selectQualifyingCompetitionScore = ({
   playerId,
   scoringMode,
@@ -25,40 +63,40 @@ export const selectQualifyingCompetitionScore = ({
     ? playerRows.find((entry) => String(entry.entered_by_player_id) === assignedScorerPlayerId)
     : undefined;
   const marker = assigned ?? playerRows.find((entry) => String(entry.entered_by_player_id) !== playerId);
-  const primary = scoringMode === "designated_scorer" ? (assigned ?? marker ?? self) : (self ?? marker);
-  const primaryIsFinal = Boolean(
-    primary && (
-      primary.submitted_at ||
-      ["complete", "submitted", "verified", "official"].includes(primary.entry_status)
-    )
-  );
-  const liveRows = officialEntries.filter((entry) =>
-    !primaryIsFinal &&
+  const canonicalRows = officialEntries.filter((entry) =>
     !entry.is_official &&
     String(entry.player_id) === playerId &&
     Number(entry.strokes) > 0
   );
-  const liveScorerPlayerId = primary?.entered_by_player_id ?? (
-    scoringMode === "designated_scorer"
-      ? assignedScorerPlayerId
-      : liveRows.find((entry) => String(entry.entered_by_player_id) === playerId)?.entered_by_player_id ??
-        liveRows.find((entry) => String(entry.entered_by_player_id) !== playerId)?.entered_by_player_id
-  );
-  if (!primary && !liveScorerPlayerId) return null;
-  const liveScoresByHole = new Map(
-    liveRows
-      .filter((entry) => String(entry.entered_by_player_id) === String(liveScorerPlayerId))
-      .map((entry) => [Number(entry.hole_number), Number(entry.strokes)])
-  );
-  const configuredHoleNumbers = holeNumbers?.length === holeCount
-    ? holeNumbers
-    : Array.from({ length: holeCount }, (_, index) => index + 1);
-  const liveScores = configuredHoleNumbers.map((holeNumber, index) =>
-    liveScoresByHole.get(holeNumber) ?? (Number(primary?.hole_scores[index]) || 0)
-  );
-  const resolutions = buildOfficialScoreResolutionMap(officialEntries);
+  const canonicalCountByScorer = canonicalRows.reduce((counts, entry) => {
+    const scorerId = String(entry.entered_by_player_id);
+    counts.set(scorerId, (counts.get(scorerId) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const canonicalScorerPlayerId = [...canonicalCountByScorer.entries()]
+    .sort(([leftId, leftCount], [rightId, rightCount]) =>
+      rightCount - leftCount ||
+      Number(rightId === assignedScorerPlayerId) - Number(leftId === assignedScorerPlayerId) ||
+      Number(rightId !== playerId) - Number(leftId !== playerId) ||
+      leftId.localeCompare(rightId)
+    )[0]?.[0];
+  const aggregatePrimary = scoringMode === "designated_scorer" ? (assigned ?? marker ?? self) : (self ?? marker);
+  const scorerPlayerId = canonicalScorerPlayerId ?? aggregatePrimary?.entered_by_player_id;
+  const primary = scorerPlayerId
+    ? playerRows.find((entry) => String(entry.entered_by_player_id) === String(scorerPlayerId))
+    : aggregatePrimary;
+  if (!primary && !scorerPlayerId) return null;
+  const holeScores = projectCanonicalExactRoundHoleScores({
+    playerId,
+    enteredByPlayerId: String(scorerPlayerId),
+    scoreEntry: primary,
+    holeEntries: officialEntries,
+    holeCount,
+    holeNumbers,
+  });
   return {
     entry: primary,
-    holeScores: applyOfficialScoreResolutions(liveScores, playerId, holeCount, resolutions),
+    scorerPlayerId: String(scorerPlayerId),
+    holeScores,
   };
 };

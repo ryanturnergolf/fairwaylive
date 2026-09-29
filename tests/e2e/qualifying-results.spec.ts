@@ -214,6 +214,66 @@ test("canonical exact-round hole rows supersede a stale aggregate marker card", 
   expect(selected?.holeScores).toEqual([5, 5, 5, 5, 5, 5, 5, 5, 0]);
 });
 
+test("assigned reciprocal hole rows supersede stale self and marker aggregates", () => {
+  const staleSelf = {
+    id: "self",
+    tournament_id: "tournament",
+    round_number: 1,
+    player_id: "drew",
+    entered_by_player_id: "drew",
+    hole_scores: Array(9).fill(7),
+    total: 63,
+    entry_status: "submitted",
+    submitted_at: "2026-09-28T12:00:00.000Z",
+    created_at: null,
+    updated_at: null,
+  } satisfies ScoreEntryRow;
+  const marker = {
+    ...staleSelf,
+    id: "marker",
+    entered_by_player_id: "evan",
+    hole_scores: [...Array(8).fill(4), 6],
+    total: 38,
+    entry_status: "in_progress",
+    submitted_at: null,
+  } satisfies ScoreEntryRow;
+  const canonicalHoles = Array.from({ length: 8 }, (_, index) => ({
+    id: `canonical-${index + 1}`,
+    tournament_id: "tournament",
+    round_number: 1,
+    player_id: "drew",
+    entered_by_player_id: "evan",
+    marker_for_player_id: "drew",
+    hole_number: index + 1,
+    strokes: 4,
+    fairway_hit: null,
+    green_in_regulation: null,
+    putts: null,
+    penalty_strokes: null,
+    entry_source: "marker",
+    entry_status: "in_progress",
+    review_status: "pending",
+    is_official: false,
+    official_at: null,
+    official_by: null,
+    created_at: null,
+    updated_at: null,
+  } satisfies ScoreHoleEntryRow));
+
+  const selected = selectQualifyingCompetitionScore({
+    playerId: "drew",
+    scoringMode: "reciprocal",
+    scoreEntries: [staleSelf, marker],
+    officialEntries: canonicalHoles,
+    holeCount: 9,
+    holeNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    assignedScorerPlayerId: "evan",
+  });
+
+  expect(selected?.scorerPlayerId).toBe("evan");
+  expect(selected?.holeScores).toEqual([4, 4, 4, 4, 4, 4, 4, 4, 0]);
+});
+
 test("admin card builder preserves authoritative back-nine and full-round hole identities", () => {
   const backNine = buildQualifyingAdminMarkerMutation({
     tournamentId: "tournament",
