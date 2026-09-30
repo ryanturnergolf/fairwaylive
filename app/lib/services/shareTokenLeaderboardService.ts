@@ -11,7 +11,7 @@ import type { LegacyScorecardRow, Tournament } from "../tournamentModel";
 import { buildCourseRoundProjection } from "./courseService";
 import { getQualifyingBackingTournamentStatus } from "../repositories/tournamentRepository";
 import { getQualifyingBackingScoringMode } from "../repositories/tournamentRepository";
-import { getQualifyingLeaderboardRoundMetadata } from "../repositories/tournamentRepository";
+import { getQualifyingLeaderboardRoundMetadata, type QualifyingLeaderboardRoundMetadataRow } from "../repositories/tournamentRepository";
 import { getTournamentStateSnapshot } from "../repositories/tournamentRepository";
 import { isTournamentStorageEnvelope } from "../tournamentModel";
 import { buildMultiRoundTournamentLeaderboard, type MultiRoundTournamentLeaderboardProjection } from "./multiRoundLeaderboardService";
@@ -80,6 +80,42 @@ export const bindSnapshotPlayersToDurableRoster = (
         playerId: stableIdBySnapshotId.get(player.playerId) ?? player.playerId,
       })),
     })),
+  };
+};
+
+export const bindSnapshotRoundsToDurableMetadata = (
+  tournament: Tournament,
+  metadataRows: QualifyingLeaderboardRoundMetadataRow[]
+): Tournament => {
+  const metadataByRoundId = new Map(metadataRows.map((metadata) => [metadata.tournament_round_id, metadata]));
+  const metadataByRoundNumber = new Map<number, QualifyingLeaderboardRoundMetadataRow[]>();
+  metadataRows.forEach((metadata) => {
+    metadataByRoundNumber.set(
+      metadata.round_number,
+      [...(metadataByRoundNumber.get(metadata.round_number) ?? []), metadata]
+    );
+  });
+  const durableRoundIdBySnapshotId = new Map(tournament.rounds.map((round) => {
+    if (metadataByRoundId.has(round.id)) return [round.id, round.id];
+    const matchingMetadata = metadataByRoundNumber.get(round.roundNumber) ?? [];
+    return [round.id, matchingMetadata.length === 1 ? matchingMetadata[0].tournament_round_id : round.id];
+  }));
+  const bindRoundId = (roundId: string) => durableRoundIdBySnapshotId.get(roundId) ?? roundId;
+
+  return {
+    ...tournament,
+    settings: {
+      ...tournament.settings,
+      operationalCurrentRoundId: tournament.settings.operationalCurrentRoundId
+        ? bindRoundId(tournament.settings.operationalCurrentRoundId)
+        : tournament.settings.operationalCurrentRoundId,
+      selectedRoundId: tournament.settings.selectedRoundId
+        ? bindRoundId(tournament.settings.selectedRoundId)
+        : tournament.settings.selectedRoundId,
+    },
+    rounds: tournament.rounds.map((round) => ({ ...round, id: bindRoundId(round.id) })),
+    scores: tournament.scores.map((score) => ({ ...score, roundId: bindRoundId(score.roundId) })),
+    pairings: tournament.pairings.map((pairing) => ({ ...pairing, roundId: bindRoundId(pairing.roundId) })),
   };
 };
 
@@ -171,7 +207,10 @@ export const loadShareTokenLeaderboard = async ({
     ? snapshot.state_snapshot
     : null;
   const multiRoundProjection = snapshotEnvelope?.tournament.players.length && snapshotEnvelope.tournament.rounds.length > 1 ? (() => {
-    const tournament = bindSnapshotPlayersToDurableRoster(snapshotEnvelope.tournament, sharedState.scorecardRows);
+    const tournament = bindSnapshotRoundsToDurableMetadata(
+      bindSnapshotPlayersToDurableRoster(snapshotEnvelope.tournament, sharedState.scorecardRows),
+      qualifyingRoundMetadata
+    );
     const settings = tournament.settings;
     const roundSetups = settings.roundSetups ?? {};
     const metadataByRoundId = new Map(qualifyingRoundMetadata.map((metadata) => [metadata.tournament_round_id, metadata]));

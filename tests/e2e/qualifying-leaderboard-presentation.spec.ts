@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { getGolfScoreKind } from "../../app/components/leaderboards/GolfScoreCell";
 import { buildMultiRoundTournamentLeaderboard } from "../../app/lib/services/multiRoundLeaderboardService";
+import { bindSnapshotRoundsToDurableMetadata } from "../../app/lib/services/shareTokenLeaderboardService";
+import type { QualifyingLeaderboardRoundMetadataRow } from "../../app/lib/repositories/tournamentRepository";
 import type { Tournament } from "../../app/lib/tournamentModel";
 
 const source = (file: string) => fs.readFileSync(path.join(process.cwd(), file), "utf8");
@@ -82,9 +84,66 @@ test("leaderboard tables expose Individual and Team views with mobile containmen
 test("public metadata is resolved through a read-only share-token authority", () => {
   const service = source("app/lib/services/shareTokenLeaderboardService.ts");
   const migration = source("supabase/migrations/20260928000000_add_share_token_qualifying_round_metadata.sql");
+  expect(service).toContain("bindSnapshotRoundsToDurableMetadata");
   expect(service).toContain("metadataByRoundId.get(round.id)");
   expect(service).toContain("metadata?.course_hole_snapshot");
   expect(migration).toContain("public.has_valid_share_token");
   expect(migration).toContain("day.course_hole_snapshot");
   expect(migration).not.toMatch(/insert|update|delete/i);
+});
+
+test("legacy snapshot round keys bind to durable R1, R2, and R3 metadata authority", () => {
+  const legacyTournament: Tournament = {
+    ...tournament,
+    settings: { operationalCurrentRoundId: "round-2", selectedRoundId: "round-1" },
+    rounds: [
+      ...tournament.rounds,
+      { id: "round-3", name: "Round 3", roundNumber: 3, status: "upcoming", pairings: [], leaderboard: [] },
+    ],
+    pairings: [{ id: "pairing-r2", roundId: "round-2", groupNumber: 1, teeTime: "", startingHole: "1", players: [] }],
+  };
+  const metadata = [
+    { tournament_round_id: "stable-r1", round_number: 1, course_name: "North Course", starting_hole: 1, hole_sequence: [1, 2, 3], course_hole_snapshot: [] },
+    { tournament_round_id: "stable-r2", round_number: 2, course_name: "South Course", starting_hole: 10, hole_sequence: [10, 11, 12], course_hole_snapshot: [] },
+    { tournament_round_id: "stable-r3", round_number: 3, course_name: "West Course", starting_hole: 4, hole_sequence: [4, 5, 6], course_hole_snapshot: [] },
+  ] satisfies QualifyingLeaderboardRoundMetadataRow[];
+
+  const bound = bindSnapshotRoundsToDurableMetadata(legacyTournament, metadata);
+
+  expect(bound.rounds.map((round) => round.id)).toEqual(["stable-r1", "stable-r2", "stable-r3"]);
+  expect(bound.settings).toMatchObject({ operationalCurrentRoundId: "stable-r2", selectedRoundId: "stable-r1" });
+  expect(bound.scores.map((score) => score.roundId)).toEqual(["stable-r1", "stable-r1", "stable-r2", "stable-r2"]);
+  expect(bound.pairings[0].roundId).toBe("stable-r2");
+});
+
+test("durable round binding keeps distinct course, hole, and par cards across R1 to R2 to R1", () => {
+  const metadata = [
+    { tournament_round_id: "stable-r1", round_number: 1, course_name: "North Course", starting_hole: 1, hole_sequence: [1, 2, 3], course_hole_snapshot: [] },
+    { tournament_round_id: "stable-r2", round_number: 2, course_name: "South Course", starting_hole: 10, hole_sequence: [10, 11, 12], course_hole_snapshot: [] },
+  ] satisfies QualifyingLeaderboardRoundMetadataRow[];
+  const bound = bindSnapshotRoundsToDurableMetadata(tournament, metadata);
+  const model = buildMultiRoundTournamentLeaderboard({
+    tournament: bound,
+    operationalCurrentRoundId: bound.settings.operationalCurrentRoundId,
+    roundConfigurationById: {
+      "stable-r1": { courseName: "North Course", holeNumbers: [1, 2, 3], pars: [4, 4, 4], countingScores: 1 },
+      "stable-r2": { courseName: "South Course", holeNumbers: [10, 11, 12], pars: [3, 5, 4], countingScores: 1 },
+    },
+  });
+  const alex = model.players.find((player) => player.id === "player-a")!;
+  const selectedCards = ["stable-r1", "stable-r2", "stable-r1"].map((roundId) => alex.rounds[roundId]);
+
+  expect(selectedCards.map((round) => round.courseName)).toEqual(["North Course", "South Course", "North Course"]);
+  expect(selectedCards.map((round) => round.holes.map((hole) => [hole.holeNumber, hole.par]))).toEqual([
+    [[1, 4], [2, 4], [3, 4]],
+    [[10, 3], [11, 5], [12, 4]],
+    [[1, 4], [2, 4], [3, 4]],
+  ]);
+});
+
+test("Coach Portal and public leaderboard share the same share-token round metadata projection", () => {
+  const panel = source("app/coach-dashboard/qualifying-manager/QualifyingLeaderboardPanel.tsx");
+  const publicPage = source("app/leaderboard/page.tsx");
+  expect(panel).toContain("loadShareTokenLeaderboard");
+  expect(publicPage).toContain("loadShareTokenLeaderboard");
 });
