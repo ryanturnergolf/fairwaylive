@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CreateQualifyingSessionInput } from "../../app/lib/qualifyingModel";
 import {
-  autoBalanceQualifyingGroups,
+  autoPairQualifyingGroups,
   validateQualifyingCreation,
 } from "../../app/lib/services/qualifyingCreationService";
 import {
@@ -214,8 +214,8 @@ test("qualifying wizard validates, configures, reviews, saves, and reloads a dra
 
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("p[role='alert']")).toContainText("Empty groups");
-  await page.getByLabel("Number of groups").fill("1");
-  await page.getByRole("button", { name: "Auto-balance" }).click();
+  await page.getByRole("button", { name: "Foursomes" }).click();
+  await page.getByRole("button", { name: "Auto Pair" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
 
@@ -267,7 +267,7 @@ test("creation validation rejects duplicates, empty groups, and incomplete assig
     rosterType: "men",
     scoringMode: "reciprocal",
     selectedPlayers: players,
-    groups: autoBalanceQualifyingGroups(players, 1),
+    groups: autoPairQualifyingGroups(players, 4),
     days: [{
       dayNumber: 1,
       playDate: "2026-08-01",
@@ -294,6 +294,25 @@ test("creation validation rejects duplicates, empty groups, and incomplete assig
     ...valid,
     days: [{ ...valid.days[0], courseName: "" }],
   }).errors).toContain("Every qualifying day requires a date, holes, course, tee, and valid starting hole.");
+});
+
+test("Auto Pair creates roster-ordered foursomes and balanced odd threesomes", () => {
+  const players = Array.from({ length: 8 }, (_, index) => ({
+    id: `player-${index + 1}`,
+    name: `Player ${index + 1}`,
+    rosterType: "men" as const,
+    classYear: "Senior",
+  }));
+
+  expect(autoPairQualifyingGroups(players, 4).map((group) => group.playerIds)).toEqual([
+    ["player-1", "player-2", "player-3", "player-4"],
+    ["player-5", "player-6", "player-7", "player-8"],
+  ]);
+  expect(autoPairQualifyingGroups(players.slice(0, 7), 3).map((group) => group.playerIds)).toEqual([
+    ["player-1", "player-2", "player-3"],
+    ["player-4", "player-5"],
+    ["player-6", "player-7"],
+  ]);
 });
 
 test("qualifying roster projection selects the current active season and eligible permanent identities", () => {

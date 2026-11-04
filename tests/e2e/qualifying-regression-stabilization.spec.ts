@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createOperationId } from "../../app/lib/services/operationIdService";
 import {
-  autoBalanceQualifyingGroups,
+  autoPairQualifyingGroups,
   orderQualifyingPlayersByGroup,
 } from "../../app/lib/services/qualifyingCreationService";
 import {
@@ -98,15 +98,15 @@ test("preferred given names retain the durable last name without mutating snapsh
   expect(historicalSnapshot.playerName).toBe("AJ");
 });
 
-test("auto-balanced and manually reassigned players display in deterministic group order", () => {
+test("auto-paired and manually reassigned players display in deterministic group order", () => {
   const players = ["A", "B", "C", "D"].map((name) => ({
     id: name.toLowerCase(), name, rosterType: "men" as const, classYear: "Senior",
   }));
-  const groups = autoBalanceQualifyingGroups(players, 2);
-  expect(orderQualifyingPlayersByGroup(players, groups).map((player) => player.name)).toEqual(["A", "C", "B", "D"]);
+  const groups = autoPairQualifyingGroups(players, 2);
+  expect(orderQualifyingPlayersByGroup(players, groups).map((player) => player.name)).toEqual(["A", "B", "C", "D"]);
   const reassigned = groups.map((group) => ({
     ...group,
-    playerIds: group.id === "group-1" ? ["a", "c", "b"] : ["d"],
+    playerIds: group.id === "group-1" ? ["a", "b", "c"] : ["d"],
   }));
   expect(orderQualifyingPlayersByGroup(players, reassigned).map((player) => player.name)).toEqual(["A", "B", "C", "D"]);
 });

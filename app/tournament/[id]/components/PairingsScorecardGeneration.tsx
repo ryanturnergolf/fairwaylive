@@ -21,6 +21,7 @@ export type RoundSetupState = {
   roundName?: string;
   startingHole: string;
   numberOfHoles: string;
+  holeSequence?: number[];
   teeTime: string;
   countingScores: string;
 };

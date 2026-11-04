@@ -13,7 +13,7 @@ import type {
   QualifyingScoringMode,
 } from "../../../lib/qualifyingModel";
 import {
-  autoBalanceQualifyingGroups,
+  autoPairQualifyingGroups,
   orderQualifyingPlayersByGroup,
   validateQualifyingCreation,
 } from "../../../lib/services/qualifyingCreationService";
@@ -51,7 +51,7 @@ export default function CreateQualifyingPage() {
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [days, setDays] = useState<DayDraft[]>([emptyDay(1)]);
   const [groups, setGroups] = useState<QualifyingGroup[]>([]);
-  const [groupCount, setGroupCount] = useState(1);
+  const [groupSize, setGroupSize] = useState<2 | 3 | 4>(4);
   const [scoringMode, setScoringMode] = useState<QualifyingScoringMode>("reciprocal");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -328,10 +328,25 @@ export default function CreateQualifyingPage() {
             <div>
               <h2 className="text-2xl font-black">Create groups</h2>
               <div className="mt-4 flex flex-wrap items-end gap-3">
-                <label className="font-bold">Number of groups<input aria-label="Number of groups" type="number" min={1} max={selectedPlayers.length} className={`${inputClass} w-28`} value={groupCount} onChange={(event) => setGroupCount(Number(event.target.value))} /></label>
-                <button type="button" className="rounded-lg bg-[#0B3D2E] px-4 py-2 font-black text-white" onClick={() => setGroups(autoBalanceQualifyingGroups(selectedPlayers, groupCount))}>Auto-balance</button>
+                <fieldset>
+                  <legend className="font-bold">Group Size</legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {([{ size: 2, label: "Twosomes" }, { size: 3, label: "Threesomes" }, { size: 4, label: "Foursomes" }] as const).map((option) => (
+                      <button
+                        key={option.size}
+                        type="button"
+                        aria-pressed={groupSize === option.size}
+                        className={`rounded-lg border px-4 py-2 font-black ${groupSize === option.size ? "border-[#0B3D2E] bg-[#0B3D2E] text-white" : "border-[#D9D0C0] bg-white text-[#0B3D2E]"}`}
+                        onClick={() => setGroupSize(option.size)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <button type="button" className="rounded-lg bg-[#0B3D2E] px-4 py-2 font-black text-white" onClick={() => setGroups(autoPairQualifyingGroups(selectedPlayers, groupSize))}>Auto Pair</button>
               </div>
-              {groups.length === 0 ? <p className="mt-5 rounded-lg bg-[#FCFAF5] p-4 text-sm text-[#51635C]">Choose a group count and auto-balance, then adjust assignments manually.</p> : (
+              {groups.length === 0 ? <p className="mt-5 rounded-lg bg-[#FCFAF5] p-4 text-sm text-[#51635C]">Choose a group size and Auto Pair, then adjust assignments manually.</p> : (
                 <div className="mt-5 grid gap-4">
                   {groups.map((group) => (
                     <section key={group.id} aria-labelledby={`${group.id}-heading`} className="rounded-lg border border-[#D9D0C0] bg-[#FCFAF5] p-3">

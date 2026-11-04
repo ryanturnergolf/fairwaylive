@@ -9,6 +9,7 @@ import type {
   TournamentScorecardReadRow,
 } from "../../app/lib/repositories/tournamentRepository";
 import type { TournamentStorageEnvelope } from "../../app/lib/tournamentModel";
+import { resolveLiveScoringWorkspaceState } from "../../app/lib/services/tournamentDerivedState";
 
 const tournamentId = "88888888-8888-4888-8888-888888888888";
 
@@ -147,8 +148,10 @@ const durableRound = (
   roundNumber = 1,
   holeCount: 9 | 18 = 18
 ): TournamentRoundReadRow => ({
+  id: `stable-round-${roundNumber}`,
   tournament_id: tournamentId,
   round_number: roundNumber,
+  name: `Round ${roundNumber}`,
   hole_count: holeCount,
   qualifying_session_id: "99999999-9999-4999-8999-999999999999",
 });
@@ -176,6 +179,24 @@ const tournament = {
   scoringFormat: "Stroke Play",
   status: "Live",
 };
+
+test("live scoring waits for authority before deciding whether scorecards exist", () => {
+  expect(resolveLiveScoringWorkspaceState({
+    isHydrating: true,
+    scorecardsGenerated: false,
+    hasScorecardRows: false,
+  })).toBe("loading");
+  expect(resolveLiveScoringWorkspaceState({
+    isHydrating: false,
+    scorecardsGenerated: true,
+    hasScorecardRows: true,
+  })).toBe("scorecards");
+  expect(resolveLiveScoringWorkspaceState({
+    isHydrating: false,
+    scorecardsGenerated: false,
+    hasScorecardRows: false,
+  })).toBe("ready-to-generate");
+});
 
 test("durable Tournament Engine collections enrich an empty cached snapshot", () => {
   const reconciled = reconcileSnapshotWithDurableTournamentState({
@@ -206,6 +227,44 @@ test("durable Tournament Engine collections enrich an empty cached snapshot", ()
   expect(reconciled?.uiState.scorecards.scorecardsGenerated).toBe(true);
   expect(reconciled?.uiState.scorecards.scorecardRows).toHaveLength(2);
   expect(buildTournamentRoundManagerReadModel(reconciled, 1).roundOptions[0].scorecardsCount).toBe(2);
+});
+
+test("durable back-nine round presentation replaces a generic nine-hole snapshot", () => {
+  const snapshot = emptySnapshot();
+  snapshot.tournament.settings.roundSetups = {
+    ...snapshot.tournament.settings.roundSetups,
+    "2": {
+      roundNumber: "2",
+      startingHole: "1",
+      numberOfHoles: "9",
+      teeTime: "8:00 AM",
+      countingScores: "4",
+    },
+  };
+  snapshot.uiState.scorecards.roundSetup = snapshot.tournament.settings.roundSetups["2"];
+  const round = {
+    ...durableRound(2, 9),
+    starting_hole: 10,
+    ending_hole: 18,
+    hole_sequence: [10, 11, 12, 13, 14, 15, 16, 17, 18],
+  };
+
+  const reconciled = reconcileSnapshotWithDurableTournamentState({
+    envelope: snapshot,
+    tournament,
+    roundNumber: 2,
+    playerRows: playerRows(2),
+    durableRound: round,
+    durableScorecards: durableScorecards(2, 9),
+  });
+
+  expect(reconciled?.uiState.scorecards.roundSetup).toMatchObject({
+    roundNumber: "2",
+    numberOfHoles: "9",
+    startingHole: "10",
+    holeSequence: [10, 11, 12, 13, 14, 15, 16, 17, 18],
+  });
+  expect(reconciled?.uiState.scorecards.scorecardRows.every((row) => row.scores.length === 9)).toBe(true);
 });
 
 test("complete snapshot presentation and saved scores remain unchanged", () => {

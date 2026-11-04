@@ -5,7 +5,14 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import { getTournamentStateStorageKey, loadTournamentStorageEnvelope } from "../../lib/tournamentStorage";
 import { getSupabaseBrowserClient } from "../../lib/supabaseClient";
-import { configureTournamentRoundCount, getTournamentPlayers, setTournamentOperationalRound, type TournamentPlayerRow } from "../../lib/repositories/tournamentRepository";
+import {
+  configureTournamentRoundCount,
+  getQualifyingLeaderboardRoundMetadata,
+  getTournamentPlayers,
+  setTournamentOperationalRound,
+  type QualifyingLeaderboardRoundMetadataRow,
+  type TournamentPlayerRow,
+} from "../../lib/repositories/tournamentRepository";
 import {
   normalizeTournamentRoundSetup,
   projectOfficialLeaderboardScorecards,
@@ -104,7 +111,7 @@ import type { QualifyingResultsReadModel } from "../../lib/qualifyingModel";
 import type { EventCourseHoleSnapshot } from "../../lib/courseModel";
 import { buildCourseHoleSequence } from "../../lib/services/courseService";
 import { buildMultiRoundTournamentLeaderboard } from "../../lib/services/multiRoundLeaderboardService";
-import { bindSnapshotPlayersToDurableRoster } from "../../lib/services/shareTokenLeaderboardService";
+import { bindSnapshotPlayersToDurableRoster, bindSnapshotRoundsToDurableMetadata } from "../../lib/services/shareTokenLeaderboardService";
 import TournamentTeamInvitationManager from "./components/TournamentTeamInvitationManager";
 import {
   buildQualifyingAdminMarkerMutation,
@@ -257,6 +264,7 @@ export default function TournamentPage() {
   const [scoreHoleEntries, setScoreHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
   const [multiRoundHoleEntries, setMultiRoundHoleEntries] = useState<ScoreHoleEntryRow[]>([]);
   const [durableLeaderboardPlayers, setDurableLeaderboardPlayers] = useState<TournamentPlayerRow[]>([]);
+  const [qualifyingRoundMetadata, setQualifyingRoundMetadata] = useState<QualifyingLeaderboardRoundMetadataRow[]>([]);
   const [reviewResolutionMessage, setReviewResolutionMessage] = useState("");
   const [reviewOverrideValues, setReviewOverrideValues] = useState<Record<string, string>>({});
   const [reviewOverrideReasons, setReviewOverrideReasons] = useState<Record<string, string>>({});
@@ -287,6 +295,19 @@ export default function TournamentPage() {
       : null;
     return Array.isArray(settings?.courseSetup?.holes) ? settings.courseSetup.holes : [];
   }, [tournamentMeta.settings]);
+  const selectedQualifyingRoundMetadata = useMemo(
+    () => qualifyingRoundMetadata.find((round) => round.round_number === normalizedRoundSetup.roundNumber) ?? null,
+    [normalizedRoundSetup.roundNumber, qualifyingRoundMetadata]
+  );
+  const authoritativeRoundHoleNumbers = useMemo(() => {
+    const configured = selectedQualifyingRoundMetadata?.hole_sequence?.map(Number) ?? roundSetup.holeSequence ?? [];
+    return configured.length === normalizedRoundSetup.numberOfHoles
+      ? configured
+      : buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles);
+  }, [normalizedRoundSetup.numberOfHoles, normalizedRoundSetup.startingHole, roundSetup.holeSequence, selectedQualifyingRoundMetadata]);
+  const authoritativeRoundCourseHoles = selectedQualifyingRoundMetadata?.course_hole_snapshot?.length
+    ? selectedQualifyingRoundMetadata.course_hole_snapshot
+    : eventCourseHoles;
   const multiRoundLeaderboardProjection = useMemo(() => {
     if (!isClientMounted || !tournamentId) return null;
     const envelope = loadTournamentStorageEnvelope(tournamentId);
@@ -297,28 +318,39 @@ export default function TournamentPage() {
     const courseHoles = Array.isArray((settings as { courseSetup?: { holes?: EventCourseHoleSnapshot[] } }).courseSetup?.holes)
       ? (settings as { courseSetup: { holes: EventCourseHoleSnapshot[] } }).courseSetup.holes
       : eventCourseHoles;
-    const parsByHole = new Map(courseHoles.map((hole) => [hole.holeNumber, hole.par]));
+    const metadataByRoundNumber = new Map(qualifyingRoundMetadata.map((round) => [round.round_number, round]));
     const roundConfigurationById = Object.fromEntries(envelope.tournament.rounds.map((round) => {
       const setup = roundSetups[String(round.roundNumber)];
       const startingHole = Math.max(1, Number(setup?.startingHole) || 1);
       const holeCount = Math.max(1, Math.min(18, Number(setup?.numberOfHoles) || 18));
-      const holeNumbers = buildCourseHoleSequence(startingHole, holeCount);
-      return [round.id, {
+      const metadata = metadataByRoundNumber.get(round.roundNumber);
+      const holeNumbers = metadata?.hole_sequence?.length === holeCount
+        ? metadata.hole_sequence.map(Number)
+        : buildCourseHoleSequence(startingHole, holeCount);
+      const parsByHole = new Map(
+        (metadata?.course_hole_snapshot?.length ? metadata.course_hole_snapshot : courseHoles)
+          .map((hole) => [Number(hole.holeNumber), Number(hole.par)])
+      );
+      return [metadata?.tournament_round_id ?? round.id, {
+        courseName: metadata?.course_name,
         holeNumbers,
         pars: holeNumbers.map((holeNumber) => parsByHole.get(holeNumber) ?? null),
         countingScores: Math.max(1, Number(setup?.countingScores) || 4),
       }];
     }));
+    const roundBoundTournament = isQualifyingTournament
+      ? bindSnapshotRoundsToDurableMetadata(envelope.tournament, qualifyingRoundMetadata)
+      : envelope.tournament;
     const leaderboardTournament = isQualifyingTournament
       ? bindSnapshotPlayersToDurableRoster(
-          envelope.tournament,
+          roundBoundTournament,
           durableLeaderboardPlayers.map((player) => ({
             id: player.player_id,
             playerName: player.player_name,
             team: player.team_name ?? "",
           }))
         )
-      : envelope.tournament;
+      : roundBoundTournament;
     return buildMultiRoundTournamentLeaderboard({
       tournament: leaderboardTournament,
       roundConfigurationById,
@@ -328,7 +360,7 @@ export default function TournamentPage() {
       scoringMode: qualifyingScoringMode,
       allowLegacyScoreFallback: !isQualifyingTournament,
     });
-  }, [durableLeaderboardPlayers, eventCourseHoles, isClientMounted, isQualifyingTournament, multiRoundHoleEntries, multiRoundScoreEntries, operationalCurrentRoundId, qualifyingScoringMode, tournamentId]);
+  }, [durableLeaderboardPlayers, eventCourseHoles, isClientMounted, isQualifyingTournament, multiRoundHoleEntries, multiRoundScoreEntries, operationalCurrentRoundId, qualifyingRoundMetadata, qualifyingScoringMode, tournamentId]);
   const handleQualifyingContextResolved = useCallback((context: QualifyingTournamentAccessContext | null) => {
     const isMatchingQualifyingTournament = Boolean(
       context &&
@@ -340,6 +372,25 @@ export default function TournamentPage() {
     if (!isMatchingQualifyingTournament) setQualifyingResults(null);
     if (context?.scoringMode) setQualifyingScoringMode(context.scoringMode);
   }, [tournamentId]);
+  useEffect(() => {
+    if (!isQualifyingTournament || !sharedTournamentId) {
+      setQualifyingRoundMetadata([]);
+      return;
+    }
+
+    let cancelled = false;
+    void getQualifyingLeaderboardRoundMetadata(sharedTournamentId)
+      .then((metadata) => {
+        if (!cancelled) setQualifyingRoundMetadata(metadata);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setQualifyingRoundMetadata([]);
+          console.warn("[TournamentService] Unable to load authoritative Qualifying round presentation.", error);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [isQualifyingTournament, sharedTournamentId]);
   useEffect(() => {
     if (
       !scorecardsGenerated ||
@@ -457,7 +508,7 @@ export default function TournamentPage() {
     setQualifyingAdminSaveStates({});
   }, [selectedRoundOption?.roundId]);
   const reviewResolutionItems = useMemo<ReviewResolutionItem[]>(() => {
-    const displayHoleNumbers = buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles);
+    const displayHoleNumbers = authoritativeRoundHoleNumbers;
     const entriesByPlayerId = new Map<string, ScoreEntryRow[]>();
     const holeEntriesByKey = new Map<string, ScoreHoleEntryRow[]>();
 
@@ -506,7 +557,7 @@ export default function TournamentPage() {
         };
       }).filter((item): item is ReviewResolutionItem => Boolean(item));
     });
-  }, [normalizedRoundSetup.numberOfHoles, normalizedRoundSetup.startingHole, officialHoleKeys, playerIdsByName, scoreHoleEntries, scorecardRows, sharedScoreEntries]);
+  }, [authoritativeRoundHoleNumbers, normalizedRoundSetup.numberOfHoles, officialHoleKeys, playerIdsByName, scoreHoleEntries, scorecardRows, sharedScoreEntries]);
   const dynamicStatisticReviewItems = useMemo(
     () =>
       dynamicReviewFoundation
@@ -520,14 +571,14 @@ export default function TournamentPage() {
             holePars: certifiedMobileHolePars.slice(0, normalizedRoundSetup.numberOfHoles),
           }).map((item) => ({
             ...item,
-            displayHoleNumber: buildCourseHoleSequence(normalizedRoundSetup.startingHole, normalizedRoundSetup.numberOfHoles)[item.holeNumber - 1] ?? item.holeNumber,
+            displayHoleNumber: authoritativeRoundHoleNumbers[item.holeNumber - 1] ?? item.holeNumber,
           }))
         : [],
     [
       dynamicReviewFoundation,
+      authoritativeRoundHoleNumbers,
       normalizedRoundSetup.numberOfHoles,
       normalizedRoundSetup.roundNumber,
-      normalizedRoundSetup.startingHole,
       playerIdsByName,
       scorecardRows,
     ]
@@ -687,7 +738,7 @@ export default function TournamentPage() {
     setTournamentMeta,
     setSharedTournamentId,
   });
-  const { hasLoadedFromStorageRef, hydrationPendingRef, authenticatedHydrationRef } = useTournamentPageLoading({
+  const { hasLoadedFromStorageRef, hydrationPendingRef, authenticatedHydrationRef, isInitialHydrationLoading } = useTournamentPageLoading({
     tournamentId,
     storageKey,
     setTournamentMeta,
@@ -1240,10 +1291,7 @@ export default function TournamentPage() {
           roundNumber: normalizedRoundSetup.roundNumber,
           subjectPlayerId: playerId,
           assignedMarkerPlayerId: durablePlayer.marker_player_id,
-          holeNumbers: buildCourseHoleSequence(
-            normalizedRoundSetup.startingHole,
-            normalizedRoundSetup.numberOfHoles
-          ),
+          holeNumbers: authoritativeRoundHoleNumbers,
           holeScores: updatedRow.scores.slice(0, normalizedRoundSetup.numberOfHoles),
         })
       : null;
@@ -1333,7 +1381,7 @@ export default function TournamentPage() {
           row.playerName === item.playerName
             ? {
                 ...row,
-                scores: row.scores.map((score, index) => (index === item.holeNumber - 1 ? selectedScore : score)),
+                scores: row.scores.map((score, index) => (index === authoritativeRoundHoleNumbers.indexOf(item.holeNumber) ? selectedScore : score)),
               }
             : row
         )
@@ -1884,7 +1932,9 @@ export default function TournamentPage() {
                   activeTab === "Live Scoring" ? (
                     <LiveScoringLeaderboard
                        normalizedRoundSetup={normalizedRoundSetup}
-                       eventCourseHoles={eventCourseHoles}
+                       eventCourseHoles={authoritativeRoundCourseHoles}
+                       roundHoleNumbers={authoritativeRoundHoleNumbers}
+                       isHydrating={isInitialHydrationLoading}
                        scorecardsGenerated={scorecardsGenerated}
                        scorecardRows={isQualifyingTournament ? qualifyingScorecardRows : scorecardRows}
                        leaderboardScorecardRows={isQualifyingTournament ? qualifyingScorecardRows : leaderboardScorecardRows}

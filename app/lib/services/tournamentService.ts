@@ -371,8 +371,18 @@ export const reconcileSnapshotWithDurableTournamentState = ({
         !getRoundStateMap(envelope.tournament.settings)?.[String(roundNumber)]?.scorecardsGenerated
       )
     );
+  const existingRoundSetup = getRoundSetup(envelope, roundNumber);
+  const durableHoleSequence = durableRound?.hole_sequence?.map(Number) ?? [];
+  const roundPresentationIncomplete = Boolean(
+    durableRound && (
+      Number(existingRoundSetup.numberOfHoles) !== Number(durableRound.hole_count) ||
+      Number(existingRoundSetup.startingHole) !== Number(durableRound.starting_hole ?? 1) ||
+      (durableHoleSequence.length === Number(durableRound.hole_count) &&
+        durableHoleSequence.some((holeNumber, index) => existingRoundSetup.holeSequence?.[index] !== holeNumber))
+    )
+  );
 
-  if (!playersIncomplete && !pairingsIncomplete && !scorecardsIncomplete && !scorecardReadinessIncomplete) {
+  if (!playersIncomplete && !pairingsIncomplete && !scorecardsIncomplete && !scorecardReadinessIncomplete && !roundPresentationIncomplete) {
     return envelope;
   }
 
@@ -447,6 +457,9 @@ export const reconcileSnapshotWithDurableTournamentState = ({
     roundNumber: String(roundNumber),
     numberOfHoles: String(holeCount),
     startingHole: String(durableRound?.starting_hole ?? roundPlayerRows[0]?.starting_hole ?? 1),
+    holeSequence: durableRound?.hole_sequence?.length === holeCount
+      ? durableRound.hole_sequence.map(Number)
+      : getRoundSetup(envelope, roundNumber).holeSequence,
   };
   const hasRoundKeyedPresentation = Boolean(envelope.roundPresentationsById);
   const roundIdentity = hasRoundKeyedPresentation

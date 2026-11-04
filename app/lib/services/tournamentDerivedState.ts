@@ -35,6 +35,20 @@ export type TeamLeaderboardRow = {
   today: string;
 };
 
+export const resolveLiveScoringWorkspaceState = ({
+  isHydrating,
+  scorecardsGenerated,
+  hasScorecardRows,
+}: {
+  isHydrating: boolean;
+  scorecardsGenerated: boolean;
+  hasScorecardRows: boolean;
+}): "loading" | "scorecards" | "empty-roster" | "ready-to-generate" => {
+  if (isHydrating) return "loading";
+  if (!scorecardsGenerated) return "ready-to-generate";
+  return hasScorecardRows ? "scorecards" : "empty-roster";
+};
+
 export const limitCountingScoresToAvailablePlayers = (
   configuredCountingScores: number,
   scorecardRows: LegacyScorecardRow[]

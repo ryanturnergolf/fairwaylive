@@ -14,7 +14,7 @@ import type { TournamentPlayerRow } from "../repositories/tournamentRepository";
 import { activateQualifyingSession } from "./qualifyingActivationService";
 import { manageQualifyingAccessCode } from "./qualifyingAccessService";
 import {
-  autoBalanceQualifyingGroups,
+  autoPairQualifyingGroups,
 } from "./qualifyingCreationService";
 import { provisionQualifyingSession } from "./qualifyingProvisioningService";
 import { requireQaSeedAccess } from "./qaSeedAccessService";
@@ -82,7 +82,7 @@ export const buildTestQualifierDraft = (
     rosterType: "men",
     scoringMode: "reciprocal",
     selectedPlayers,
-    groups: autoBalanceQualifyingGroups(selectedPlayers, 2),
+    groups: autoPairQualifyingGroups(selectedPlayers, 3),
     days: [
       {
         dayNumber: 1,

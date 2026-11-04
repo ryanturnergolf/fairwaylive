@@ -11,21 +11,27 @@ export type QualifyingCreationValidation = {
   errors: string[];
 };
 
-export const autoBalanceQualifyingGroups = (
+export const autoPairQualifyingGroups = (
   players: QualifyingRosterPlayer[],
-  groupCount: number
+  groupSize: 2 | 3 | 4
 ): QualifyingGroup[] => {
   if (players.length === 0) return [];
-  const normalizedCount = Math.max(1, Math.min(players.length, Math.floor(groupCount) || 1));
-  const groups = Array.from({ length: normalizedCount }, (_, index) => ({
-    id: `group-${index + 1}`,
-    name: `Group ${index + 1}`,
-    playerIds: [] as string[],
-  }));
-  players.forEach((player, index) => {
-    groups[index % normalizedCount].playerIds.push(player.id);
+  const normalizedSize = ([2, 3, 4] as const).includes(groupSize) ? groupSize : 4;
+  const groupCount = Math.ceil(players.length / normalizedSize);
+  const minimumGroupSize = Math.floor(players.length / groupCount);
+  const largerGroupCount = players.length % groupCount;
+  let rosterIndex = 0;
+
+  return Array.from({ length: groupCount }, (_, index) => {
+    const balancedSize = minimumGroupSize + (index < largerGroupCount ? 1 : 0);
+    const playerIds = players.slice(rosterIndex, rosterIndex + balancedSize).map((player) => player.id);
+    rosterIndex += balancedSize;
+    return {
+      id: `group-${index + 1}`,
+      name: `Group ${index + 1}`,
+      playerIds,
+    };
   });
-  return groups;
 };
 
 export const orderQualifyingPlayersByGroup = (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { toDataURL } from "qrcode";
 import type { ScoreEntryRow } from "../repositories/scoreRepository";
 import {
@@ -122,6 +122,7 @@ export const useTournamentPageLoading = ({
   const hasLoadedFromStorageRef = useRef(false);
   const hydrationPendingRef = useRef(false);
   const authenticatedHydrationRef = useRef(false);
+  const [isInitialHydrationLoading, setIsInitialHydrationLoading] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined" || !tournamentId || !storageKey) {
@@ -132,6 +133,7 @@ export const useTournamentPageLoading = ({
     hasLoadedFromStorageRef.current = false;
     hydrationPendingRef.current = false;
     authenticatedHydrationRef.current = false;
+    setIsInitialHydrationLoading(true);
 
     const loadStoredOrRemoteSnapshot = async () => {
       try {
@@ -146,6 +148,7 @@ export const useTournamentPageLoading = ({
 
         if (loadResult.status === "empty") {
           hasLoadedFromStorageRef.current = true;
+          setIsInitialHydrationLoading(false);
           return;
         }
 
@@ -153,6 +156,7 @@ export const useTournamentPageLoading = ({
           setTournamentMeta(loadResult.tournament);
           setSharedTournamentId(loadResult.sharedTournamentId);
           hasLoadedFromStorageRef.current = true;
+          setIsInitialHydrationLoading(false);
           return;
         }
 
@@ -179,9 +183,11 @@ export const useTournamentPageLoading = ({
         setClippdExportState(loadResult.hydration.clippdExportState);
         setScoreboardImportState(loadResult.hydration.scoreboardImportState);
         setAutoRepairState(loadResult.hydration.autoRepairState);
+        setIsInitialHydrationLoading(false);
       } catch (error) {
         if (!isCancelled) {
           hasLoadedFromStorageRef.current = true;
+          setIsInitialHydrationLoading(false);
           console.warn("[TournamentService] Unable to load tournament state snapshot; local storage fallback remains active.", error);
         }
       }
@@ -208,7 +214,7 @@ export const useTournamentPageLoading = ({
     tournamentId,
   ]);
 
-  return { hasLoadedFromStorageRef, hydrationPendingRef, authenticatedHydrationRef };
+  return { hasLoadedFromStorageRef, hydrationPendingRef, authenticatedHydrationRef, isInitialHydrationLoading };
 };
 
 export const useTournamentPagePersistence = ({

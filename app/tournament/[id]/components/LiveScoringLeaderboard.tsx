@@ -6,6 +6,7 @@ import {
   buildTeamLeaderboard,
   calculateTotal,
   formatScoreToPar,
+  resolveLiveScoringWorkspaceState,
   type NormalizedRoundSetup,
 } from "../../../lib/services/tournamentDerivedState";
 import PairingsScorecardGeneration from "./PairingsScorecardGeneration";
@@ -14,8 +15,6 @@ import type { ScoreHoleEntryRow } from "../../../lib/repositories/statisticsRepo
 import type {
   DynamicStatisticReviewItem,
 } from "../../../lib/services/dynamicStatisticsReviewService";
-import { buildCourseHoleSequence } from "../../../lib/services/courseService";
-import type { EventCourseHoleSnapshot } from "../../../lib/courseModel";
 import MultiRoundTournamentLeaderboard from "../../../components/leaderboards/MultiRoundTournamentLeaderboard";
 import MultiRoundQualifyingLeaderboard from "../../../components/leaderboards/MultiRoundQualifyingLeaderboard";
 import type { MultiRoundTournamentLeaderboardProjection } from "../../../lib/services/multiRoundLeaderboardService";
@@ -44,7 +43,9 @@ export type ReviewResolutionItem = {
 
 type LiveScoringLeaderboardProps = {
   normalizedRoundSetup: NormalizedRoundSetup;
-  eventCourseHoles?: EventCourseHoleSnapshot[];
+  eventCourseHoles?: Array<{ holeNumber: number; par: number }>;
+  roundHoleNumbers?: number[];
+  isHydrating?: boolean;
   scorecardsGenerated: boolean;
   scorecardRows: ScorecardRow[];
   leaderboardScorecardRows?: ScorecardRow[];
@@ -95,6 +96,8 @@ const statisticStatusLabel: Record<DynamicStatisticReviewItem["status"], string>
 export default function LiveScoringLeaderboard({
   normalizedRoundSetup,
   eventCourseHoles = [],
+  roundHoleNumbers = [],
+  isHydrating = false,
   scorecardsGenerated,
   scorecardRows,
   leaderboardScorecardRows = scorecardRows,
@@ -127,10 +130,17 @@ export default function LiveScoringLeaderboard({
 }: LiveScoringLeaderboardProps) {
   const displayHoleCount = normalizedRoundSetup.numberOfHoles;
   const displayHoleNumbers = useMemo(
-    () => buildCourseHoleSequence(normalizedRoundSetup.startingHole, displayHoleCount),
-    [displayHoleCount, normalizedRoundSetup.startingHole]
+    () => roundHoleNumbers.length === displayHoleCount
+      ? roundHoleNumbers
+      : Array.from({ length: displayHoleCount }, (_, index) => ((normalizedRoundSetup.startingHole - 1 + index) % 18) + 1),
+    [displayHoleCount, normalizedRoundSetup.startingHole, roundHoleNumbers]
   );
   const countingScores = normalizedRoundSetup.countingScores;
+  const workspaceState = resolveLiveScoringWorkspaceState({
+    isHydrating,
+    scorecardsGenerated: scorecardsGenerated || Boolean(qualifyingResults),
+    hasScorecardRows: leaderboardScorecardRows.length > 0 || Boolean(qualifyingResults?.combined.length),
+  });
   const roundPars = useMemo(() => {
     const parsByHole = new Map(eventCourseHoles.map((hole) => [hole.holeNumber, hole.par]));
     return displayHoleNumbers.map((holeNumber) => parsByHole.get(holeNumber) || 4);
@@ -154,7 +164,7 @@ export default function LiveScoringLeaderboard({
 
   return (
     <div className="space-y-6" aria-label="Tournament live scoring workspace">
-      <PairingsScorecardGeneration
+      {!isHydrating ? <PairingsScorecardGeneration
         activeTab="Live Scoring"
         normalizedRoundSetup={normalizedRoundSetup}
         scorecardsGenerated={scorecardsGenerated}
@@ -162,7 +172,7 @@ export default function LiveScoringLeaderboard({
         onGenerateScorecards={onGenerateScorecards}
         onRoundSetupChange={onRoundSetupChange}
         isReadOnly={isReadOnly}
-      />
+      /> : null}
       {isReadOnly ? (
         <div className="rounded-[24px] border border-[#77B98E] bg-[#ECF8EF] px-5 py-4 text-sm font-semibold text-[#146233]">
           This tournament is finalized. Score entry is locked, but leaderboards, scorecards, print tools, and reports remain available.
@@ -389,8 +399,13 @@ export default function LiveScoringLeaderboard({
           </div>
         </section>
       ) : null}
-      {scorecardsGenerated || Boolean(qualifyingResults) ? (
-        leaderboardScorecardRows.length > 0 || Boolean(qualifyingResults?.combined.length) ? (
+      {workspaceState === "loading" ? (
+        <div className="rounded-[28px] border border-[#E8DCC8] bg-[#FCFAF5] p-8 text-center shadow-inner" role="status">
+          <h4 className="text-2xl font-black tracking-[-0.02em] text-[#0B3D2E]">Loading scorecards…</h4>
+          <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-[#51635C]">Checking the authoritative event workspace.</p>
+        </div>
+      ) : workspaceState !== "ready-to-generate" ? (
+        workspaceState === "scorecards" ? (
           <div className="space-y-6">
             {isQualifyingTournament && qualifyingResults ? (
               <MultiRoundQualifyingLeaderboard
